@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+:root {
+  --background: #000000;
+  --foreground: #f5f5f5;
+  --surface: #0d0d0d;
+  --surface-elevated: #141414;
+  --border: rgba(255, 255, 255, 0.08);
+  --muted: #737373;
+  --accent: #a78bfa;
+  --gold: #fbbf24;
+  --gold-glow: rgba(251, 191, 36, 0.45);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-gold: var(--gold);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  overflow: hidden;
+}
+
+@keyframes bubble-float-x {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(var(--float-x, 8px));
+  }
+}
+
+@keyframes bubble-float-y {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(var(--float-y, -10px));
+  }
+}
+
+@keyframes bubble-shimmer {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes crown-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px var(--gold-glow));
+  }
+  50% {
+    filter: drop-shadow(0 0 14px var(--gold-glow));
+  }
+}
+
+@keyframes burst-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes burst-shard {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--shard-x), var(--shard-y)) scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes fullscreen-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.bubble-float {
+  animation:
+    bubble-float-x var(--duration-x, 5s) ease-in-out infinite,
+    bubble-float-y var(--duration-y, 6.5s) ease-in-out infinite;
+  animation-delay: var(--delay-x, 0s), var(--delay-y, 0s);
+}
+
+.bubble-shimmer::before {
+  animation: bubble-shimmer 3.5s ease-in-out infinite;
+}
+
+.crown-glow {
+  animation: crown-pulse 2.4s ease-in-out infinite;
+}
+
+.fullscreen-enter {
+  animation: fullscreen-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
