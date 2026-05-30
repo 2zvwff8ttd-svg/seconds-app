@@ -56,7 +56,7 @@ export function VideoBubble({
 
   return (
     <div
-      className="bubble-float absolute"
+      className="bubble-float pointer-events-auto absolute"
       style={{
         left: placement.x - placement.radius,
         top: placement.y - placement.radius,
@@ -93,6 +93,7 @@ export function VideoBubble({
           <video
             ref={videoRef}
             src={video.videoUrl}
+            poster={video.thumbnailUrl}
             className="h-full w-full object-cover"
             muted
             playsInline

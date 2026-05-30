@@ -10,6 +10,12 @@
   --accent: #a78bfa;
   --gold: #fbbf24;
   --gold-glow: rgba(251, 191, 36, 0.45);
+
+  /* Stacking order (low → high) */
+  --z-bubble-field: 1;
+  --z-header: 10;
+  --z-bottom-nav: 100;
+  --z-fullscreen: 200;
 }
 
 @theme inline {
@@ -34,6 +40,27 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   overflow: hidden;
+}
+
+.z-bubble-field {
+  z-index: var(--z-bubble-field);
+  isolation: isolate;
+}
+
+.z-bubble-canvas {
+  z-index: 1;
+}
+
+.z-header {
+  z-index: var(--z-header);
+}
+
+.z-bottom-nav {
+  z-index: var(--z-bottom-nav);
+}
+
+.z-fullscreen {
+  z-index: var(--z-fullscreen);
 }
 
 @keyframes bubble-float-x {

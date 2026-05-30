@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:apply-status": "node scripts/apply-video-status.mjs",
+    "db:apply-fixes": "node scripts/apply-db-fixes.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
@@ -16,6 +18,8 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "dotenv": "^16.5.0",
+    "postgres": "^3.4.7",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",

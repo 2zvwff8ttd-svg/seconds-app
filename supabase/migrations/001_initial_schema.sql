@@ -10,6 +10,7 @@ create extension if not exists "pgcrypto";
 -- Types
 -- -----------------------------------------------------------------------------
 create type public.video_visibility as enum ('public', 'followers_only');
+create type public.video_status as enum ('pending', 'published');
 
 -- -----------------------------------------------------------------------------
 -- profiles
@@ -42,6 +43,9 @@ create table public.videos (
   visibility public.video_visibility not null default 'public',
   country text not null,
   view_count integer not null default 0,
+  status public.video_status not null default 'pending',
+  publish_at timestamptz,
+  published_at timestamptz,
   created_at timestamptz not null default now(),
   constraint videos_duration_non_negative check (duration_seconds >= 0),
   constraint videos_view_count_non_negative check (view_count >= 0)
@@ -156,11 +160,16 @@ set search_path = public
 as $$
   select
     v.user_id = auth.uid()
-    or v.visibility = 'public'::public.video_visibility
     or (
-      v.visibility = 'followers_only'::public.video_visibility
-      and auth.uid() is not null
-      and public.is_following(v.user_id)
+      v.status = 'published'::public.video_status
+      and (
+        v.visibility = 'public'::public.video_visibility
+        or (
+          v.visibility = 'followers_only'::public.video_visibility
+          and auth.uid() is not null
+          and public.is_following(v.user_id)
+        )
+      )
     )
   from public.videos v
   where v.id = p_video_id;
@@ -246,13 +255,21 @@ create policy "profiles_update_own"
 -- -----------------------------------------------------------------------------
 -- videos policies
 -- -----------------------------------------------------------------------------
+create policy "videos_select_own"
+  on public.videos
+  as permissive
+  for select
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
 create policy "videos_select_visible"
   on public.videos
+  as permissive
   for select
   to authenticated, anon
   using (public.can_view_video(id));
 
-create policy "videos_insert_own"
+create policy "Users can insert own videos"
   on public.videos
   for insert
   to authenticated
@@ -260,16 +277,18 @@ create policy "videos_insert_own"
 
 create policy "videos_update_own"
   on public.videos
+  as permissive
   for update
   to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 create policy "videos_delete_own"
   on public.videos
+  as permissive
   for delete
   to authenticated
-  using (auth.uid() = user_id);
+  using ((select auth.uid()) = user_id);
 
 -- -----------------------------------------------------------------------------
 -- clips policies
@@ -452,3 +471,4 @@ grant select on all tables in schema public to anon, authenticated;
 grant insert, update, delete on all tables in schema public to authenticated;
 
 grant usage on type public.video_visibility to anon, authenticated;
+grant usage on type public.video_status to anon, authenticated;

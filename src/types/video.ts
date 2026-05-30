@@ -1,0 +1,28 @@
+export type VideoVisibility = "public" | "followers_only";
+export type VideoStatus = "pending" | "published";
+
+export type VideoRow = {
+  id: string;
+  user_id: string;
+  video_url: string;
+  thumbnail_url: string | null;
+  title: string;
+  duration_seconds: number;
+  visibility: VideoVisibility;
+  status: VideoStatus;
+  publish_at: string | null;
+  published_at: string | null;
+  country: string;
+  view_count: number;
+  created_at: string;
+  profiles: { username: string } | null;
+};
+
+export type PostUploadStage =
+  | "idle"
+  | "preparing"
+  | "uploading_thumbnail"
+  | "uploading_video"
+  | "saving"
+  | "done"
+  | "error";

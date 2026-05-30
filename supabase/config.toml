@@ -1,0 +1,8 @@
+# https://supabase.com/docs/guides/cli/config
+project_id = "ynnabzfgkrrqrtrdckyk"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15

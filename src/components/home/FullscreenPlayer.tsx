@@ -28,7 +28,7 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
 
   return (
     <div
-      className="fullscreen-enter fixed inset-0 z-50 flex flex-col bg-black"
+      className="fullscreen-enter z-fullscreen fixed inset-0 flex flex-col bg-black"
       role="dialog"
       aria-modal
       aria-label={video.title}
@@ -37,6 +37,7 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
         <video
           ref={videoRef}
           src={video.videoUrl}
+          poster={video.thumbnailUrl}
           className="h-full w-full object-contain"
           playsInline
           controls
