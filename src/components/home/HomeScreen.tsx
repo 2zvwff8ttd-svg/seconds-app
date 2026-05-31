@@ -1,6 +1,7 @@
 "use client";
 
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { BubbleField } from "./BubbleField";
 import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "./BottomNav";
 import { useState } from "react";
@@ -22,6 +23,7 @@ export function HomeScreen() {
           <span className="rounded-full border border-border bg-surface-elevated px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted sm:px-3 sm:py-1 sm:text-[10px]">
             {countryCode} #1
           </span>
+          <NotificationBell />
           <SignOutButton />
         </div>
       </header>

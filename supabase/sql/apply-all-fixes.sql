@@ -217,4 +217,14 @@ begin
   ) then
     alter publication supabase_realtime add table public.comments;
   end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notifications'
+  ) then
+    alter publication supabase_realtime add table public.notifications;
+  end if;
 end $$;
+
+-- --- 007: Social notifications ---
+-- 1) supabase/sql/create-notifications-table.sql
+-- 2) supabase/sql/007-social-notifications.sql
