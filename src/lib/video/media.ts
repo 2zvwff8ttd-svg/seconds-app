@@ -1,3 +1,22 @@
+/** Supabase Storage `media` bucket allowed video types (no codec suffix). */
+const STORAGE_VIDEO_TYPES = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "video/x-msvideo",
+]);
+
+/**
+ * Strip codec parameters (e.g. `video/webm;codecs=vp9,opus` → `video/webm`)
+ * so Storage accepts the Content-Type header.
+ */
+export function normalizeStorageContentType(mimeType: string): string {
+  const base = mimeType.split(";")[0].trim().toLowerCase();
+  if (STORAGE_VIDEO_TYPES.has(base)) return base;
+  if (base.startsWith("video/")) return "video/webm";
+  return base || "video/webm";
+}
+
 export async function getVideoDuration(file: File): Promise<number> {
   const url = URL.createObjectURL(file);
   try {

@@ -29,7 +29,7 @@ export function ClipStrip({ clips, onRemove, disabled }: ClipStripProps) {
               className="h-24 w-[54px] object-cover"
             />
             <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] text-white">
-              {index + 1}
+              {index + 1} · {clip.durationSeconds}s
             </span>
             <button
               type="button"

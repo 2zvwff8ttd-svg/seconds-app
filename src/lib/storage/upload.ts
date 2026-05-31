@@ -1,4 +1,5 @@
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
+import { normalizeStorageContentType } from "@/lib/video/media";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const MEDIA_BUCKET = "media";
@@ -51,7 +52,10 @@ export async function uploadFileWithProgress(
     xhr.open("POST", url);
     xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
     xhr.setRequestHeader("apikey", getSupabaseAnonKey());
-    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.setRequestHeader(
+      "Content-Type",
+      normalizeStorageContentType(contentType),
+    );
     xhr.setRequestHeader("x-upsert", "false");
     xhr.send(file);
   });

@@ -1,8 +1,8 @@
 export function getPreferredMimeType(): string {
   const candidates = [
+    "video/webm",
     "video/webm;codecs=vp9,opus",
     "video/webm;codecs=vp8,opus",
-    "video/webm",
     "video/mp4",
   ];
   for (const type of candidates) {

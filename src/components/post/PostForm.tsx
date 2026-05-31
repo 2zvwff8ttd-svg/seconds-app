@@ -3,11 +3,18 @@
 import { CameraRecorder } from "@/components/record/CameraRecorder";
 import { ClipStrip } from "@/components/record/ClipStrip";
 import { UploadProgress } from "@/components/post/UploadProgress";
+import {
+  fetchTodayAssignedSeconds,
+} from "@/lib/recording/daily-assignment";
+import {
+  isRecordingBudgetExhausted,
+  sumRecordedClipSeconds,
+} from "@/lib/recording/clip-budget";
 import { postVideo } from "@/lib/videos/post";
 import type { RecordedClip } from "@/types/recording";
 import type { PostUploadStage, VideoVisibility } from "@/types/video";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const VISIBILITY_OPTIONS = [
   {
@@ -44,11 +51,7 @@ function formatPublishTime(iso: string): string {
 }
 
 export function PostForm() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const [clips, setClips] = useState<RecordedClip[]>([]);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState<VideoVisibility>("public");
   const [stage, setStage] = useState<PostUploadStage>("idle");
@@ -56,22 +59,26 @@ export function PostForm() {
   const [progressLabel, setProgressLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ publishAt: string } | null>(null);
-
-  const isUploading = stage !== "idle" && stage !== "error" && stage !== "done";
-  const hasContent = clips.length > 0 || uploadFile !== null;
+  const [assignedSeconds, setAssignedSeconds] = useState(15);
 
   useEffect(() => {
-    if (!uploadFile) {
-      setUploadPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(uploadFile);
-    setUploadPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [uploadFile]);
+    fetchTodayAssignedSeconds()
+      .then(setAssignedSeconds)
+      .catch(() => {
+        /* デフォルト 15 秒のまま */
+      });
+  }, []);
+
+  const isUploading = stage !== "idle" && stage !== "error" && stage !== "done";
+  const hasContent = clips.length > 0;
+  const usedSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
+  const budgetExhausted = useMemo(
+    () => isRecordingBudgetExhausted(usedSeconds, assignedSeconds),
+    [usedSeconds, assignedSeconds],
+  );
+  const canPost = hasContent && budgetExhausted && !isUploading;
 
   const handleClipAdded = useCallback((clip: RecordedClip) => {
-    setUploadFile(null);
     setClips((prev) => [...prev, clip]);
     setError(null);
   }, []);
@@ -84,21 +91,9 @@ export function PostForm() {
     });
   }, []);
 
-  const handleFileChange = (nextFile: File | null) => {
-    if (!nextFile) return;
-    if (!nextFile.type.startsWith("video/")) {
-      setError("動画ファイルを選択してください");
-      return;
-    }
-    clips.forEach((c) => URL.revokeObjectURL(c.previewUrl));
-    setClips([]);
-    setUploadFile(nextFile);
-    setError(null);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!hasContent || isUploading) return;
+    if (!canPost) return;
 
     setError(null);
     setProgress(0);
@@ -106,8 +101,10 @@ export function PostForm() {
 
     try {
       const result = await postVideo({
-        clips: clips.length > 0 ? clips.map((c) => c.file) : undefined,
-        file: uploadFile ?? undefined,
+        clips: clips.map((c) => ({
+          file: c.file,
+          durationSeconds: c.durationSeconds,
+        })),
         title,
         visibility,
         onStageChange: setStage,
@@ -155,61 +152,17 @@ export function PostForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="video/*"
-        className="hidden"
-        onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
-      />
-
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 sm:px-5">
-        {!uploadFile ? (
-          <>
-            <CameraRecorder
-              clips={clips}
-              onClipAdded={handleClipAdded}
-              disabled={isUploading}
-            />
-            <ClipStrip
-              clips={clips}
-              onRemove={handleRemoveClip}
-              disabled={isUploading}
-            />
-          </>
-        ) : (
-          <div className="space-y-3 pb-4">
-            <div className="overflow-hidden rounded-2xl border border-border bg-black">
-              {uploadPreviewUrl && (
-                <video
-                  src={uploadPreviewUrl}
-                  controls
-                  playsInline
-                  className="aspect-[9/16] max-h-[38vh] w-full bg-black object-contain"
-                />
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setUploadFile(null)}
-              disabled={isUploading}
-              className="text-xs text-muted underline-offset-2 hover:text-foreground hover:underline"
-            >
-              カメラ撮影に戻る
-            </button>
-          </div>
-        )}
-
-        {!uploadFile && (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
-            className="mt-3 w-full text-center text-xs text-muted underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
-          >
-            ファイルから選ぶ
-          </button>
-        )}
+        <CameraRecorder
+          clips={clips}
+          onClipAdded={handleClipAdded}
+          disabled={isUploading}
+        />
+        <ClipStrip
+          clips={clips}
+          onRemove={handleRemoveClip}
+          disabled={isUploading}
+        />
 
         {hasContent && (
           <div className="mt-4">
@@ -286,19 +239,21 @@ export function PostForm() {
 
         <button
           type="submit"
-          disabled={!hasContent || isUploading}
+          disabled={!canPost}
           className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isUploading
-            ? "投稿中…"
-            : clips.length > 1
-              ? `${clips.length}クリップをvlogとして投稿`
-              : "投稿する"}
+          {isUploading ? "投稿中…" : "投稿"}
         </button>
 
         {!hasContent && !isUploading && (
           <p className="mt-2 text-center text-[10px] text-muted">
             録画ボタンでクリップを撮影してください
+          </p>
+        )}
+
+        {hasContent && !budgetExhausted && !isUploading && (
+          <p className="mt-2 text-center text-[10px] text-muted">
+            割り当て時間をすべて使うと投稿できます
           </p>
         )}
       </div>

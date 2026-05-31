@@ -1,20 +1,33 @@
 "use client";
 
 import type { RecordedClip } from "@/types/recording";
-import { getVideoDuration } from "@/lib/video/media";
 import {
   facingModeLabel,
   getPreferredMimeType,
   mimeToExtension,
 } from "@/lib/recording/recorder-utils";
+import { normalizeStorageContentType } from "@/lib/video/media";
+import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type CameraRecorderProps = {
   clips: RecordedClip[];
   onClipAdded: (clip: RecordedClip) => void;
   disabled?: boolean;
 };
+
+function isStreamLive(stream: MediaStream | null): boolean {
+  return Boolean(
+    stream?.getVideoTracks().some((t) => t.readyState === "live"),
+  );
+}
+
+function measureRecordingSeconds(startedAt: number | null): number {
+  if (!startedAt) return 0;
+  return Math.max(0, (Date.now() - startedAt) / 1000);
+}
 
 export function CameraRecorder({
   clips,
@@ -26,31 +39,65 @@ export function CameraRecorder({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingStartRef = useRef<number | null>(null);
+  const recordBudgetRef = useRef(0);
+  const finishingRef = useRef(false);
   const mimeRef = useRef(getPreferredMimeType());
 
   const [assignedSeconds, setAssignedSeconds] = useState(15);
-  const [remaining, setRemaining] = useState(15);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [isRecording, setIsRecording] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  const usedClipSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
+
+  const remainingSeconds = useMemo(() => {
+    void tick;
+    const elapsed =
+      isRecording && recordingStartRef.current
+        ? measureRecordingSeconds(recordingStartRef.current)
+        : 0;
+    return Math.max(0, assignedSeconds - usedClipSeconds - elapsed);
+  }, [assignedSeconds, usedClipSeconds, isRecording, tick]);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    if (tickRef.current) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+    recordingStartRef.current = null;
   }, []);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setCameraReady(false);
+    const el = videoRef.current;
+    if (el) el.srcObject = null;
+  }, []);
+
+  const ensurePreview = useCallback(async () => {
+    const el = videoRef.current;
+    const stream = streamRef.current;
+    if (!el || !stream) return;
+    if (el.srcObject !== stream) {
+      el.srcObject = stream;
+    }
+    await el.play().catch(() => {});
   }, []);
 
   const startCamera = useCallback(
     async (mode: "user" | "environment") => {
       setError(null);
+      setCameraStarting(true);
       stopStream();
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -58,11 +105,7 @@ export function CameraRecorder({
           audio: true,
         });
         streamRef.current = stream;
-        const el = videoRef.current;
-        if (el) {
-          el.srcObject = stream;
-          await el.play().catch(() => {});
-        }
+        await ensurePreview();
         setCameraReady(true);
       } catch (err) {
         setError(
@@ -70,46 +113,64 @@ export function CameraRecorder({
             ? err.message
             : "カメラへのアクセスが拒否されました",
         );
+        setCameraReady(false);
+      } finally {
+        setCameraStarting(false);
       }
     },
-    [stopStream],
+    [ensurePreview, stopStream],
   );
 
   useEffect(() => {
     fetchTodayAssignedSeconds()
-      .then((sec) => {
-        setAssignedSeconds(sec);
-        setRemaining(sec);
-      })
+      .then(setAssignedSeconds)
       .catch((err) => {
         setError(err instanceof Error ? err.message : "秒数の取得に失敗しました");
       });
   }, []);
 
   useEffect(() => {
-    if (disabled) return;
-    startCamera(facingMode);
     return () => {
       clearTimer();
-      recorderRef.current?.state === "recording" && recorderRef.current.stop();
+      if (recorderRef.current?.state === "recording") {
+        recorderRef.current.stop();
+      }
       stopStream();
     };
-  }, [facingMode, disabled, startCamera, clearTimer, stopStream]);
+  }, [clearTimer, stopStream]);
 
   const finishRecording = useCallback(async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
+
+    const elapsed = measureRecordingSeconds(recordingStartRef.current);
+    const budget = recordBudgetRef.current;
     clearTimer();
     setIsRecording(false);
-    setRemaining(assignedSeconds);
+    recorderRef.current = null;
 
     const chunks = chunksRef.current;
-    if (chunks.length === 0) return;
+    chunksRef.current = [];
+
+    if (chunks.length === 0) {
+      finishingRef.current = false;
+      await ensurePreview();
+      return;
+    }
+
+    const durationSeconds = Math.min(
+      budget,
+      Math.max(0.1, Math.round(elapsed * 10) / 10),
+    );
 
     const mime = mimeRef.current;
-    const blob = new Blob(chunks, { type: mime });
+    const storageType = normalizeStorageContentType(mime);
+    const blob = new Blob(chunks, { type: storageType });
     const ext = mimeToExtension(mime);
-    const file = new File([blob], `clip-${Date.now()}.${ext}`, { type: mime });
+    const file = new File([blob], `clip-${Date.now()}.${ext}`, {
+      type: storageType,
+    });
     const previewUrl = URL.createObjectURL(blob);
-    const durationSeconds = await getVideoDuration(file).catch(() => assignedSeconds);
 
     onClipAdded({
       id: crypto.randomUUID(),
@@ -117,27 +178,44 @@ export function CameraRecorder({
       previewUrl,
       durationSeconds,
     });
-    chunksRef.current = [];
-  }, [assignedSeconds, clearTimer, onClipAdded]);
+
+    finishingRef.current = false;
+    setTick((t) => t + 1);
+    await ensurePreview();
+  }, [clearTimer, ensurePreview, onClipAdded]);
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
-    if (recorder && recorder.state === "recording") {
-      recorder.stop();
-    } else {
-      void finishRecording();
+    if (!recorder || recorder.state !== "recording") {
+      return;
     }
-  }, [finishRecording]);
+    try {
+      recorder.requestData();
+    } catch {
+      // ignore
+    }
+    recorder.stop();
+  }, []);
 
-  const startRecording = useCallback(() => {
+  const beginRecording = useCallback(() => {
     const stream = streamRef.current;
-    if (!stream || isRecording || disabled) return;
+    const budget = assignedSeconds - usedClipSeconds;
+    if (!stream || isRecording || disabled || budget <= 0) return;
 
     setError(null);
     chunksRef.current = [];
+    finishingRef.current = false;
     mimeRef.current = getPreferredMimeType();
+    recordBudgetRef.current = budget;
 
-    const recorder = new MediaRecorder(stream, { mimeType: mimeRef.current });
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream, { mimeType: mimeRef.current });
+    } catch {
+      mimeRef.current = "video/webm";
+      recorder = new MediaRecorder(stream, { mimeType: mimeRef.current });
+    }
+
     recorderRef.current = recorder;
 
     recorder.ondataavailable = (e) => {
@@ -146,21 +224,31 @@ export function CameraRecorder({
     recorder.onstop = () => {
       void finishRecording();
     };
+    recorder.onerror = () => {
+      setError("録画に失敗しました");
+      clearTimer();
+      setIsRecording(false);
+      recorderRef.current = null;
+    };
 
     recorder.start(200);
     setIsRecording(true);
-    setRemaining(assignedSeconds);
+    recordingStartRef.current = Date.now();
 
-    clearTimer();
+    tickRef.current = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 100);
+
     timerRef.current = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev <= 1) {
-          stopRecording();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+      if (!recordingStartRef.current) return;
+      const left =
+        assignedSeconds -
+        usedClipSeconds -
+        measureRecordingSeconds(recordingStartRef.current);
+      if (left <= 0) {
+        stopRecording();
+      }
+    }, 200);
   }, [
     assignedSeconds,
     clearTimer,
@@ -168,21 +256,56 @@ export function CameraRecorder({
     finishRecording,
     isRecording,
     stopRecording,
+    usedClipSeconds,
   ]);
 
-  const switchCamera = () => {
-    if (isRecording) return;
-    setFacingMode((m) => (m === "user" ? "environment" : "user"));
+  const handleRecordPress = async () => {
+    if (disabled || cameraStarting || finishingRef.current) return;
+
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+
+    if (remainingSeconds <= 0) {
+      setError("今日の撮影時間を使い切りました");
+      return;
+    }
+
+    if (!cameraReady || !isStreamLive(streamRef.current)) {
+      await startCamera(facingMode);
+      if (!streamRef.current) return;
+    }
+
+    beginRecording();
   };
 
-  const progress =
-    assignedSeconds > 0
-      ? ((assignedSeconds - remaining) / assignedSeconds) * 100
+  const switchCamera = async () => {
+    if (isRecording || disabled || cameraStarting) return;
+    const next = facingMode === "user" ? "environment" : "user";
+    setFacingMode(next);
+    if (cameraReady) {
+      await startCamera(next);
+    }
+  };
+
+  const gaugeRecordingElapsed =
+    isRecording && recordingStartRef.current
+      ? measureRecordingSeconds(recordingStartRef.current)
       : 0;
+
+  const canRecord =
+    remainingSeconds > 0 && !disabled && !cameraStarting && !finishingRef.current;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-black">
       <div className="relative aspect-[9/16] max-h-[52vh] w-full bg-black">
+        <TimeBudgetGauge
+          assignedSeconds={assignedSeconds}
+          usedSeconds={usedClipSeconds}
+          recordingElapsed={gaugeRecordingElapsed}
+        />
+
         <video
           ref={videoRef}
           muted
@@ -194,24 +317,30 @@ export function CameraRecorder({
           }}
         />
 
-        {!cameraReady && !error && (
+        {!cameraReady && !isRecording && !error && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-elevated/90 px-6 pt-2 text-center">
+            <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-violet-500/15 text-violet-300">
+              <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 7h4l2-3h8l2 3h4v12H4V7z" />
+                <circle cx="12" cy="13" r="3.5" />
+              </svg>
+            </span>
+            <p className="text-sm font-medium text-foreground">録画ボタンでカメラを起動</p>
+            <p className="mt-1 text-xs text-muted">撮影時間は全クリップで共有されます</p>
+          </div>
+        )}
+
+        {cameraStarting && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-sm text-muted">
             カメラを起動中…
           </div>
         )}
 
-        <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-4">
-          <div className="rounded-full bg-black/50 px-3 py-1.5 backdrop-blur-md">
-            <span className="text-xs text-muted">今日の撮影</span>
-            <span className="ml-2 text-lg font-bold tabular-nums text-foreground">
-              {isRecording ? remaining : assignedSeconds}
-              <span className="text-sm font-normal text-muted">秒</span>
-            </span>
-          </div>
+        <div className="absolute inset-x-0 top-0 flex justify-end bg-gradient-to-b from-black/50 to-transparent px-3 pb-6 pt-5">
           <button
             type="button"
-            onClick={switchCamera}
-            disabled={isRecording || !cameraReady || disabled}
+            onClick={() => void switchCamera()}
+            disabled={isRecording || cameraStarting || disabled}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70 disabled:opacity-40"
             aria-label="カメラ切り替え"
             title={facingModeLabel(facingMode === "user" ? "environment" : "user")}
@@ -223,28 +352,23 @@ export function CameraRecorder({
           </button>
         </div>
 
-        {isRecording && (
-          <div className="absolute inset-x-4 top-16 h-1 overflow-hidden rounded-full bg-white/20">
-            <div
-              className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all duration-1000 ease-linear"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        )}
-
         <div className="absolute inset-x-0 bottom-0 flex flex-col items-center bg-gradient-to-t from-black/80 to-transparent pb-6 pt-10">
           {isRecording && (
             <span className="mb-3 flex items-center gap-2 text-xs font-medium text-red-400">
               <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-              録画中 {remaining}秒
+              録画中
             </span>
+          )}
+
+          {!canRecord && !isRecording && usedClipSeconds >= assignedSeconds && (
+            <p className="mb-3 text-xs text-red-400">撮影時間を使い切りました</p>
           )}
 
           <button
             type="button"
-            onClick={isRecording ? stopRecording : startRecording}
-            disabled={!cameraReady || disabled}
-            className={`relative flex h-16 w-16 items-center justify-center rounded-full border-4 transition touch-manipulation disabled:opacity-40 ${
+            onClick={() => void handleRecordPress()}
+            disabled={(!canRecord && !isRecording) || cameraStarting}
+            className={`relative flex h-16 w-16 items-center justify-center rounded-full border-4 transition touch-manipulation disabled:cursor-not-allowed disabled:opacity-40 ${
               isRecording
                 ? "border-red-500/80 bg-red-500/20"
                 : "border-white/90 bg-white/10 hover:bg-white/20"
@@ -262,8 +386,8 @@ export function CameraRecorder({
 
           <p className="mt-3 text-[10px] text-muted">
             {clips.length > 0
-              ? `${clips.length}クリップ撮影済み · あと何本でも追加できます`
-              : "タップで録画開始 · タイマー終了で自動停止"}
+              ? `${clips.length}クリップ · 残り時間はゲージで表示`
+              : "録画ボタンで開始 · 時間切れで自動停止"}
           </p>
         </div>
       </div>

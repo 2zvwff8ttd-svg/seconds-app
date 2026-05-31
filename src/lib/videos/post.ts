@@ -6,19 +6,24 @@ import {
   probeVideoSchema,
 } from "@/lib/supabase/video-schema";
 import { getMediaPublicUrl, uploadFileWithProgress } from "@/lib/storage/upload";
+import { totalDurationSecondsForDb } from "@/lib/recording/clip-budget";
 import {
   captureVideoThumbnail,
-  getVideoDuration,
   getVideoExtension,
+  normalizeStorageContentType,
 } from "@/lib/video/media";
 import { createClient } from "@/lib/supabase/client";
 import type { PostUploadStage, VideoVisibility } from "@/types/video";
 
+export type PostClipInput = {
+  file: File;
+  /** 録画時に計測した秒数（WebM メタデータは使わない） */
+  durationSeconds: number;
+};
+
 export type PostVideoInput = {
-  /** 複数クリップ（vlog） */
-  clips?: File[];
-  /** 単一ファイル（従来互換） */
-  file?: File;
+  /** カメラで撮影したクリップ（vlog） */
+  clips: PostClipInput[];
   title: string;
   visibility: VideoVisibility;
   onStageChange: (stage: PostUploadStage) => void;
@@ -38,12 +43,6 @@ function isRlsError(message: string): boolean {
     message.includes("row-level security") ||
     message.includes("42501")
   );
-}
-
-function resolveClipFiles(input: PostVideoInput): File[] {
-  if (input.clips && input.clips.length > 0) return input.clips;
-  if (input.file) return [input.file];
-  return [];
 }
 
 function clipExtension(file: File): string {
@@ -160,10 +159,15 @@ async function saveVideoRow(
 }
 
 export async function postVideo(input: PostVideoInput): Promise<PostVideoResult> {
-  const clipFiles = resolveClipFiles(input);
-  if (clipFiles.length === 0) {
+  const clips = input.clips;
+  if (clips.length === 0) {
     throw new Error("投稿するクリップがありません");
   }
+
+  const clipFiles = clips.map((c) => c.file);
+  const durationSeconds = totalDurationSecondsForDb(
+    clips.map((c) => c.durationSeconds),
+  );
 
   const { title, visibility, onStageChange, onProgress } = input;
   const supabase = createClient();
@@ -182,13 +186,11 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   onStageChange("preparing");
   onProgress(5, "動画を解析中…");
 
-  const [country, durations, thumbnailBlob] = await Promise.all([
+  const [country, thumbnailBlob] = await Promise.all([
     detectCountryCode(),
-    Promise.all(clipFiles.map((f) => getVideoDuration(f))),
     captureVideoThumbnail(clipFiles[0]),
   ]);
 
-  const durationSeconds = durations.reduce((a, b) => a + b, 0);
   const videoId = crypto.randomUUID();
   const basePath = `${user.id}/${videoId}`;
   const thumbnailPath = `${basePath}/thumb.jpg`;
@@ -226,7 +228,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
       supabase,
       clipPath,
       file,
-      file.type || "video/webm",
+      normalizeStorageContentType(file.type || "video/webm"),
       (ratio) => {
         onProgress(20 + uploadShare * i + uploadShare * ratio, "動画をアップロード中…");
       },
