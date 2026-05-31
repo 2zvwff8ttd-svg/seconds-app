@@ -1,12 +1,16 @@
 "use client";
 
+import { FollowButton } from "@/components/profile/FollowButton";
 import { FullscreenPlayer } from "@/components/home/FullscreenPlayer";
+import { fetchFollowStats } from "@/lib/social/follows";
 import {
   fetchCurrentProfile,
   fetchLikedVideos,
-  fetchMyVideos,
+  fetchProfile,
+  fetchUserVideos,
 } from "@/lib/videos/profile-feed";
 import type { FeedVideo } from "@/types/feed";
+import type { FollowStats, ProfileData } from "@/types/profile";
 import { useCallback, useEffect, useState } from "react";
 
 type Tab = "likes" | "videos";
@@ -54,13 +58,33 @@ function VideoGrid({
   ));
 }
 
-export function ProfileScreen() {
-  const [profile, setProfile] = useState<Awaited<
-    ReturnType<typeof fetchCurrentProfile>
-  > | null>(null);
+function ProfileStats({ stats }: { stats: FollowStats }) {
+  return (
+    <div className="mt-3 flex gap-6 text-sm">
+      <div>
+        <span className="font-semibold text-foreground">{stats.followerCount}</span>
+        <span className="ml-1 text-muted">フォロワー</span>
+      </div>
+      <div>
+        <span className="font-semibold text-foreground">{stats.followingCount}</span>
+        <span className="ml-1 text-muted">フォロー中</span>
+      </div>
+    </div>
+  );
+}
+
+type ProfileScreenProps = {
+  /** 省略時はログインユーザー自身 */
+  userId?: string;
+};
+
+export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [followStats, setFollowStats] = useState<FollowStats | null>(null);
+  const [isOwnProfile, setIsOwnProfile] = useState(true);
   const [tab, setTab] = useState<Tab>("likes");
   const [likedVideos, setLikedVideos] = useState<FeedVideo[]>([]);
-  const [myVideos, setMyVideos] = useState<FeedVideo[]>([]);
+  const [userVideos, setUserVideos] = useState<FeedVideo[]>([]);
   const [selected, setSelected] = useState<FeedVideo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,20 +93,35 @@ export function ProfileScreen() {
     setLoading(true);
     setError(null);
     try {
-      const p = await fetchCurrentProfile();
-      const [liked, mine] = await Promise.all([
-        fetchLikedVideos(p.userId),
-        fetchMyVideos(p.userId),
+      const current = await fetchCurrentProfile();
+      const targetUserId = userIdProp ?? current.userId;
+      const own = targetUserId === current.userId;
+
+      const [p, stats, videos] = await Promise.all([
+        own ? Promise.resolve(current) : fetchProfile(targetUserId),
+        fetchFollowStats(targetUserId),
+        fetchUserVideos(targetUserId),
       ]);
+
       setProfile(p);
-      setLikedVideos(liked);
-      setMyVideos(mine);
+      setFollowStats(stats);
+      setIsOwnProfile(own);
+      setUserVideos(videos);
+
+      if (own) {
+        const liked = await fetchLikedVideos(targetUserId);
+        setLikedVideos(liked);
+        setTab((t) => (t === "likes" ? "likes" : t));
+      } else {
+        setLikedVideos([]);
+        setTab("videos");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "読み込みに失敗しました");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userIdProp]);
 
   useEffect(() => {
     load();
@@ -94,44 +133,61 @@ export function ProfileScreen() {
         {loading && !profile ? (
           <p className="text-sm text-muted">読み込み中…</p>
         ) : profile ? (
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/30 to-fuchsia-500/30 text-xl font-bold text-violet-200">
-              {profile.username.slice(0, 1).toUpperCase()}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-4">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/30 to-fuchsia-500/30 text-xl font-bold text-violet-200">
+                {profile.username.slice(0, 1).toUpperCase()}
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-foreground">@{profile.username}</h2>
+                {profile.bio && (
+                  <p className="mt-1 text-sm text-muted">{profile.bio}</p>
+                )}
+                <p className="mt-1 text-xs text-muted">{profile.country}</p>
+                {followStats && <ProfileStats stats={followStats} />}
+              </div>
             </div>
-            <div>
-              <h2 className="text-lg font-bold text-foreground">@{profile.username}</h2>
-              {profile.bio && (
-                <p className="mt-1 text-sm text-muted">{profile.bio}</p>
-              )}
-              <p className="mt-1 text-xs text-muted">{profile.country}</p>
-            </div>
+
+            {!isOwnProfile && followStats && (
+              <FollowButton
+                userId={profile.userId}
+                initialStats={followStats}
+                onStatsChange={setFollowStats}
+              />
+            )}
           </div>
         ) : null}
 
-        <div className="mt-4 flex gap-1 rounded-xl bg-surface p-1">
-          <button
-            type="button"
-            onClick={() => setTab("likes")}
-            className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
-              tab === "likes"
-                ? "bg-surface-elevated text-foreground shadow-sm"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            いいね
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("videos")}
-            className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
-              tab === "videos"
-                ? "bg-surface-elevated text-foreground shadow-sm"
-                : "text-muted hover:text-foreground"
-            }`}
-          >
-            投稿
-          </button>
-        </div>
+        {isOwnProfile ? (
+          <div className="mt-4 flex gap-1 rounded-xl bg-surface p-1">
+            <button
+              type="button"
+              onClick={() => setTab("likes")}
+              className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
+                tab === "likes"
+                  ? "bg-surface-elevated text-foreground shadow-sm"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              いいね
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab("videos")}
+              className={`flex-1 rounded-lg py-2 text-sm font-medium transition ${
+                tab === "videos"
+                  ? "bg-surface-elevated text-foreground shadow-sm"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              投稿
+            </button>
+          </div>
+        ) : (
+          <p className="mt-4 text-xs text-muted">
+            公開済みの動画のみ表示されます（フォロワー限定はフォロー中のみ）
+          </p>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
@@ -145,7 +201,7 @@ export function ProfileScreen() {
           <p className="text-center text-sm text-muted">読み込み中…</p>
         ) : (
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            {tab === "likes" ? (
+            {isOwnProfile && tab === "likes" ? (
               <VideoGrid
                 videos={likedVideos}
                 emptyMessage="いいねした動画はまだありません"
@@ -153,8 +209,12 @@ export function ProfileScreen() {
               />
             ) : (
               <VideoGrid
-                videos={myVideos}
-                emptyMessage="投稿した動画はまだありません"
+                videos={userVideos}
+                emptyMessage={
+                  isOwnProfile
+                    ? "投稿した動画はまだありません"
+                    : "表示できる動画はありません"
+                }
                 onSelect={setSelected}
               />
             )}

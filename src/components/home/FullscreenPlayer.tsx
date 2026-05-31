@@ -2,6 +2,7 @@
 
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
 import type { FeedVideo } from "@/types/feed";
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 
 type FullscreenPlayerProps = {
@@ -59,7 +60,13 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
       <div className="flex min-h-0 flex-1 flex-col border-t border-border bg-surface-elevated px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
         <div className="shrink-0">
           <p className="text-base font-semibold text-foreground sm:text-lg">{video.title}</p>
-          <p className="mt-0.5 text-sm text-muted">@{video.creatorName}</p>
+          <Link
+            href={`/profile/${video.creatorId}`}
+            onClick={onClose}
+            className="mt-0.5 inline-block text-sm text-violet-300 transition hover:text-violet-200 hover:underline"
+          >
+            @{video.creatorName}
+          </Link>
           {video.isViralTop && (
             <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1 text-xs font-medium text-gold">
               <span aria-hidden>👑</span>

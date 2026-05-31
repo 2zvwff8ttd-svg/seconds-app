@@ -44,7 +44,7 @@ export async function fetchLikedVideos(userId: string): Promise<FeedVideo[]> {
     .filter((v): v is FeedVideo => v !== null);
 }
 
-export async function fetchMyVideos(userId: string): Promise<FeedVideo[]> {
+export async function fetchUserVideos(userId: string): Promise<FeedVideo[]> {
   const supabase = createClient();
   const caps = await probeVideoSchema(supabase);
   const select = caps.hasStatus || caps.hasPublishAt || caps.hasPublishedAt
@@ -66,6 +66,26 @@ export async function fetchMyVideos(userId: string): Promise<FeedVideo[]> {
   );
 }
 
+export async function fetchProfile(userId: string) {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, username, bio, avatar_url, country")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("ユーザーが見つかりません");
+
+  return {
+    userId: data.id,
+    username: data.username,
+    bio: data.bio,
+    avatarUrl: data.avatar_url,
+    country: data.country,
+  };
+}
+
 export async function fetchCurrentProfile() {
   const supabase = createClient();
   const {
@@ -77,19 +97,5 @@ export async function fetchCurrentProfile() {
     throw new Error("ログインが必要です");
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, username, bio, avatar_url, country")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-
-  return {
-    userId: user.id,
-    username: data?.username ?? "user",
-    bio: data?.bio ?? null,
-    avatarUrl: data?.avatar_url ?? null,
-    country: data?.country ?? "JP",
-  };
+  return fetchProfile(user.id);
 }

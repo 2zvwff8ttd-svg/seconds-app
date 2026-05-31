@@ -1,0 +1,13 @@
+export type ProfileData = {
+  userId: string;
+  username: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  country: string;
+};
+
+export type FollowStats = {
+  followerCount: number;
+  followingCount: number;
+  isFollowing: boolean;
+};
