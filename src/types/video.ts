@@ -15,7 +15,7 @@ export type VideoRow = {
   country: string;
   view_count: number;
   created_at: string;
-  profiles: { username: string } | null;
+  profiles: { username: string; avatar_url?: string | null } | null;
 };
 
 export type PostUploadStage =

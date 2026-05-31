@@ -201,3 +201,20 @@ where table_schema = 'public' and table_name = 'videos'
 select policyname, cmd from pg_policies
 where schemaname = 'public' and tablename = 'videos'
 order by policyname;
+
+-- --- 006: Realtime (likes & comments) ---
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'likes'
+  ) then
+    alter publication supabase_realtime add table public.likes;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'comments'
+  ) then
+    alter publication supabase_realtime add table public.comments;
+  end if;
+end $$;

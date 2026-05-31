@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
 import type { FeedVideo } from "@/types/feed";
+import { useEffect, useRef } from "react";
 
 type FullscreenPlayerProps = {
   video: FeedVideo;
@@ -33,7 +34,7 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
       aria-modal
       aria-label={video.title}
     >
-      <div className="relative flex-1">
+      <div className="relative min-h-0 flex-[1.1] shrink-0">
         <video
           ref={videoRef}
           src={video.videoUrl}
@@ -47,7 +48,7 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
           type="button"
           onClick={onClose}
           className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70"
-          aria-label="Close"
+          aria-label="閉じる"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M6 6l12 12M18 6L6 18" />
@@ -55,15 +56,21 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
         </button>
       </div>
 
-      <div className="border-t border-border bg-surface-elevated px-5 pb-8 pt-4 safe-area-pb">
-        <p className="text-lg font-semibold text-foreground">{video.title}</p>
-        <p className="mt-1 text-sm text-muted">@{video.creatorName}</p>
-        {video.isViralTop && (
-          <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1 text-xs font-medium text-gold">
-            <span aria-hidden>👑</span>
-            Yesterday&apos;s #1 in your country
-          </p>
-        )}
+      <div className="flex min-h-0 flex-1 flex-col border-t border-border bg-surface-elevated px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
+        <div className="shrink-0">
+          <p className="text-base font-semibold text-foreground sm:text-lg">{video.title}</p>
+          <p className="mt-0.5 text-sm text-muted">@{video.creatorName}</p>
+          {video.isViralTop && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1 text-xs font-medium text-gold">
+              <span aria-hidden>👑</span>
+              昨日の国別 #1
+            </p>
+          )}
+        </div>
+
+        <div className="mt-3 min-h-0 flex-1">
+          <VideoSocialPanel videoId={video.id} />
+        </div>
       </div>
     </div>
   );

@@ -7,41 +7,11 @@ import {
   probeVideoSchema,
 } from "@/lib/supabase/video-schema";
 import { createClient } from "@/lib/supabase/client";
+import { normalizeVideoRow, videoRowToFeedVideo } from "@/lib/videos/map-feed";
 import type { FeedVideo } from "@/types/feed";
-import type { VideoRow } from "@/types/video";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const FEED_LIMIT = 6;
-
-function normalizeRow(row: Record<string, unknown>): VideoRow {
-  const profiles = row.profiles;
-  const profile =
-    Array.isArray(profiles) && profiles.length > 0
-      ? (profiles[0] as { username: string })
-      : profiles && typeof profiles === "object" && "username" in profiles
-        ? (profiles as { username: string })
-        : null;
-
-  return {
-    ...(row as Omit<VideoRow, "profiles">),
-    profiles: profile,
-    status: (row.status as VideoRow["status"]) ?? "published",
-    publish_at: (row.publish_at as string | null) ?? null,
-    published_at: (row.published_at as string | null) ?? null,
-  };
-}
-
-function mapRow(row: VideoRow, isViralTop = false): FeedVideo {
-  return {
-    id: row.id,
-    videoUrl: row.video_url,
-    thumbnailUrl: row.thumbnail_url ?? undefined,
-    title: row.title || "Untitled",
-    creatorName: row.profiles?.username ?? "unknown",
-    isViralTop,
-    countryCode: row.country,
-  };
-}
 
 function getYesterdayRangeJst() {
   const now = new Date();
@@ -112,7 +82,10 @@ async function fetchViralVideo(
   }
 
   return data && typeof data === "object" && !("error" in data)
-    ? mapRow(normalizeRow(data as unknown as Record<string, unknown>), true)
+    ? videoRowToFeedVideo(
+        normalizeVideoRow(data as unknown as Record<string, unknown>),
+        { isViralTop: true },
+      )
     : null;
 }
 
@@ -168,7 +141,9 @@ export async function fetchHomeFeed(): Promise<{
       const retryOthers = (retry.data ?? [])
         .slice(0, viralVideo ? FEED_LIMIT - 1 : FEED_LIMIT)
         .map((row) =>
-      mapRow(normalizeRow(row as unknown as Record<string, unknown>)),
+      videoRowToFeedVideo(
+          normalizeVideoRow(row as unknown as Record<string, unknown>),
+        ),
     );
       const retryVideos = viralVideo ? [viralVideo, ...retryOthers] : retryOthers;
       return { videos: retryVideos, countryCode };
@@ -179,7 +154,9 @@ export async function fetchHomeFeed(): Promise<{
   const others = (rows ?? [])
     .slice(0, viralVideo ? FEED_LIMIT - 1 : FEED_LIMIT)
     .map((row) =>
-      mapRow(normalizeRow(row as unknown as Record<string, unknown>)),
+      videoRowToFeedVideo(
+        normalizeVideoRow(row as unknown as Record<string, unknown>),
+      ),
     );
 
   const videos = viralVideo ? [viralVideo, ...others] : others;

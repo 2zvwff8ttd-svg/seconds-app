@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:apply-status": "node scripts/apply-video-status.mjs",
-    "db:apply-fixes": "node scripts/apply-db-fixes.mjs"
+    "db:apply-fixes": "node scripts/apply-db-fixes.mjs",
+    "db:enable-realtime": "node scripts/enable-realtime.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

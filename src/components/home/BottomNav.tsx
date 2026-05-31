@@ -9,7 +9,7 @@ const NAV_ITEMS = [
   { id: "search", label: "Search", href: "#", disabled: true },
   { id: "camera", label: "Record", href: "/post", primary: true },
   { id: "messages", label: "Messages", href: "#", disabled: true },
-  { id: "profile", label: "Profile", href: "#", disabled: true },
+  { id: "profile", label: "Profile", href: "/profile" },
 ] as const;
 
 function NavIcon({ id }: { id: string }) {
