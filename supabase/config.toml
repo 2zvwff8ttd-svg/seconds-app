@@ -6,3 +6,10 @@ enabled = true
 
 [db]
 major_version = 15
+
+# Edge Function: daily-morning（毎朝 7:00 JST の日次ジョブ）
+# Cron は config.toml では定義できません。次のいずれかで設定:
+#   - Dashboard → Edge Functions → daily-morning → Schedules → 0 22 * * * (UTC)
+#   - SQL Editor → supabase/sql/schedule-daily-morning-cron.sql
+[functions.daily-morning]
+verify_jwt = false

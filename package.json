@@ -9,7 +9,9 @@
     "lint": "eslint",
     "db:apply-status": "node scripts/apply-video-status.mjs",
     "db:apply-fixes": "node scripts/apply-db-fixes.mjs",
-    "db:enable-realtime": "node scripts/enable-realtime.mjs"
+    "db:enable-realtime": "node scripts/enable-realtime.mjs",
+    "functions:deploy-daily-morning": "npx --yes supabase functions deploy daily-morning --no-verify-jwt",
+    "functions:invoke-daily-morning": "node scripts/invoke-daily-morning.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",
