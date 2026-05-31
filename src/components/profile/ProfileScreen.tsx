@@ -1,6 +1,8 @@
 "use client";
 
 import { FollowButton } from "@/components/profile/FollowButton";
+import { FollowListModal } from "@/components/profile/FollowListModal";
+import { ProfileStats } from "@/components/profile/ProfileStats";
 import { FullscreenPlayer } from "@/components/home/FullscreenPlayer";
 import { fetchFollowStats } from "@/lib/social/follows";
 import {
@@ -10,7 +12,7 @@ import {
   fetchUserVideos,
 } from "@/lib/videos/profile-feed";
 import type { FeedVideo } from "@/types/feed";
-import type { FollowStats, ProfileData } from "@/types/profile";
+import type { FollowListKind, FollowStats, ProfileData } from "@/types/profile";
 import { useCallback, useEffect, useState } from "react";
 
 type Tab = "likes" | "videos";
@@ -58,21 +60,6 @@ function VideoGrid({
   ));
 }
 
-function ProfileStats({ stats }: { stats: FollowStats }) {
-  return (
-    <div className="mt-3 flex gap-6 text-sm">
-      <div>
-        <span className="font-semibold text-foreground">{stats.followerCount}</span>
-        <span className="ml-1 text-muted">フォロワー</span>
-      </div>
-      <div>
-        <span className="font-semibold text-foreground">{stats.followingCount}</span>
-        <span className="ml-1 text-muted">フォロー中</span>
-      </div>
-    </div>
-  );
-}
-
 type ProfileScreenProps = {
   /** 省略時はログインユーザー自身 */
   userId?: string;
@@ -86,6 +73,9 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
   const [likedVideos, setLikedVideos] = useState<FeedVideo[]>([]);
   const [userVideos, setUserVideos] = useState<FeedVideo[]>([]);
   const [selected, setSelected] = useState<FeedVideo | null>(null);
+  const [followListKind, setFollowListKind] = useState<FollowListKind | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,7 +134,13 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
                   <p className="mt-1 text-sm text-muted">{profile.bio}</p>
                 )}
                 <p className="mt-1 text-xs text-muted">{profile.country}</p>
-                {followStats && <ProfileStats stats={followStats} />}
+                {followStats && (
+                  <ProfileStats
+                    stats={followStats}
+                    onFollowersClick={() => setFollowListKind("followers")}
+                    onFollowingClick={() => setFollowListKind("following")}
+                  />
+                )}
               </div>
             </div>
 
@@ -224,6 +220,14 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
 
       {selected && (
         <FullscreenPlayer video={selected} onClose={() => setSelected(null)} />
+      )}
+
+      {followListKind && profile && (
+        <FollowListModal
+          userId={profile.userId}
+          kind={followListKind}
+          onClose={() => setFollowListKind(null)}
+        />
       )}
     </div>
   );

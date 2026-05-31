@@ -11,3 +11,11 @@ export type FollowStats = {
   followingCount: number;
   isFollowing: boolean;
 };
+
+export type FollowListUser = {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+};
+
+export type FollowListKind = "followers" | "following";
