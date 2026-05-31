@@ -15,7 +15,10 @@ import { createClient } from "@/lib/supabase/client";
 import type { PostUploadStage, VideoVisibility } from "@/types/video";
 
 export type PostVideoInput = {
-  file: File;
+  /** 複数クリップ（vlog） */
+  clips?: File[];
+  /** 単一ファイル（従来互換） */
+  file?: File;
   title: string;
   visibility: VideoVisibility;
   onStageChange: (stage: PostUploadStage) => void;
@@ -35,6 +38,16 @@ function isRlsError(message: string): boolean {
     message.includes("row-level security") ||
     message.includes("42501")
   );
+}
+
+function resolveClipFiles(input: PostVideoInput): File[] {
+  if (input.clips && input.clips.length > 0) return input.clips;
+  if (input.file) return [input.file];
+  return [];
+}
+
+function clipExtension(file: File): string {
+  return getVideoExtension(file);
 }
 
 async function ensureProfile(
@@ -124,7 +137,6 @@ async function saveVideoRow(
     };
   }
 
-  // INSERT のみ（.select() なし）→ RLS の SELECT ポリシー不要
   const { error } = await supabase.from("videos").insert(baseInsert);
 
   if (error) {
@@ -147,13 +159,13 @@ async function saveVideoRow(
   };
 }
 
-export async function postVideo({
-  file,
-  title,
-  visibility,
-  onStageChange,
-  onProgress,
-}: PostVideoInput): Promise<PostVideoResult> {
+export async function postVideo(input: PostVideoInput): Promise<PostVideoResult> {
+  const clipFiles = resolveClipFiles(input);
+  if (clipFiles.length === 0) {
+    throw new Error("投稿するクリップがありません");
+  }
+
+  const { title, visibility, onStageChange, onProgress } = input;
   const supabase = createClient();
 
   const {
@@ -170,16 +182,15 @@ export async function postVideo({
   onStageChange("preparing");
   onProgress(5, "動画を解析中…");
 
-  const [country, durationSeconds, thumbnailBlob] = await Promise.all([
+  const [country, durations, thumbnailBlob] = await Promise.all([
     detectCountryCode(),
-    getVideoDuration(file),
-    captureVideoThumbnail(file),
+    Promise.all(clipFiles.map((f) => getVideoDuration(f))),
+    captureVideoThumbnail(clipFiles[0]),
   ]);
 
+  const durationSeconds = durations.reduce((a, b) => a + b, 0);
   const videoId = crypto.randomUUID();
-  const ext = getVideoExtension(file);
   const basePath = `${user.id}/${videoId}`;
-  const videoPath = `${basePath}/video.${ext}`;
   const thumbnailPath = `${basePath}/thumb.jpg`;
 
   onStageChange("uploading_thumbnail");
@@ -191,24 +202,40 @@ export async function postVideo({
     thumbnailBlob,
     "image/jpeg",
     (ratio) => {
-      onProgress(10 + ratio * 15, "サムネイルをアップロード中…");
+      onProgress(10 + ratio * 10, "サムネイルをアップロード中…");
     },
   );
 
-  onStageChange("uploading_video");
-  onProgress(25, "動画をアップロード中…");
+  const clipUrls: string[] = [];
+  const uploadShare = 70 / clipFiles.length;
 
-  await uploadFileWithProgress(
-    supabase,
-    videoPath,
-    file,
-    file.type || "video/mp4",
-    (ratio) => {
-      onProgress(25 + ratio * 65, "動画をアップロード中…");
-    },
-  );
+  for (let i = 0; i < clipFiles.length; i++) {
+    const file = clipFiles[i];
+    const ext = clipExtension(file);
+    const clipPath = `${basePath}/clip-${i}.${ext}`;
 
-  const videoUrl = getMediaPublicUrl(videoPath);
+    onStageChange("uploading_video");
+    onProgress(
+      20 + uploadShare * i,
+      clipFiles.length > 1
+        ? `クリップ ${i + 1}/${clipFiles.length} をアップロード中…`
+        : "動画をアップロード中…",
+    );
+
+    await uploadFileWithProgress(
+      supabase,
+      clipPath,
+      file,
+      file.type || "video/webm",
+      (ratio) => {
+        onProgress(20 + uploadShare * i + uploadShare * ratio, "動画をアップロード中…");
+      },
+    );
+
+    clipUrls.push(getMediaPublicUrl(clipPath));
+  }
+
+  const videoUrl = clipUrls[0];
   const thumbnailUrl = getMediaPublicUrl(thumbnailPath);
 
   onStageChange("saving");
@@ -225,17 +252,19 @@ export async function postVideo({
     country,
   });
 
-  const { error: clipError } = await supabase.from("clips").insert({
-    video_id: inserted.id,
-    clip_url: videoUrl,
-    clip_order: 0,
-  });
+  for (let i = 0; i < clipUrls.length; i++) {
+    const { error: clipError } = await supabase.from("clips").insert({
+      video_id: inserted.id,
+      clip_url: clipUrls[i],
+      clip_order: i,
+    });
 
-  if (clipError) {
-    if (isRlsError(clipError.message)) {
-      throw new Error(`${clipError.message}\n\n${DB_FIX_HINT}`);
+    if (clipError) {
+      if (isRlsError(clipError.message)) {
+        throw new Error(`${clipError.message}\n\n${DB_FIX_HINT}`);
+      }
+      throw new Error(clipError.message);
     }
-    throw new Error(clipError.message);
   }
 
   onStageChange("done");

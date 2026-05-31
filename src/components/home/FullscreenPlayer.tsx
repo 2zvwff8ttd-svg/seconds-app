@@ -1,9 +1,10 @@
 "use client";
 
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
+import { fetchVideoClipUrls } from "@/lib/videos/clips";
 import type { FeedVideo } from "@/types/feed";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type FullscreenPlayerProps = {
   video: FeedVideo;
@@ -12,13 +13,27 @@ type FullscreenPlayerProps = {
 
 export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [clipUrls, setClipUrls] = useState<string[]>([video.videoUrl]);
+  const [clipIndex, setClipIndex] = useState(0);
+
+  useEffect(() => {
+    setClipUrls([video.videoUrl]);
+    setClipIndex(0);
+    fetchVideoClipUrls(video.id)
+      .then((urls) => {
+        if (urls.length > 0) setClipUrls(urls);
+      })
+      .catch(() => {});
+  }, [video.id, video.videoUrl]);
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     el.muted = false;
+    el.src = clipUrls[clipIndex] ?? video.videoUrl;
+    el.load();
     el.play().catch(() => {});
-  }, [video.id]);
+  }, [clipIndex, clipUrls, video.videoUrl]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -27,6 +42,12 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const handleEnded = () => {
+    if (clipIndex < clipUrls.length - 1) {
+      setClipIndex((i) => i + 1);
+    }
+  };
 
   return (
     <div
@@ -38,13 +59,18 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
       <div className="relative min-h-0 flex-[1.1] shrink-0">
         <video
           ref={videoRef}
-          src={video.videoUrl}
           poster={video.thumbnailUrl}
           className="h-full w-full object-contain"
           playsInline
           controls
           autoPlay
+          onEnded={handleEnded}
         />
+        {clipUrls.length > 1 && (
+          <div className="absolute right-4 top-14 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white backdrop-blur-md">
+            {clipIndex + 1} / {clipUrls.length}
+          </div>
+        )}
         <button
           type="button"
           onClick={onClose}

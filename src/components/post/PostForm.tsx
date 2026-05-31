@@ -1,10 +1,13 @@
 "use client";
 
+import { CameraRecorder } from "@/components/record/CameraRecorder";
+import { ClipStrip } from "@/components/record/ClipStrip";
 import { UploadProgress } from "@/components/post/UploadProgress";
 import { postVideo } from "@/lib/videos/post";
+import type { RecordedClip } from "@/types/recording";
 import type { PostUploadStage, VideoVisibility } from "@/types/video";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const VISIBILITY_OPTIONS = [
   {
@@ -43,8 +46,9 @@ function formatPublishTime(iso: string): string {
 export function PostForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [clips, setClips] = useState<RecordedClip[]>([]);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreviewUrl, setUploadPreviewUrl] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [visibility, setVisibility] = useState<VideoVisibility>("public");
   const [stage, setStage] = useState<PostUploadStage>("idle");
@@ -54,29 +58,47 @@ export function PostForm() {
   const [success, setSuccess] = useState<{ publishAt: string } | null>(null);
 
   const isUploading = stage !== "idle" && stage !== "error" && stage !== "done";
+  const hasContent = clips.length > 0 || uploadFile !== null;
 
-  const handleFileChange = (nextFile: File | null) => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-
-    if (!nextFile) {
-      setFile(null);
-      setPreviewUrl(null);
+  useEffect(() => {
+    if (!uploadFile) {
+      setUploadPreviewUrl(null);
       return;
     }
+    const url = URL.createObjectURL(uploadFile);
+    setUploadPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [uploadFile]);
 
+  const handleClipAdded = useCallback((clip: RecordedClip) => {
+    setUploadFile(null);
+    setClips((prev) => [...prev, clip]);
+    setError(null);
+  }, []);
+
+  const handleRemoveClip = useCallback((id: string) => {
+    setClips((prev) => {
+      const target = prev.find((c) => c.id === id);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((c) => c.id !== id);
+    });
+  }, []);
+
+  const handleFileChange = (nextFile: File | null) => {
+    if (!nextFile) return;
     if (!nextFile.type.startsWith("video/")) {
       setError("動画ファイルを選択してください");
       return;
     }
-
+    clips.forEach((c) => URL.revokeObjectURL(c.previewUrl));
+    setClips([]);
+    setUploadFile(nextFile);
     setError(null);
-    setFile(nextFile);
-    setPreviewUrl(URL.createObjectURL(nextFile));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || isUploading) return;
+    if (!hasContent || isUploading) return;
 
     setError(null);
     setProgress(0);
@@ -84,7 +106,8 @@ export function PostForm() {
 
     try {
       const result = await postVideo({
-        file,
+        clips: clips.length > 0 ? clips.map((c) => c.file) : undefined,
+        file: uploadFile ?? undefined,
         title,
         visibility,
         onStageChange: setStage,
@@ -136,107 +159,118 @@ export function PostForm() {
         ref={fileInputRef}
         type="file"
         accept="video/*"
-        capture="environment"
         className="hidden"
         onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)}
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 sm:px-5">
-        {!file ? (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex min-h-[240px] w-full flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-surface-elevated/60 px-6 py-10 text-center transition hover:border-accent/40 hover:bg-surface-elevated"
-          >
-            <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-violet-500/15 text-violet-300">
-              <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
-            </span>
-            <span className="text-sm font-medium text-foreground">動画を選択</span>
-            <span className="mt-1 text-xs text-muted">MP4 / WebM / MOV（最大100MB）</span>
-            <span className="mt-3 text-[10px] text-muted">※ 翌朝7時に公開されます</span>
-          </button>
+        {!uploadFile ? (
+          <>
+            <CameraRecorder
+              clips={clips}
+              onClipAdded={handleClipAdded}
+              disabled={isUploading}
+            />
+            <ClipStrip
+              clips={clips}
+              onRemove={handleRemoveClip}
+              disabled={isUploading}
+            />
+          </>
         ) : (
-          <div className="space-y-4 pb-4">
+          <div className="space-y-3 pb-4">
             <div className="overflow-hidden rounded-2xl border border-border bg-black">
-              {previewUrl && (
+              {uploadPreviewUrl && (
                 <video
-                  src={previewUrl}
+                  src={uploadPreviewUrl}
                   controls
                   playsInline
                   className="aspect-[9/16] max-h-[38vh] w-full bg-black object-contain"
                 />
               )}
             </div>
-
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setUploadFile(null)}
               disabled={isUploading}
-              className="text-xs text-muted underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+              className="text-xs text-muted underline-offset-2 hover:text-foreground hover:underline"
             >
-              別の動画を選ぶ
+              カメラ撮影に戻る
             </button>
+          </div>
+        )}
 
-            <div>
-              <label htmlFor="title" className="mb-1.5 flex items-baseline gap-2">
-                <span className="text-xs font-medium text-foreground">タイトル</span>
-                <span className="text-[10px] text-muted">任意</span>
-              </label>
-              <input
-                id="title"
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                maxLength={120}
-                disabled={isUploading}
-                placeholder="未入力の場合は「無題のvlog」になります"
-                className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none placeholder:text-muted/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/30 disabled:opacity-50"
-              />
-            </div>
+        {!uploadFile && (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="mt-3 w-full text-center text-xs text-muted underline-offset-2 hover:text-foreground hover:underline disabled:opacity-50"
+          >
+            ファイルから選ぶ
+          </button>
+        )}
+
+        {hasContent && (
+          <div className="mt-4">
+            <label htmlFor="title" className="mb-1.5 flex items-baseline gap-2">
+              <span className="text-xs font-medium text-foreground">タイトル</span>
+              <span className="text-[10px] text-muted">任意</span>
+            </label>
+            <input
+              id="title"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={120}
+              disabled={isUploading}
+              placeholder="未入力の場合は「無題のvlog」になります"
+              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none placeholder:text-muted/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/30 disabled:opacity-50"
+            />
           </div>
         )}
       </div>
 
       <div className="shrink-0 border-t border-border bg-surface-elevated/95 px-4 py-4 backdrop-blur-lg sm:px-5">
-        <section aria-labelledby="visibility-label">
-          <h2 id="visibility-label" className="mb-1 text-xs font-semibold text-foreground">
-            公開範囲
-          </h2>
-          <p className="mb-3 text-[10px] text-muted">公開後に誰が視聴できるかを選びます</p>
+        {hasContent && (
+          <section aria-labelledby="visibility-label">
+            <h2 id="visibility-label" className="mb-1 text-xs font-semibold text-foreground">
+              公開範囲
+            </h2>
+            <p className="mb-3 text-[10px] text-muted">公開後に誰が視聴できるかを選びます</p>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {VISIBILITY_OPTIONS.map((option) => {
-              const selected = visibility === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  disabled={isUploading}
-                  onClick={() => setVisibility(option.value)}
-                  className={`flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition disabled:opacity-50 ${
-                    selected
-                      ? "border-violet-400/70 bg-violet-500/15 ring-1 ring-violet-400/30"
-                      : "border-border bg-surface hover:border-border/80"
-                  }`}
-                >
-                  <span className={selected ? "text-violet-300" : "text-muted"}>
-                    {option.icon}
-                  </span>
-                  <span>
-                    <span className="block text-sm font-medium text-foreground">
-                      {option.label}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {VISIBILITY_OPTIONS.map((option) => {
+                const selected = visibility === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    disabled={isUploading}
+                    onClick={() => setVisibility(option.value)}
+                    className={`flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition disabled:opacity-50 ${
+                      selected
+                        ? "border-violet-400/70 bg-violet-500/15 ring-1 ring-violet-400/30"
+                        : "border-border bg-surface hover:border-border/80"
+                    }`}
+                  >
+                    <span className={selected ? "text-violet-300" : "text-muted"}>
+                      {option.icon}
                     </span>
-                    <span className="mt-0.5 block text-[10px] leading-snug text-muted">
-                      {option.description}
+                    <span>
+                      <span className="block text-sm font-medium text-foreground">
+                        {option.label}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] leading-snug text-muted">
+                        {option.description}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {isUploading && (
           <div className="mt-4">
@@ -252,15 +286,19 @@ export function PostForm() {
 
         <button
           type="submit"
-          disabled={!file || isUploading}
+          disabled={!hasContent || isUploading}
           className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {isUploading ? "投稿中…" : "投稿する"}
+          {isUploading
+            ? "投稿中…"
+            : clips.length > 1
+              ? `${clips.length}クリップをvlogとして投稿`
+              : "投稿する"}
         </button>
 
-        {!file && !isUploading && (
+        {!hasContent && !isUploading && (
           <p className="mt-2 text-center text-[10px] text-muted">
-            動画を選択すると投稿できます
+            録画ボタンでクリップを撮影してください
           </p>
         )}
       </div>
