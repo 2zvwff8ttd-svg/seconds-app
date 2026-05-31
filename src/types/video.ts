@@ -20,6 +20,8 @@ export type VideoRow = {
 
 export type PostUploadStage =
   | "idle"
+  | "ai_enhancing"
+  | "merging_audio"
   | "preparing"
   | "uploading_thumbnail"
   | "uploading_video"

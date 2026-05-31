@@ -14,6 +14,9 @@
     "functions:invoke-daily-morning": "node scripts/invoke-daily-morning.mjs"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.2",
     "next": "16.2.6",
@@ -21,14 +24,14 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
-    "dotenv": "^16.5.0",
-    "postgres": "^3.4.7",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^16.5.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "postgres": "^3.4.7",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

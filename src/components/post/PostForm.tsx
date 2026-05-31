@@ -1,8 +1,10 @@
 "use client";
 
+import { AiEnhancePanel } from "@/components/post/AiEnhancePanel";
 import { CameraRecorder } from "@/components/record/CameraRecorder";
 import { ClipStrip } from "@/components/record/ClipStrip";
 import { UploadProgress } from "@/components/post/UploadProgress";
+import { analyzeVideoFrame, generateAiMusic } from "@/lib/ai/client";
 import {
   fetchTodayAssignedSeconds,
 } from "@/lib/recording/daily-assignment";
@@ -11,10 +13,13 @@ import {
   sumRecordedClipSeconds,
 } from "@/lib/recording/clip-budget";
 import { postVideo } from "@/lib/videos/post";
+import { blobToBase64, extractFirstFrameBlob } from "@/lib/video/extract-frame";
+import { mergeVideoWithBgm } from "@/lib/video/merge-bgm";
+import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
 import type { RecordedClip } from "@/types/recording";
 import type { PostUploadStage, VideoVisibility } from "@/types/video";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const VISIBILITY_OPTIONS = [
   {
@@ -53,6 +58,7 @@ function formatPublishTime(iso: string): string {
 export function PostForm() {
   const [clips, setClips] = useState<RecordedClip[]>([]);
   const [title, setTitle] = useState("");
+  const [titleTouched, setTitleTouched] = useState(false);
   const [visibility, setVisibility] = useState<VideoVisibility>("public");
   const [stage, setStage] = useState<PostUploadStage>("idle");
   const [progress, setProgress] = useState(0);
@@ -61,12 +67,17 @@ export function PostForm() {
   const [success, setSuccess] = useState<{ publishAt: string } | null>(null);
   const [assignedSeconds, setAssignedSeconds] = useState(15);
 
+  const [aiMusicEnabled, setAiMusicEnabled] = useState(false);
+  const [aiStatus, setAiStatus] = useState<AiEnhanceStatus>("idle");
+  const [analyzeResult, setAnalyzeResult] = useState<AiAnalyzeResult | null>(null);
+  const [bgmBlob, setBgmBlob] = useState<Blob | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const aiRunId = useRef(0);
+
   useEffect(() => {
     fetchTodayAssignedSeconds()
       .then(setAssignedSeconds)
-      .catch(() => {
-        /* デフォルト 15 秒のまま */
-      });
+      .catch(() => {});
   }, []);
 
   const isUploading = stage !== "idle" && stage !== "error" && stage !== "done";
@@ -77,10 +88,97 @@ export function PostForm() {
     [usedSeconds, assignedSeconds],
   );
   const canPost = hasContent && budgetExhausted && !isUploading;
+  const clipKey = useMemo(() => clips.map((c) => c.id).join(","), [clips]);
+
+  const runMusicGeneration = useCallback(
+    async (result: AiAnalyzeResult, totalSeconds: number, runId: number) => {
+      setAiStatus("generating_music");
+      try {
+        const blob = await generateAiMusic(result.musicPrompt, totalSeconds);
+        if (aiRunId.current !== runId) return;
+        setBgmBlob(blob);
+        setAiStatus("ready");
+      } catch (err) {
+        if (aiRunId.current !== runId) return;
+        setAiError(err instanceof Error ? err.message : "BGM生成に失敗しました");
+        setAiStatus("error");
+      }
+    },
+    [],
+  );
+
+  const runAiPipeline = useCallback(async () => {
+    if (clips.length === 0) return;
+
+    const runId = ++aiRunId.current;
+    setAiError(null);
+    setAnalyzeResult(null);
+    setBgmBlob(null);
+    setAiStatus("analyzing");
+
+    try {
+      const frame = await extractFirstFrameBlob(clips[0].file);
+      const base64 = await blobToBase64(frame);
+      const result = await analyzeVideoFrame(base64, "image/jpeg");
+
+      if (aiRunId.current !== runId) return;
+
+      setAnalyzeResult(result);
+      if (!titleTouched) {
+        setTitle(result.title);
+      }
+
+      if (aiMusicEnabled) {
+        await runMusicGeneration(result, usedSeconds, runId);
+      } else {
+        setAiStatus("ready");
+      }
+    } catch (err) {
+      if (aiRunId.current !== runId) return;
+      setAiError(err instanceof Error ? err.message : "AI解析に失敗しました");
+      setAiStatus("error");
+    }
+  }, [clips, aiMusicEnabled, runMusicGeneration, titleTouched, usedSeconds]);
+
+  useEffect(() => {
+    if (!budgetExhausted || clips.length === 0) {
+      setAiStatus("idle");
+      setAnalyzeResult(null);
+      setBgmBlob(null);
+      setAiError(null);
+      return;
+    }
+    void runAiPipeline();
+  }, [budgetExhausted, clipKey, runAiPipeline]);
+
+  useEffect(() => {
+    if (!aiMusicEnabled || !analyzeResult || bgmBlob || aiStatus === "analyzing") {
+      return;
+    }
+    if (aiStatus === "generating_music") return;
+    const runId = aiRunId.current;
+    void runMusicGeneration(analyzeResult, usedSeconds, runId);
+  }, [
+    aiMusicEnabled,
+    analyzeResult,
+    bgmBlob,
+    aiStatus,
+    usedSeconds,
+    runMusicGeneration,
+  ]);
+
+  const handleAiMusicChange = (enabled: boolean) => {
+    setAiMusicEnabled(enabled);
+    if (!enabled) {
+      setBgmBlob(null);
+      if (analyzeResult) setAiStatus("ready");
+    }
+  };
 
   const handleClipAdded = useCallback((clip: RecordedClip) => {
     setClips((prev) => [...prev, clip]);
     setError(null);
+    setTitleTouched(false);
   }, []);
 
   const handleRemoveClip = useCallback((id: string) => {
@@ -89,7 +187,38 @@ export function PostForm() {
       if (target) URL.revokeObjectURL(target.previewUrl);
       return prev.filter((c) => c.id !== id);
     });
+    setTitleTouched(false);
   }, []);
+
+  const prepareClipsForUpload = async (): Promise<
+    { file: File; durationSeconds: number }[]
+  > => {
+    if (!aiMusicEnabled || !bgmBlob) {
+      return clips.map((c) => ({
+        file: c.file,
+        durationSeconds: c.durationSeconds,
+      }));
+    }
+
+    setStage("merging_audio");
+    setProgressLabel("BGM を動画に合成中…");
+
+    const merged: { file: File; durationSeconds: number }[] = [];
+    for (let i = 0; i < clips.length; i++) {
+      setProgressLabel(
+        clips.length > 1
+          ? `クリップ ${i + 1}/${clips.length} に BGM を合成中…`
+          : "BGM を動画に合成中…",
+      );
+      const file = await mergeVideoWithBgm(
+        clips[i].file,
+        bgmBlob,
+        (ratio) => setProgress(Math.round(ratio * 15)),
+      );
+      merged.push({ file, durationSeconds: clips[i].durationSeconds });
+    }
+    return merged;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,11 +229,10 @@ export function PostForm() {
     setProgressLabel("準備中…");
 
     try {
+      const uploadClips = await prepareClipsForUpload();
+
       const result = await postVideo({
-        clips: clips.map((c) => ({
-          file: c.file,
-          durationSeconds: c.durationSeconds,
-        })),
+        clips: uploadClips,
         title,
         visibility,
         onStageChange: setStage,
@@ -164,20 +292,39 @@ export function PostForm() {
           disabled={isUploading}
         />
 
+        {budgetExhausted && hasContent && (
+          <AiEnhancePanel
+            status={aiStatus}
+            aiMusicEnabled={aiMusicEnabled}
+            onAiMusicChange={handleAiMusicChange}
+            analyzeResult={analyzeResult}
+            error={aiError}
+            onRegenerate={() => void runAiPipeline()}
+            disabled={isUploading}
+          />
+        )}
+
         {hasContent && (
           <div className="mt-4">
             <label htmlFor="title" className="mb-1.5 flex items-baseline gap-2">
               <span className="text-xs font-medium text-foreground">タイトル</span>
-              <span className="text-[10px] text-muted">任意</span>
+              <span className="text-[10px] text-muted">
+                {analyzeResult && !titleTouched ? "AI提案" : "任意"}
+              </span>
             </label>
             <input
               id="title"
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitleTouched(true);
+                setTitle(e.target.value);
+              }}
               maxLength={120}
               disabled={isUploading}
-              placeholder="未入力の場合は「無題のvlog」になります"
+              placeholder={
+                analyzeResult?.title || "未入力の場合は「無題のvlog」になります"
+              }
               className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none placeholder:text-muted/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/30 disabled:opacity-50"
             />
           </div>
