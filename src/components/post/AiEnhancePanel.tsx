@@ -1,5 +1,6 @@
 "use client";
 
+import { AI_BGM_GENERATION_ENABLED } from "@/lib/ai/features";
 import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
 
 type AiEnhancePanelProps = {
@@ -29,7 +30,7 @@ export function AiEnhancePanel({
         <div>
           <h3 className="text-xs font-semibold text-violet-200">AI 投稿サポート</h3>
           <p className="mt-0.5 text-[10px] leading-relaxed text-muted">
-            最初のフレームを Gemini が解析し、タイトルと BGM を提案します
+            最初のフレームを Gemini が解析し、タイトルを提案します
           </p>
         </div>
         <span className="shrink-0 rounded-full bg-violet-500/20 px-2 py-0.5 text-[9px] font-medium text-violet-300">
@@ -41,7 +42,9 @@ export function AiEnhancePanel({
         <div>
           <p className="text-sm font-medium text-foreground">AI 音楽（BGM）</p>
           <p className="text-[10px] text-muted">
-            ON で MusicGen / Suno による BGM を合成
+            {AI_BGM_GENERATION_ENABLED
+              ? "ON で BGM を動画に合成"
+              : "準備中（プリセット音楽は近日対応）"}
           </p>
         </div>
         <button
@@ -77,11 +80,19 @@ export function AiEnhancePanel({
             <span className="text-foreground/70">シーン: </span>
             {analyzeResult.sceneDescription}
           </p>
-          <p className="text-muted">
-            <span className="text-foreground/70">BGM: </span>
-            {analyzeResult.musicPrompt}
-          </p>
+          {AI_BGM_GENERATION_ENABLED && (
+            <p className="text-muted">
+              <span className="text-foreground/70">BGM: </span>
+              {analyzeResult.musicPrompt}
+            </p>
+          )}
         </div>
+      )}
+
+      {aiMusicEnabled && !AI_BGM_GENERATION_ENABLED && (
+        <p className="mt-3 text-[10px] text-muted">
+          AI 音楽は現在オフです。スイッチは今後のプリセット BGM 用に残しています。
+        </p>
       )}
 
       {error && (

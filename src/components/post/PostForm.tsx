@@ -5,6 +5,7 @@ import { CameraRecorder } from "@/components/record/CameraRecorder";
 import { ClipStrip } from "@/components/record/ClipStrip";
 import { UploadProgress } from "@/components/post/UploadProgress";
 import { analyzeVideoFrame, generateAiMusic } from "@/lib/ai/client";
+import { AI_BGM_GENERATION_ENABLED } from "@/lib/ai/features";
 import {
   fetchTodayAssignedSeconds,
 } from "@/lib/recording/daily-assignment";
@@ -92,6 +93,7 @@ export function PostForm() {
 
   const runMusicGeneration = useCallback(
     async (result: AiAnalyzeResult, totalSeconds: number, runId: number) => {
+      if (!AI_BGM_GENERATION_ENABLED) return;
       setAiStatus("generating_music");
       try {
         const blob = await generateAiMusic(result.musicPrompt, totalSeconds);
@@ -128,7 +130,7 @@ export function PostForm() {
         setTitle(result.title);
       }
 
-      if (aiMusicEnabled) {
+      if (aiMusicEnabled && AI_BGM_GENERATION_ENABLED) {
         await runMusicGeneration(result, usedSeconds, runId);
       } else {
         setAiStatus("ready");
@@ -152,6 +154,7 @@ export function PostForm() {
   }, [budgetExhausted, clipKey, runAiPipeline]);
 
   useEffect(() => {
+    if (!AI_BGM_GENERATION_ENABLED) return;
     if (!aiMusicEnabled || !analyzeResult || bgmBlob || aiStatus === "analyzing") {
       return;
     }
@@ -172,6 +175,11 @@ export function PostForm() {
     if (!enabled) {
       setBgmBlob(null);
       if (analyzeResult) setAiStatus("ready");
+      return;
+    }
+    // BGM 生成は無効化中（プリセット音楽へ切替予定）
+    if (!AI_BGM_GENERATION_ENABLED && analyzeResult) {
+      setAiStatus("ready");
     }
   };
 
@@ -193,7 +201,7 @@ export function PostForm() {
   const prepareClipsForUpload = async (): Promise<
     { file: File; durationSeconds: number }[]
   > => {
-    if (!aiMusicEnabled || !bgmBlob) {
+    if (!AI_BGM_GENERATION_ENABLED || !aiMusicEnabled || !bgmBlob) {
       return clips.map((c) => ({
         file: c.file,
         durationSeconds: c.durationSeconds,

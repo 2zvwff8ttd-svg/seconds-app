@@ -1,7 +1,10 @@
 import { getReplicateApiToken } from "@/lib/ai/env";
 
-const MUSICGEN_VERSION =
-  "7a76a8258b23fae65c5ea7ede261ed0632f1e5b845643882224a6fe0007f20aa";
+const MUSICGEN_MODEL = "meta/musicgen";
+
+/** @see https://replicate.com/meta/musicgen */
+const MUSICGEN_LATEST_VERSION =
+  "671ac645ce5e552cc63a54a2bbff63fcf798043055d2dac5fc9e36a837eedcfb";
 
 async function waitForPrediction(
   id: string,
@@ -36,6 +39,55 @@ async function waitForPrediction(
   throw new Error("音楽生成がタイムアウトしました");
 }
 
+async function createPrediction(
+  token: string,
+  input: Record<string, unknown>,
+): Promise<{ id: string }> {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+
+  const modelRes = await fetch(
+    `https://api.replicate.com/v1/models/${MUSICGEN_MODEL}/predictions`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ input }),
+    },
+  );
+
+  if (modelRes.ok) {
+    const data = (await modelRes.json()) as { id: string };
+    return data;
+  }
+
+  const modelErr = await modelRes.text();
+  const useVersionFallback =
+    modelRes.status === 404 ||
+    modelErr.includes("Invalid version") ||
+    modelErr.includes("not permitted");
+
+  if (!useVersionFallback) {
+    throw new Error(`Replicate: ${modelRes.status} ${modelErr}`);
+  }
+
+  const versionRes = await fetch("https://api.replicate.com/v1/predictions", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      version: MUSICGEN_LATEST_VERSION,
+      input,
+    }),
+  });
+
+  if (!versionRes.ok) {
+    throw new Error(`Replicate: ${versionRes.status} ${await versionRes.text()}`);
+  }
+
+  return (await versionRes.json()) as { id: string };
+}
+
 export async function generateMusicWithReplicate(
   prompt: string,
   durationSeconds: number,
@@ -48,29 +100,14 @@ export async function generateMusicWithReplicate(
   }
 
   const duration = Math.min(30, Math.max(5, Math.round(durationSeconds)));
+  const input = {
+    prompt,
+    model_version: "melody",
+    duration,
+    output_format: "mp3",
+  };
 
-  const createRes = await fetch("https://api.replicate.com/v1/predictions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      version: MUSICGEN_VERSION,
-      input: {
-        prompt,
-        model_version: "melody",
-        duration,
-        output_format: "mp3",
-      },
-    }),
-  });
-
-  if (!createRes.ok) {
-    throw new Error(`Replicate: ${createRes.status} ${await createRes.text()}`);
-  }
-
-  const created = (await createRes.json()) as { id: string };
+  const created = await createPrediction(token, input);
   const audioUrl = await waitForPrediction(created.id, token);
 
   const audioRes = await fetch(audioUrl);

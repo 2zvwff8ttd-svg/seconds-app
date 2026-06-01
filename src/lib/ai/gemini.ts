@@ -50,7 +50,7 @@ export async function analyzeFirstFrameWithGemini(
 
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash",
+    model: process.env.GEMINI_MODEL?.trim() || "gemini-2.5-flash",
   });
 
   const result = await model.generateContent([
