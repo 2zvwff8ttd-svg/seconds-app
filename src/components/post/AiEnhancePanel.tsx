@@ -1,7 +1,9 @@
 "use client";
 
-import { AI_BGM_GENERATION_ENABLED } from "@/lib/ai/features";
+import { PresetBgmPicker } from "@/components/post/PresetBgmPicker";
+import { AI_BGM_GENERATION_ENABLED, PRESET_BGM_ENABLED } from "@/lib/ai/features";
 import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
+import type { PresetBgmTrack } from "@/types/preset-bgm";
 
 type AiEnhancePanelProps = {
   status: AiEnhanceStatus;
@@ -11,6 +13,8 @@ type AiEnhancePanelProps = {
   error: string | null;
   onRegenerate: () => void;
   disabled?: boolean;
+  selectedPresetId?: string | null;
+  onPresetSelect?: (track: PresetBgmTrack, blob: Blob) => void;
 };
 
 export function AiEnhancePanel({
@@ -21,8 +25,16 @@ export function AiEnhancePanel({
   error,
   onRegenerate,
   disabled = false,
+  selectedPresetId = null,
+  onPresetSelect,
 }: AiEnhancePanelProps) {
   const busy = status === "analyzing" || status === "generating_music";
+
+  const bgmDescription = AI_BGM_GENERATION_ENABLED
+    ? "ON で BGM を動画に合成"
+    : PRESET_BGM_ENABLED
+      ? "ON でプリセット曲を選んで合成"
+      : "準備中";
 
   return (
     <section className="mt-4 rounded-xl border border-violet-400/25 bg-violet-500/10 p-4">
@@ -40,12 +52,8 @@ export function AiEnhancePanel({
 
       <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-surface/80 px-3 py-2.5">
         <div>
-          <p className="text-sm font-medium text-foreground">AI 音楽（BGM）</p>
-          <p className="text-[10px] text-muted">
-            {AI_BGM_GENERATION_ENABLED
-              ? "ON で BGM を動画に合成"
-              : "準備中（プリセット音楽は近日対応）"}
-          </p>
+          <p className="text-sm font-medium text-foreground">BGM</p>
+          <p className="text-[10px] text-muted">{bgmDescription}</p>
         </div>
         <button
           type="button"
@@ -64,6 +72,14 @@ export function AiEnhancePanel({
           />
         </button>
       </div>
+
+      {aiMusicEnabled && PRESET_BGM_ENABLED && onPresetSelect && (
+        <PresetBgmPicker
+          selectedId={selectedPresetId}
+          onSelect={onPresetSelect}
+          disabled={disabled || busy}
+        />
+      )}
 
       {busy && (
         <p className="mt-3 flex items-center gap-2 text-xs text-violet-200">
@@ -89,9 +105,9 @@ export function AiEnhancePanel({
         </div>
       )}
 
-      {aiMusicEnabled && !AI_BGM_GENERATION_ENABLED && (
-        <p className="mt-3 text-[10px] text-muted">
-          AI 音楽は現在オフです。スイッチは今後のプリセット BGM 用に残しています。
+      {aiMusicEnabled && PRESET_BGM_ENABLED && !selectedPresetId && !busy && (
+        <p className="mt-3 text-[10px] text-amber-200/90">
+          投稿するにはプリセット曲を1曲選択してください。
         </p>
       )}
 

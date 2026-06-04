@@ -5,7 +5,7 @@ import { CameraRecorder } from "@/components/record/CameraRecorder";
 import { ClipStrip } from "@/components/record/ClipStrip";
 import { UploadProgress } from "@/components/post/UploadProgress";
 import { analyzeVideoFrame, generateAiMusic } from "@/lib/ai/client";
-import { AI_BGM_GENERATION_ENABLED } from "@/lib/ai/features";
+import { AI_BGM_GENERATION_ENABLED, PRESET_BGM_ENABLED } from "@/lib/ai/features";
 import {
   fetchTodayAssignedSeconds,
 } from "@/lib/recording/daily-assignment";
@@ -17,6 +17,7 @@ import { postVideo } from "@/lib/videos/post";
 import { blobToBase64, extractFirstFrameBlob } from "@/lib/video/extract-frame";
 import { mergeVideoWithBgm } from "@/lib/video/merge-bgm";
 import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
+import type { PresetBgmTrack } from "@/types/preset-bgm";
 import type { RecordedClip } from "@/types/recording";
 import type { PostUploadStage, VideoVisibility } from "@/types/video";
 import Link from "next/link";
@@ -72,6 +73,7 @@ export function PostForm() {
   const [aiStatus, setAiStatus] = useState<AiEnhanceStatus>("idle");
   const [analyzeResult, setAnalyzeResult] = useState<AiAnalyzeResult | null>(null);
   const [bgmBlob, setBgmBlob] = useState<Blob | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<PresetBgmTrack | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const aiRunId = useRef(0);
 
@@ -88,7 +90,10 @@ export function PostForm() {
     () => isRecordingBudgetExhausted(usedSeconds, assignedSeconds),
     [usedSeconds, assignedSeconds],
   );
-  const canPost = hasContent && budgetExhausted && !isUploading;
+  const bgmReady =
+    !aiMusicEnabled ||
+    (AI_BGM_GENERATION_ENABLED ? Boolean(bgmBlob) : Boolean(selectedPreset && bgmBlob));
+  const canPost = hasContent && budgetExhausted && !isUploading && bgmReady;
   const clipKey = useMemo(() => clips.map((c) => c.id).join(","), [clips]);
 
   const runMusicGeneration = useCallback(
@@ -115,7 +120,10 @@ export function PostForm() {
     const runId = ++aiRunId.current;
     setAiError(null);
     setAnalyzeResult(null);
-    setBgmBlob(null);
+    if (AI_BGM_GENERATION_ENABLED) {
+      setBgmBlob(null);
+      setSelectedPreset(null);
+    }
     setAiStatus("analyzing");
 
     try {
@@ -170,14 +178,21 @@ export function PostForm() {
     runMusicGeneration,
   ]);
 
+  const handlePresetSelect = useCallback((track: PresetBgmTrack, blob: Blob) => {
+    setSelectedPreset(track);
+    setBgmBlob(blob);
+    setAiError(null);
+    if (analyzeResult) setAiStatus("ready");
+  }, [analyzeResult]);
+
   const handleAiMusicChange = (enabled: boolean) => {
     setAiMusicEnabled(enabled);
     if (!enabled) {
       setBgmBlob(null);
+      setSelectedPreset(null);
       if (analyzeResult) setAiStatus("ready");
       return;
     }
-    // BGM 生成は無効化中（プリセット音楽へ切替予定）
     if (!AI_BGM_GENERATION_ENABLED && analyzeResult) {
       setAiStatus("ready");
     }
@@ -201,7 +216,12 @@ export function PostForm() {
   const prepareClipsForUpload = async (): Promise<
     { file: File; durationSeconds: number }[]
   > => {
-    if (!AI_BGM_GENERATION_ENABLED || !aiMusicEnabled || !bgmBlob) {
+    const shouldMergeBgm =
+      aiMusicEnabled &&
+      bgmBlob &&
+      (AI_BGM_GENERATION_ENABLED || PRESET_BGM_ENABLED);
+
+    if (!shouldMergeBgm) {
       return clips.map((c) => ({
         file: c.file,
         durationSeconds: c.durationSeconds,
@@ -309,6 +329,8 @@ export function PostForm() {
             error={aiError}
             onRegenerate={() => void runAiPipeline()}
             disabled={isUploading}
+            selectedPresetId={selectedPreset?.id ?? null}
+            onPresetSelect={handlePresetSelect}
           />
         )}
 
@@ -409,6 +431,12 @@ export function PostForm() {
         {hasContent && !budgetExhausted && !isUploading && (
           <p className="mt-2 text-center text-[10px] text-muted">
             割り当て時間をすべて使うと投稿できます
+          </p>
+        )}
+
+        {hasContent && budgetExhausted && aiMusicEnabled && !bgmReady && !isUploading && (
+          <p className="mt-2 text-center text-[10px] text-amber-200/90">
+            BGM を ON にした場合は曲を選択してください
           </p>
         )}
       </div>

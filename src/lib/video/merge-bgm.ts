@@ -39,7 +39,7 @@ export async function mergeVideoWithBgm(
 
   const videoExt = videoFile.name.split(".").pop() || "webm";
   const videoName = `input.${videoExt}`;
-  const bgmName = "bgm.mp3";
+  const bgmName = bgmFileName(bgmBlob);
   const outName = `output.${videoExt}`;
 
   await ffmpeg.writeFile(videoName, await fetchFile(videoFile));
@@ -112,6 +112,15 @@ export async function mergeVideoWithBgm(
   onProgress?.(1);
 
   return new File([blob], videoFile.name, { type: mime });
+}
+
+function bgmFileName(blob: Blob): string {
+  const type = blob.type.toLowerCase();
+  if (type.includes("wav")) return "bgm.wav";
+  if (type.includes("ogg")) return "bgm.ogg";
+  if (type.includes("m4a") || type.includes("mp4")) return "bgm.m4a";
+  if (type.includes("aac")) return "bgm.aac";
+  return "bgm.mp3";
 }
 
 async function videoHasAudioTrack(file: File): Promise<boolean> {
