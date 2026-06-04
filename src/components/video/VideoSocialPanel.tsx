@@ -18,9 +18,15 @@ function formatRelativeTime(iso: string): string {
 
 type VideoSocialPanelProps = {
   videoId: string;
+  onLikeEngagement?: () => void;
+  onCommentEngagement?: () => void;
 };
 
-export function VideoSocialPanel({ videoId }: VideoSocialPanelProps) {
+export function VideoSocialPanel({
+  videoId,
+  onLikeEngagement,
+  onCommentEngagement,
+}: VideoSocialPanelProps) {
   const [likeState, setLikeState] = useState<LikeState>({ count: 0, likedByMe: false });
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [draft, setDraft] = useState("");
@@ -66,6 +72,7 @@ export function VideoSocialPanel({ videoId }: VideoSocialPanelProps) {
     try {
       const next = await toggleLike(videoId, wasLiked);
       setLikeState(next);
+      if (!wasLiked) onLikeEngagement?.();
     } catch (err) {
       setLikeState(previous);
       setError(err instanceof Error ? err.message : "いいねに失敗しました");
@@ -83,6 +90,7 @@ export function VideoSocialPanel({ videoId }: VideoSocialPanelProps) {
       const created = await postComment(videoId, draft);
       setComments((prev) => [...prev, created]);
       setDraft("");
+      onCommentEngagement?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "コメントの投稿に失敗しました");
     } finally {

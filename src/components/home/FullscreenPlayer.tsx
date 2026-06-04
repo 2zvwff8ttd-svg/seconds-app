@@ -3,22 +3,36 @@
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
 import { fetchVideoClipUrls } from "@/lib/videos/clips";
 import type { FeedVideo } from "@/types/feed";
+import type { WatchReport } from "@/types/recommendation";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const COMPLETE_PROGRESS_THRESHOLD = 0.92;
 
 type FullscreenPlayerProps = {
   video: FeedVideo;
-  onClose: () => void;
+  onClose: (report: WatchReport) => void;
+  onLikeEngagement?: () => void;
+  onCommentEngagement?: () => void;
 };
 
-export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
+export function FullscreenPlayer({
+  video,
+  onClose,
+  onLikeEngagement,
+  onCommentEngagement,
+}: FullscreenPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [clipUrls, setClipUrls] = useState<string[]>([video.videoUrl]);
   const [clipIndex, setClipIndex] = useState(0);
+  const maxProgressRef = useRef(0);
+  const allClipsCompletedRef = useRef(false);
 
   useEffect(() => {
     setClipUrls([video.videoUrl]);
     setClipIndex(0);
+    maxProgressRef.current = 0;
+    allClipsCompletedRef.current = false;
     fetchVideoClipUrls(video.id)
       .then((urls) => {
         if (urls.length > 0) setClipUrls(urls);
@@ -35,17 +49,44 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
     el.play().catch(() => {});
   }, [clipIndex, clipUrls, video.videoUrl]);
 
+  const updateProgress = useCallback(() => {
+    const el = videoRef.current;
+    const totalClips = Math.max(1, clipUrls.length);
+    if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return;
+
+    const clipProgress = Math.min(1, el.currentTime / el.duration);
+    const overall = Math.min(1, (clipIndex + clipProgress) / totalClips);
+    maxProgressRef.current = Math.max(maxProgressRef.current, overall);
+  }, [clipIndex, clipUrls.length]);
+
+  const buildReport = useCallback((): WatchReport => {
+    const completed =
+      allClipsCompletedRef.current ||
+      maxProgressRef.current >= COMPLETE_PROGRESS_THRESHOLD;
+    return {
+      completed,
+      progress: maxProgressRef.current,
+    };
+  }, []);
+
+  const handleClose = useCallback(() => {
+    onClose(buildReport());
+  }, [onClose, buildReport]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [handleClose]);
 
   const handleEnded = () => {
     if (clipIndex < clipUrls.length - 1) {
       setClipIndex((i) => i + 1);
+    } else {
+      allClipsCompletedRef.current = true;
+      maxProgressRef.current = 1;
     }
   };
 
@@ -64,6 +105,7 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
           playsInline
           controls
           autoPlay
+          onTimeUpdate={updateProgress}
           onEnded={handleEnded}
         />
         {clipUrls.length > 1 && (
@@ -73,7 +115,7 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
         )}
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70"
           aria-label="閉じる"
         >
@@ -88,7 +130,7 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
           <p className="text-base font-semibold text-foreground sm:text-lg">{video.title}</p>
           <Link
             href={`/profile/${video.creatorId}`}
-            onClick={onClose}
+            onClick={handleClose}
             className="mt-0.5 inline-block text-sm text-violet-300 transition hover:text-violet-200 hover:underline"
           >
             @{video.creatorName}
@@ -102,7 +144,11 @@ export function FullscreenPlayer({ video, onClose }: FullscreenPlayerProps) {
         </div>
 
         <div className="mt-3 min-h-0 flex-1">
-          <VideoSocialPanel videoId={video.id} />
+          <VideoSocialPanel
+            videoId={video.id}
+            onLikeEngagement={onLikeEngagement}
+            onCommentEngagement={onCommentEngagement}
+          />
         </div>
       </div>
     </div>

@@ -11,7 +11,8 @@ import { normalizeVideoRow, videoRowToFeedVideo } from "@/lib/videos/map-feed";
 import type { FeedVideo } from "@/types/feed";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const FEED_LIMIT = 6;
+/** 補充用に多めに取得するプール上限 */
+const FEED_POOL_LIMIT = 40;
 
 function getYesterdayRangeJst() {
   const now = new Date();
@@ -111,7 +112,7 @@ export async function fetchHomeFeed(): Promise<{
     query = query.order("created_at", { ascending: false });
   }
 
-  query = query.limit(FEED_LIMIT + 5);
+  query = query.limit(FEED_POOL_LIMIT);
 
   if (viralVideo) {
     query = query.neq("id", viralVideo.id);
@@ -134,12 +135,12 @@ export async function fetchHomeFeed(): Promise<{
       } else {
         retryQuery = retryQuery.order("created_at", { ascending: false });
       }
-      retryQuery = retryQuery.limit(FEED_LIMIT + 5);
+      retryQuery = retryQuery.limit(FEED_POOL_LIMIT);
       if (viralVideo) retryQuery = retryQuery.neq("id", viralVideo.id);
       const retry = await retryQuery;
       if (retry.error) throw new Error(retry.error.message);
       const retryOthers = (retry.data ?? [])
-        .slice(0, viralVideo ? FEED_LIMIT - 1 : FEED_LIMIT)
+        .slice(0, viralVideo ? FEED_POOL_LIMIT - 1 : FEED_POOL_LIMIT)
         .map((row) =>
       videoRowToFeedVideo(
           normalizeVideoRow(row as unknown as Record<string, unknown>),
@@ -152,7 +153,7 @@ export async function fetchHomeFeed(): Promise<{
   }
 
   const others = (rows ?? [])
-    .slice(0, viralVideo ? FEED_LIMIT - 1 : FEED_LIMIT)
+    .slice(0, viralVideo ? FEED_POOL_LIMIT - 1 : FEED_POOL_LIMIT)
     .map((row) =>
       videoRowToFeedVideo(
         normalizeVideoRow(row as unknown as Record<string, unknown>),

@@ -2,12 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { FeedVideo } from "@/types/feed";
+import type { UserRecommendationContext, WatchReport } from "@/types/recommendation";
 import { fetchHomeFeed } from "@/lib/videos/feed";
+import { BUBBLE_SLOT_COUNT, pickBubbleVideos } from "@/lib/bubble-session";
 import {
   computeBubbleLayout,
   getFloatPresets,
   type BubblePlacement,
 } from "@/lib/bubble-layout";
+import {
+  emptyRecommendationContext,
+  fetchUserRecommendationContext,
+  mergeRecommendationContext,
+} from "@/lib/recommendation/context";
+import { recordWatchEngagement } from "@/lib/recommendation/engagements";
+import {
+  applySessionCommentSignal,
+  applySessionLikeSignal,
+  applySessionWatchSignal,
+  createEmptySessionPreference,
+} from "@/lib/recommendation/score";
 import { VideoBubble } from "./VideoBubble";
 import { FullscreenPlayer } from "./FullscreenPlayer";
 import Link from "next/link";
@@ -24,24 +38,72 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [selected, setSelected] = useState<FeedVideo | null>(null);
   const [burstingId, setBurstingId] = useState<string | null>(null);
-  const [videos, setVideos] = useState<FeedVideo[]>([]);
+  const [feedPool, setFeedPool] = useState<FeedVideo[]>([]);
+  const [activeBubbles, setActiveBubbles] = useState<FeedVideo[]>([]);
+  const [, setRecContext] = useState<UserRecommendationContext>(
+    emptyRecommendationContext,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const feedPoolRef = useRef<FeedVideo[]>([]);
+  const recContextRef = useRef<UserRecommendationContext>(emptyRecommendationContext());
+  const sessionPrefRef = useRef(createEmptySessionPreference());
+  const sessionWatchedIdsRef = useRef<Set<string>>(new Set());
+  const bubblesInitializedRef = useRef(false);
+
+  const mergedContext = useCallback(
+    () =>
+      mergeRecommendationContext(
+        recContextRef.current,
+        sessionPrefRef.current,
+      ),
+    [],
+  );
+
+  const pickSlots = useCallback(
+    (pool: FeedVideo[], excludeIds?: ReadonlySet<string>) =>
+      pickBubbleVideos(pool, mergedContext(), {
+        excludeIds,
+        sessionWatchedIds: sessionWatchedIdsRef.current,
+        count: BUBBLE_SLOT_COUNT,
+      }),
+    [mergedContext],
+  );
+
+  const applyFeedPool = useCallback(
+    (pool: FeedVideo[]) => {
+      feedPoolRef.current = pool;
+      setFeedPool(pool);
+      if (!bubblesInitializedRef.current) {
+        setActiveBubbles(pickSlots(pool));
+        bubblesInitializedRef.current = true;
+      }
+    },
+    [pickSlots],
+  );
 
   const loadFeed = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { videos: feedVideos, countryCode } = await fetchHomeFeed();
-      setVideos(feedVideos);
+      const [{ videos, countryCode }, serverCtx] = await Promise.all([
+        fetchHomeFeed(),
+        fetchUserRecommendationContext(),
+      ]);
+      recContextRef.current = serverCtx;
+      setRecContext(serverCtx);
+      applyFeedPool(videos);
       onCountryChange?.(countryCode);
     } catch (err) {
       setError(err instanceof Error ? err.message : "フィードの取得に失敗しました");
-      setVideos([]);
+      feedPoolRef.current = [];
+      setFeedPool([]);
+      setActiveBubbles([]);
     } finally {
       setLoading(false);
     }
-  }, [onCountryChange]);
+  }, [applyFeedPool, onCountryChange]);
 
   useEffect(() => {
     if (pathname === "/") {
@@ -69,16 +131,14 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
     return () => observer.disconnect();
   }, [bottomInset]);
 
-  const displayVideos = useMemo(() => {
-    if (videos.length > 0) return videos.slice(0, 6);
-    return [];
-  }, [videos]);
+  const displayVideos = activeBubbles;
 
   const placements = useMemo((): BubblePlacement[] => {
-    if (size.width === 0 || size.height === 0 || displayVideos.length === 0) {
+    const count = Math.min(BUBBLE_SLOT_COUNT, displayVideos.length);
+    if (size.width === 0 || size.height === 0 || count === 0) {
       return [];
     }
-    return computeBubbleLayout(size.width, size.height, displayVideos.length, {
+    return computeBubbleLayout(size.width, size.height, count, {
       viralFirst: true,
     });
   }, [size.width, size.height, displayVideos.length]);
@@ -108,7 +168,55 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
     }, 420);
   }, []);
 
-  const handleClose = useCallback(() => setSelected(null), []);
+  const replaceAllBubbles = useCallback(
+    (excludeIds: ReadonlySet<string>) => {
+      setActiveBubbles(
+        pickBubbleVideos(feedPoolRef.current, mergedContext(), {
+          excludeIds,
+          sessionWatchedIds: sessionWatchedIdsRef.current,
+          count: BUBBLE_SLOT_COUNT,
+        }),
+      );
+    },
+    [mergedContext],
+  );
+
+  const handleClose = useCallback(
+    async (report: WatchReport) => {
+      const watched = selected;
+      setSelected(null);
+      if (!watched) return;
+
+      sessionWatchedIdsRef.current.add(watched.id);
+      applySessionWatchSignal(sessionPrefRef.current, watched, report);
+      void recordWatchEngagement(watched.id, report);
+
+      const excludeIds = new Set(activeBubbles.map((v) => v.id));
+
+      try {
+        const serverCtx = await fetchUserRecommendationContext();
+        recContextRef.current = serverCtx;
+        setRecContext(serverCtx);
+      } catch {
+        /* セッション内シグナルのみで続行 */
+      }
+
+      replaceAllBubbles(excludeIds);
+    },
+    [selected, activeBubbles, replaceAllBubbles],
+  );
+
+  const handleLikeEngagement = useCallback(() => {
+    if (!selected) return;
+    applySessionLikeSignal(sessionPrefRef.current, selected);
+  }, [selected]);
+
+  const handleCommentEngagement = useCallback(() => {
+    if (!selected) return;
+    applySessionCommentSignal(sessionPrefRef.current, selected);
+  }, [selected]);
+
+  const slotCount = Math.min(BUBBLE_SLOT_COUNT, placements.length);
 
   return (
     <>
@@ -122,7 +230,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
           className="z-bubble-canvas absolute inset-x-0 top-0 overflow-hidden"
           style={{ bottom: bottomInset }}
         >
-          {loading && (
+          {loading && displayVideos.length === 0 && (
             <div className="flex h-full items-center justify-center text-sm text-muted">
               読み込み中…
             </div>
@@ -141,7 +249,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
             </div>
           )}
 
-          {!loading && !error && displayVideos.length === 0 && (
+          {!loading && !error && feedPool.length === 0 && (
             <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
               <p className="text-sm text-muted">まだ投稿がありません</p>
               <Link
@@ -156,9 +264,10 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
           {!loading &&
             !error &&
             size.width > 0 &&
-            placements.map((placement, index) => {
+            Array.from({ length: slotCount }, (_, index) => {
+              const placement = placements[index];
               const video = displayVideos[index];
-              if (!video) return null;
+              if (!placement || !video) return null;
               const preset = floatPresets[index % floatPresets.length];
               const floatStyle = {
                 "--float-x": preset.floatX,
@@ -171,7 +280,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
 
               return (
                 <VideoBubble
-                  key={video.id}
+                  key={`${index}-${video.id}`}
                   video={video}
                   placement={placement}
                   floatStyle={floatStyle}
@@ -184,7 +293,14 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
         </div>
       </div>
 
-      {selected && <FullscreenPlayer video={selected} onClose={handleClose} />}
+      {selected && (
+        <FullscreenPlayer
+          video={selected}
+          onClose={handleClose}
+          onLikeEngagement={handleLikeEngagement}
+          onCommentEngagement={handleCommentEngagement}
+        />
+      )}
     </>
   );
 }

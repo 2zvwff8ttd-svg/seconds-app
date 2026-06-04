@@ -8,4 +8,6 @@ export type FeedVideo = {
   creatorAvatar?: string;
   isViralTop?: boolean;
   countryCode?: string;
+  /** 新着順・レコメンド用（published_at または created_at） */
+  publishedAt?: string;
 };

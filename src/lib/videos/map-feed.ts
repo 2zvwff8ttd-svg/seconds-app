@@ -35,5 +35,6 @@ export function videoRowToFeedVideo(
     creatorAvatar: row.profiles?.avatar_url ?? undefined,
     isViralTop: options?.isViralTop,
     countryCode: row.country,
+    publishedAt: row.published_at ?? row.created_at,
   };
 }
