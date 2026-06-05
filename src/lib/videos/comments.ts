@@ -24,7 +24,7 @@ export async function fetchComments(videoId: string): Promise<CommentItem[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("comments")
-    .select("id, content, created_at, user_id, profiles(username)")
+    .select("id, content, created_at, user_id, profiles!user_id(username)")
     .eq("video_id", videoId)
     .order("created_at", { ascending: true });
 
@@ -60,7 +60,7 @@ export async function postComment(
       user_id: user.id,
       content: trimmed,
     })
-    .select("id, content, created_at, user_id, profiles(username)")
+    .select("id, content, created_at, user_id, profiles!user_id(username)")
     .single();
 
   if (error) throw new Error(error.message);

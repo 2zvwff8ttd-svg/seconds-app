@@ -111,6 +111,10 @@ export function computeNextPublishAtJst(from = new Date()): string {
   return publishJst.toISOString();
 }
 
+/** videos.user_id → profiles（video_engagements 経由の M2M と区別） */
+export const VIDEO_CREATOR_PROFILE_EMBED =
+  "profiles!user_id(username, avatar_url)";
+
 export const BASE_VIDEO_SELECT = `
   id,
   user_id,
@@ -122,7 +126,7 @@ export const BASE_VIDEO_SELECT = `
   country,
   view_count,
   created_at,
-  profiles(username)
+  ${VIDEO_CREATOR_PROFILE_EMBED}
 `;
 
 export function buildVideoSelect(caps: VideoSchemaCapabilities): string {

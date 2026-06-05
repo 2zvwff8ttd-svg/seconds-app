@@ -68,15 +68,15 @@ export async function fetchUserRecommendationContext(): Promise<UserRecommendati
   const [likesRes, commentsRes, engagementsRes] = await Promise.all([
     supabase
       .from("likes")
-      .select("video_id, videos!inner(user_id)")
+      .select("video_id, videos!video_id(user_id)")
       .eq("user_id", user.id),
     supabase
       .from("comments")
-      .select("video_id, videos!inner(user_id)")
+      .select("video_id, videos!video_id(user_id)")
       .eq("user_id", user.id),
     supabase
       .from("video_engagements")
-      .select("video_id, watch_outcome, videos!inner(user_id)")
+      .select("video_id, watch_outcome, videos!video_id(user_id)")
       .eq("user_id", user.id),
   ]);
 
