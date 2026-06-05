@@ -2,7 +2,7 @@ import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { normalizeStorageContentType } from "@/lib/video/media";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const MEDIA_BUCKET = "media";
+export const MEDIA_BUCKET = "media";
 
 export function getMediaPublicUrl(path: string): string {
   return `${getSupabaseUrl()}/storage/v1/object/public/${MEDIA_BUCKET}/${path}`;

@@ -1,12 +1,15 @@
 "use client";
 
+import { ConfirmDeleteVideoDialog } from "@/components/profile/ConfirmDeleteVideoDialog";
 import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import { FollowButton } from "@/components/profile/FollowButton";
 import { FollowListModal } from "@/components/profile/FollowListModal";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { ProfileStats } from "@/components/profile/ProfileStats";
+import { ProfileVideoTile } from "@/components/profile/ProfileVideoTile";
 import { FullscreenPlayer } from "@/components/home/FullscreenPlayer";
 import { fetchFollowStats } from "@/lib/social/follows";
+import { deleteOwnVideo } from "@/lib/videos/delete";
 import {
   fetchCurrentProfile,
   fetchLikedVideos,
@@ -23,11 +26,15 @@ type Tab = "likes" | "videos";
 function VideoGrid({
   videos,
   emptyMessage,
+  deletable,
   onSelect,
+  onDeleteRequest,
 }: {
   videos: FeedVideo[];
   emptyMessage: string;
+  deletable?: boolean;
   onSelect: (video: FeedVideo) => void;
+  onDeleteRequest: (video: FeedVideo) => void;
 }) {
   if (videos.length === 0) {
     return (
@@ -36,30 +43,13 @@ function VideoGrid({
   }
 
   return videos.map((video) => (
-    <button
+    <ProfileVideoTile
       key={video.id}
-      type="button"
-      onClick={() => onSelect(video)}
-      className="group relative aspect-[9/16] overflow-hidden rounded-lg border border-border bg-black"
-    >
-      {video.thumbnailUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={video.thumbnailUrl}
-          alt={video.title}
-          className="h-full w-full object-cover transition group-hover:scale-105"
-        />
-      ) : (
-        <div className="flex h-full items-center justify-center bg-surface text-xs text-muted">
-          No thumb
-        </div>
-      )}
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-        <p className="line-clamp-2 text-left text-[10px] font-medium text-foreground">
-          {video.title}
-        </p>
-      </div>
-    </button>
+      video={video}
+      deletable={deletable}
+      onSelect={onSelect}
+      onDeleteRequest={onDeleteRequest}
+    />
   ));
 }
 
@@ -82,6 +72,8 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<FeedVideo | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -120,6 +112,30 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
   useEffect(() => {
     load();
   }, [load]);
+
+  const handleDeleteRequest = (video: FeedVideo) => {
+    setDeleteTarget(video);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+
+    setDeleting(true);
+    setError(null);
+    try {
+      await deleteOwnVideo(deleteTarget.id);
+      setUserVideos((prev) => prev.filter((v) => v.id !== deleteTarget.id));
+      if (selected?.id === deleteTarget.id) {
+        setSelected(null);
+      }
+      setDeleteTarget(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "削除に失敗しました");
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -229,6 +245,7 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
                 videos={likedVideos}
                 emptyMessage="いいねした動画はまだありません"
                 onSelect={setSelected}
+                onDeleteRequest={handleDeleteRequest}
               />
             ) : (
               <VideoGrid
@@ -238,7 +255,9 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
                     ? "投稿した動画はまだありません"
                     : "表示できる動画はありません"
                 }
+                deletable={isOwnProfile && tab === "videos"}
                 onSelect={setSelected}
+                onDeleteRequest={handleDeleteRequest}
               />
             )}
           </div>
@@ -266,6 +285,17 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
               prev ? { ...prev, avatarUrl } : prev,
             )
           }
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDeleteVideoDialog
+          title={deleteTarget.title}
+          deleting={deleting}
+          onCancel={() => {
+            if (!deleting) setDeleteTarget(null);
+          }}
+          onConfirm={() => void handleDeleteConfirm()}
         />
       )}
     </div>
