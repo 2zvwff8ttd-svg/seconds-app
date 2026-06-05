@@ -24,8 +24,10 @@ export type PostClipInput = {
 export type PostVideoInput = {
   /** カメラで撮影したクリップ（vlog） */
   clips: PostClipInput[];
-  /** サムネイル生成用（BGM 合成前の元クリップを渡すと安全） */
+  /** サムネイル生成用の元クリップ */
   thumbnailSource?: File;
+  /** プリセット BGM の公開 URL（動画とは別保存・再生時に同時再生） */
+  bgmUrl?: string;
   title: string;
   visibility: VideoVisibility;
   onStageChange: (stage: PostUploadStage) => void;
@@ -49,6 +51,12 @@ function isRlsError(message: string): boolean {
 
 function clipExtension(file: File): string {
   return getVideoExtension(file);
+}
+
+function rethrowPostStage(stage: string, err: unknown): never {
+  const detail =
+    err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  throw new Error(detail ? `${stage}: ${detail}` : stage);
 }
 
 async function ensureProfile(
@@ -92,10 +100,12 @@ async function saveVideoRow(
     durationSeconds: number;
     visibility: VideoVisibility;
     country: string;
+    bgmUrl?: string;
   },
   retrying = false,
 ): Promise<{ id: string; publishAt: string }> {
   const caps = await probeVideoSchema(supabase, { force: retrying });
+  const bgmUrl = payload.bgmUrl?.trim() || null;
 
   const baseInsert = {
     id: payload.id,
@@ -106,6 +116,7 @@ async function saveVideoRow(
     duration_seconds: payload.durationSeconds,
     visibility: payload.visibility,
     country: payload.country,
+    ...(caps.hasBgmUrl && bgmUrl ? { bgm_url: bgmUrl } : {}),
   };
 
   if (caps.hasInsertRpc) {
@@ -132,8 +143,16 @@ async function saveVideoRow(
     }
 
     const row = data as { id?: string; publish_at?: string | null };
+    const id = row?.id ?? payload.id;
+    if (caps.hasBgmUrl && bgmUrl) {
+      const { error: bgmError } = await supabase
+        .from("videos")
+        .update({ bgm_url: bgmUrl })
+        .eq("id", id);
+      if (bgmError) throw new Error(bgmError.message);
+    }
     return {
-      id: row?.id ?? payload.id,
+      id,
       publishAt: row?.publish_at ?? computeNextPublishAtJst(),
     };
   }
@@ -167,9 +186,14 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   }
 
   const clipFiles = clips.map((c) => c.file);
-  const durationSeconds = totalDurationSecondsForDb(
-    clips.map((c) => c.durationSeconds),
-  );
+  let durationSeconds: number;
+  try {
+    durationSeconds = totalDurationSecondsForDb(
+      clips.map((c) => c.durationSeconds),
+    );
+  } catch (err) {
+    rethrowPostStage("動画の長さ", err);
+  }
 
   const { title, visibility, onStageChange, onProgress } = input;
   const supabase = createClient();
@@ -183,16 +207,26 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     throw new Error("ログインが必要です");
   }
 
-  await ensureProfile(supabase, user.id);
+  try {
+    await ensureProfile(supabase, user.id);
+  } catch (err) {
+    rethrowPostStage("プロフィール確認", err);
+  }
 
   onStageChange("preparing");
   onProgress(5, "動画を解析中…");
 
   const thumbnailFile = input.thumbnailSource ?? clipFiles[0];
-  const [country, thumbnailBlob] = await Promise.all([
-    detectCountryCode(),
-    captureVideoThumbnail(thumbnailFile),
-  ]);
+  let country: string;
+  let thumbnailBlob: Blob;
+  try {
+    [country, thumbnailBlob] = await Promise.all([
+      detectCountryCode(),
+      captureVideoThumbnail(thumbnailFile),
+    ]);
+  } catch (err) {
+    rethrowPostStage("サムネイル作成", err);
+  }
 
   const videoId = crypto.randomUUID();
   const basePath = `${user.id}/${videoId}`;
@@ -201,15 +235,19 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   onStageChange("uploading_thumbnail");
   onProgress(10, "サムネイルをアップロード中…");
 
-  await uploadFileWithProgress(
-    supabase,
-    thumbnailPath,
-    thumbnailBlob,
-    "image/jpeg",
-    (ratio) => {
-      onProgress(10 + ratio * 10, "サムネイルをアップロード中…");
-    },
-  );
+  try {
+    await uploadFileWithProgress(
+      supabase,
+      thumbnailPath,
+      thumbnailBlob,
+      "image/jpeg",
+      (ratio) => {
+        onProgress(10 + ratio * 10, "サムネイルをアップロード中…");
+      },
+    );
+  } catch (err) {
+    rethrowPostStage("サムネイルのアップロード", err);
+  }
 
   const clipUrls: string[] = [];
   const uploadShare = 70 / clipFiles.length;
@@ -227,15 +265,24 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
         : "動画をアップロード中…",
     );
 
-    await uploadFileWithProgress(
-      supabase,
-      clipPath,
-      file,
-      normalizeStorageContentType(file.type || "video/webm"),
-      (ratio) => {
-        onProgress(20 + uploadShare * i + uploadShare * ratio, "動画をアップロード中…");
-      },
-    );
+    try {
+      await uploadFileWithProgress(
+        supabase,
+        clipPath,
+        file,
+        normalizeStorageContentType(file.type || "video/webm"),
+        (ratio) => {
+          onProgress(20 + uploadShare * i + uploadShare * ratio, "動画をアップロード中…");
+        },
+      );
+    } catch (err) {
+      rethrowPostStage(
+        clipFiles.length > 1
+          ? `クリップ${i + 1}のアップロード`
+          : "動画のアップロード",
+        err,
+      );
+    }
 
     clipUrls.push(getMediaPublicUrl(clipPath));
   }
@@ -246,16 +293,22 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   onStageChange("saving");
   onProgress(92, "投稿を保存中…");
 
-  const inserted = await saveVideoRow(supabase, {
-    id: videoId,
-    userId: user.id,
-    videoUrl,
-    thumbnailUrl,
-    title: title.trim() || "無題のvlog",
-    durationSeconds,
-    visibility,
-    country,
-  });
+  let inserted: { id: string; publishAt: string };
+  try {
+    inserted = await saveVideoRow(supabase, {
+      id: videoId,
+      userId: user.id,
+      videoUrl,
+      thumbnailUrl,
+      title: title.trim() || "無題のvlog",
+      durationSeconds,
+      visibility,
+      country,
+      bgmUrl: input.bgmUrl,
+    });
+  } catch (err) {
+    rethrowPostStage("動画情報の保存", err);
+  }
 
   for (let i = 0; i < clipUrls.length; i++) {
     const { error: clipError } = await supabase.from("clips").insert({
@@ -268,7 +321,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
       if (isRlsError(clipError.message)) {
         throw new Error(`${clipError.message}\n\n${DB_FIX_HINT}`);
       }
-      throw new Error(clipError.message);
+      rethrowPostStage("クリップ情報の保存", new Error(clipError.message));
     }
   }
 

@@ -25,7 +25,11 @@ function mapLikedRow(row: Record<string, unknown>): FeedVideo | null {
 export async function fetchLikedVideos(userId: string): Promise<FeedVideo[]> {
   const supabase = createClient();
   const caps = await probeVideoSchema(supabase);
-  const videoSelect = caps.hasStatus || caps.hasPublishAt || caps.hasPublishedAt
+  const videoSelect =
+    caps.hasStatus ||
+    caps.hasPublishAt ||
+    caps.hasPublishedAt ||
+    caps.hasBgmUrl
     ? buildVideoSelect(caps)
     : BASE_VIDEO_SELECT;
 
@@ -47,7 +51,11 @@ export async function fetchLikedVideos(userId: string): Promise<FeedVideo[]> {
 export async function fetchUserVideos(userId: string): Promise<FeedVideo[]> {
   const supabase = createClient();
   const caps = await probeVideoSchema(supabase);
-  const select = caps.hasStatus || caps.hasPublishAt || caps.hasPublishedAt
+  const select =
+    caps.hasStatus ||
+    caps.hasPublishAt ||
+    caps.hasPublishedAt ||
+    caps.hasBgmUrl
     ? buildVideoSelect(caps)
     : BASE_VIDEO_SELECT;
 

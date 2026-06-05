@@ -15,7 +15,6 @@ import {
 } from "@/lib/recording/clip-budget";
 import { postVideo } from "@/lib/videos/post";
 import { blobToBase64, extractFirstFrameBlob } from "@/lib/video/extract-frame";
-import { mergeVideoWithBgm } from "@/lib/video/merge-bgm";
 import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
 import type { PresetBgmTrack } from "@/types/preset-bgm";
 import type { RecordedClip } from "@/types/recording";
@@ -73,7 +72,9 @@ export function PostForm() {
   const [aiStatus, setAiStatus] = useState<AiEnhanceStatus>("idle");
   const [analyzeResult, setAnalyzeResult] = useState<AiAnalyzeResult | null>(null);
   const [bgmBlob, setBgmBlob] = useState<Blob | null>(null);
-  const [selectedPreset, setSelectedPreset] = useState<PresetBgmTrack | null>(null);
+  const [selectedPreset, setSelectedPreset] = useState<PresetBgmTrack | null>(
+    null,
+  );
   const [aiError, setAiError] = useState<string | null>(null);
   const aiRunId = useRef(0);
 
@@ -92,7 +93,7 @@ export function PostForm() {
   );
   const bgmReady =
     !aiMusicEnabled ||
-    (AI_BGM_GENERATION_ENABLED ? Boolean(bgmBlob) : Boolean(selectedPreset && bgmBlob));
+    (AI_BGM_GENERATION_ENABLED ? Boolean(bgmBlob) : Boolean(selectedPreset));
   const canPost = hasContent && budgetExhausted && !isUploading && bgmReady;
   const showPostDetails = budgetExhausted && hasContent;
   const clipKey = useMemo(() => clips.map((c) => c.id).join(","), [clips]);
@@ -180,12 +181,14 @@ export function PostForm() {
     runMusicGeneration,
   ]);
 
-  const handlePresetSelect = useCallback((track: PresetBgmTrack, blob: Blob) => {
-    setSelectedPreset(track);
-    setBgmBlob(blob);
-    setAiError(null);
-    if (analyzeResult) setAiStatus("ready");
-  }, [analyzeResult]);
+  const handlePresetSelect = useCallback(
+    (track: PresetBgmTrack) => {
+      setSelectedPreset(track);
+      setAiError(null);
+      if (analyzeResult) setAiStatus("ready");
+    },
+    [analyzeResult],
+  );
 
   const handleAiMusicChange = (enabled: boolean) => {
     setAiMusicEnabled(enabled);
@@ -215,60 +218,30 @@ export function PostForm() {
     setTitleTouched(false);
   }, []);
 
-  const prepareClipsForUpload = async (): Promise<
-    { file: File; durationSeconds: number }[]
-  > => {
-    const shouldMergeBgm =
-      aiMusicEnabled &&
-      bgmBlob &&
-      (AI_BGM_GENERATION_ENABLED || PRESET_BGM_ENABLED);
-
-    if (!shouldMergeBgm) {
-      return clips.map((c) => ({
-        file: c.file,
-        durationSeconds: c.durationSeconds,
-      }));
-    }
-
-    setStage("merging_audio");
-    setProgressLabel("BGM を動画に合成中…");
-
-    const merged: { file: File; durationSeconds: number }[] = [];
-    for (let i = 0; i < clips.length; i++) {
-      setProgressLabel(
-        clips.length > 1
-          ? `クリップ ${i + 1}/${clips.length} に BGM を合成中…`
-          : "BGM を動画に合成中…",
-      );
-      const file = await mergeVideoWithBgm(
-        clips[i].file,
-        bgmBlob,
-        (ratio) => setProgress(Math.round(ratio * 15)),
-      );
-      merged.push({ file, durationSeconds: clips[i].durationSeconds });
-    }
-    return merged;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canPost) return;
 
     setError(null);
+    setAiError(null);
     setProgress(0);
     setProgressLabel("準備中…");
 
     try {
-      const uploadClips = await prepareClipsForUpload();
+      const uploadClips = clips.map((c) => ({
+        file: c.file,
+        durationSeconds: c.durationSeconds,
+      }));
 
-      const usedBgm =
-        aiMusicEnabled &&
-        bgmBlob &&
-        (AI_BGM_GENERATION_ENABLED || PRESET_BGM_ENABLED);
+      const presetBgmUrl =
+        aiMusicEnabled && PRESET_BGM_ENABLED && selectedPreset
+          ? selectedPreset.publicUrl
+          : undefined;
 
       const result = await postVideo({
         clips: uploadClips,
-        thumbnailSource: usedBgm ? clips[0]?.file : undefined,
+        thumbnailSource: clips[0]?.file,
+        bgmUrl: presetBgmUrl,
         title,
         visibility,
         onStageChange: setStage,
@@ -281,7 +254,12 @@ export function PostForm() {
       setSuccess({ publishAt: result.publishAt });
     } catch (err) {
       setStage("error");
-      setError(err instanceof Error ? err.message : "投稿に失敗しました");
+      setProgressLabel("");
+      const message =
+        err instanceof Error && err.message.trim()
+          ? err.message.trim()
+          : "投稿に失敗しました";
+      setError(message);
     }
   };
 

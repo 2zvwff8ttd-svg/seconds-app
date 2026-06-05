@@ -11,7 +11,10 @@ export async function fetchVideoById(videoId: string): Promise<FeedVideo | null>
   const supabase = createClient();
   const caps = await probeVideoSchema(supabase);
   const select =
-    caps.hasStatus || caps.hasPublishAt || caps.hasPublishedAt
+    caps.hasStatus ||
+    caps.hasPublishAt ||
+    caps.hasPublishedAt ||
+    caps.hasBgmUrl
       ? buildVideoSelect(caps)
       : BASE_VIDEO_SELECT;
 

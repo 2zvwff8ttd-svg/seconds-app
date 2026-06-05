@@ -1,5 +1,6 @@
 "use client";
 
+import { useBgmPlayback } from "@/components/video/useBgmPlayback";
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
 import { fetchVideoClipUrls } from "@/lib/videos/clips";
 import type { FeedVideo } from "@/types/feed";
@@ -28,6 +29,8 @@ export function FullscreenPlayer({
   const maxProgressRef = useRef(0);
   const allClipsCompletedRef = useRef(false);
 
+  useBgmPlayback(videoRef, { bgmUrl: video.bgmUrl, active: true });
+
   useEffect(() => {
     setClipUrls([video.videoUrl]);
     setClipIndex(0);
@@ -43,11 +46,11 @@ export function FullscreenPlayer({
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
-    el.muted = false;
+    if (!video.bgmUrl) el.muted = false;
     el.src = clipUrls[clipIndex] ?? video.videoUrl;
     el.load();
     el.play().catch(() => {});
-  }, [clipIndex, clipUrls, video.videoUrl]);
+  }, [clipIndex, clipUrls, video.videoUrl, video.bgmUrl]);
 
   const updateProgress = useCallback(() => {
     const el = videoRef.current;

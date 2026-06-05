@@ -1,6 +1,8 @@
 export type FeedVideo = {
   id: string;
   videoUrl: string;
+  /** プリセット BGM（再生時に動画と同時再生） */
+  bgmUrl?: string;
   thumbnailUrl?: string;
   title: string;
   creatorId: string;

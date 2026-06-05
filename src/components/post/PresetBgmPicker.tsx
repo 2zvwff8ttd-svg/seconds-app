@@ -1,12 +1,12 @@
 "use client";
 
-import { fetchPresetBgmBlob, fetchPresetBgmTracks } from "@/lib/storage/music";
+import { fetchPresetBgmTracks } from "@/lib/storage/music";
 import type { PresetBgmTrack } from "@/types/preset-bgm";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type PresetBgmPickerProps = {
   selectedId: string | null;
-  onSelect: (track: PresetBgmTrack, blob: Blob) => void;
+  onSelect: (track: PresetBgmTrack) => void;
   disabled?: boolean;
 };
 
@@ -18,7 +18,6 @@ export function PresetBgmPicker({
   const [tracks, setTracks] = useState<PresetBgmTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [loadingTrackId, setLoadingTrackId] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -74,25 +73,17 @@ export function PresetBgmPicker({
     }
   };
 
-  const handleSelect = async (track: PresetBgmTrack) => {
-    if (disabled || loadingTrackId) return;
+  const handleSelect = (track: PresetBgmTrack) => {
+    if (disabled) return;
     setError(null);
-    setLoadingTrackId(track.id);
-    try {
-      const blob = await fetchPresetBgmBlob(track);
-      onSelect(track, blob);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "曲の読み込みに失敗しました");
-    } finally {
-      setLoadingTrackId(null);
-    }
+    onSelect(track);
   };
 
   return (
     <div className="mt-3 rounded-lg border border-border bg-black/40">
       <div className="border-b border-border/80 px-3 py-2">
         <p className="text-xs font-medium text-foreground">プリセット BGM</p>
-        <p className="text-[10px] text-muted">曲を選ぶと投稿時に動画へ合成されます</p>
+        <p className="text-[10px] text-muted">曲を選ぶと視聴時に動画と一緒に再生されます</p>
       </div>
 
       {loading && (
@@ -119,8 +110,6 @@ export function PresetBgmPicker({
           {tracks.map((track) => {
             const selected = selectedId === track.id;
             const isPlaying = playingId === track.id;
-            const isLoading = loadingTrackId === track.id;
-
             return (
               <li key={track.id}>
                 <div
@@ -130,7 +119,7 @@ export function PresetBgmPicker({
                 >
                   <button
                     type="button"
-                    disabled={disabled || isLoading}
+                    disabled={disabled}
                     onClick={() => void handlePreview(track)}
                     aria-label={isPlaying ? `${track.name}の試聴を停止` : `${track.name}を試聴`}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-violet-300 transition hover:border-violet-400/50 hover:bg-violet-500/20 disabled:opacity-40"
@@ -149,19 +138,15 @@ export function PresetBgmPicker({
 
                   <button
                     type="button"
-                    disabled={disabled || isLoading}
-                    onClick={() => void handleSelect(track)}
+                    disabled={disabled}
+                    onClick={() => handleSelect(track)}
                     className="min-w-0 flex-1 text-left disabled:opacity-50"
                   >
                     <span className="block truncate text-sm font-medium text-foreground">
                       {track.name}
                     </span>
                     <span className="block truncate text-[10px] text-muted">
-                      {isLoading
-                        ? "読み込み中…"
-                        : selected
-                          ? "選択中 · 投稿時に合成"
-                          : "タップして選択"}
+                      {selected ? "選択中 · 視聴時に再生" : "タップして選択"}
                     </span>
                   </button>
 

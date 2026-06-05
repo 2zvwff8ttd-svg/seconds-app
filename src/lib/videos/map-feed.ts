@@ -28,6 +28,7 @@ export function videoRowToFeedVideo(
   return {
     id: row.id,
     videoUrl: row.video_url,
+    bgmUrl: row.bgm_url?.trim() || undefined,
     thumbnailUrl: row.thumbnail_url ?? undefined,
     title: row.title || "Untitled",
     creatorId: row.user_id,

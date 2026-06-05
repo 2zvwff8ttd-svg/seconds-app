@@ -14,7 +14,7 @@ type AiEnhancePanelProps = {
   onRegenerate: () => void;
   disabled?: boolean;
   selectedPresetId?: string | null;
-  onPresetSelect?: (track: PresetBgmTrack, blob: Blob) => void;
+  onPresetSelect?: (track: PresetBgmTrack) => void;
 };
 
 export function AiEnhancePanel({
@@ -33,7 +33,7 @@ export function AiEnhancePanel({
   const bgmDescription = AI_BGM_GENERATION_ENABLED
     ? "ON で BGM を動画に合成"
     : PRESET_BGM_ENABLED
-      ? "ON でプリセット曲を選んで合成"
+      ? "ON でプリセット曲を選び、再生時に付けて聴けます"
       : "準備中";
 
   return (

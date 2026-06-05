@@ -5,6 +5,7 @@ export type VideoRow = {
   id: string;
   user_id: string;
   video_url: string;
+  bgm_url?: string | null;
   thumbnail_url: string | null;
   title: string;
   duration_seconds: number;

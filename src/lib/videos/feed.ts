@@ -97,7 +97,11 @@ export async function fetchHomeFeed(): Promise<{
   const supabase = createClient();
   const countryCode = await detectCountryCode();
   const caps = await probeVideoSchema(supabase);
-  const select = caps.hasStatus || caps.hasPublishAt || caps.hasPublishedAt
+  const select =
+    caps.hasStatus ||
+    caps.hasPublishAt ||
+    caps.hasPublishedAt ||
+    caps.hasBgmUrl
     ? buildVideoSelect(caps)
     : BASE_VIDEO_SELECT;
 
@@ -125,7 +129,10 @@ export async function fetchHomeFeed(): Promise<{
       clearVideoSchemaCache();
       const retryCaps = await probeVideoSchema(supabase, { force: true });
       const retrySelect =
-        retryCaps.hasStatus || retryCaps.hasPublishAt || retryCaps.hasPublishedAt
+        retryCaps.hasStatus ||
+        retryCaps.hasPublishAt ||
+        retryCaps.hasPublishedAt ||
+        retryCaps.hasBgmUrl
           ? buildVideoSelect(retryCaps)
           : BASE_VIDEO_SELECT;
       let retryQuery = supabase.from("videos").select(retrySelect);

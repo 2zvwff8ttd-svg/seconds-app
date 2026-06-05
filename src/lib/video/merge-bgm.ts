@@ -1,9 +1,7 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
-/** @ffmpeg/ffmpeg パッケージと揃える（const.js の CORE_VERSION） */
-const FFMPEG_CORE_VERSION = "0.12.9";
-const FFMPEG_CORE_BASE = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
+const FFMPEG_PUBLIC_BASE = "/ffmpeg";
 
 let ffmpegInstance: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;
@@ -14,22 +12,33 @@ async function getFfmpeg(): Promise<FFmpeg> {
   if (!loadPromise) {
     loadPromise = (async () => {
       const ffmpeg = new FFmpeg();
-      await ffmpeg.load({
-        coreURL: await toBlobURL(
-          `${FFMPEG_CORE_BASE}/ffmpeg-core.js`,
-          "text/javascript",
-        ),
-        wasmURL: await toBlobURL(
-          `${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`,
-          "application/wasm",
-        ),
-      });
+      try {
+        await ffmpeg.load({
+          coreURL: await toBlobURL(
+            `${FFMPEG_PUBLIC_BASE}/ffmpeg-core.js`,
+            "text/javascript",
+          ),
+          wasmURL: await toBlobURL(
+            `${FFMPEG_PUBLIC_BASE}/ffmpeg-core.wasm`,
+            "application/wasm",
+          ),
+        });
+      } catch {
+        throw new Error(
+          "動画合成エンジンの読み込みに失敗しました。`npm install` 後に開発サーバーを再起動してください。",
+        );
+      }
       ffmpegInstance = ffmpeg;
       return ffmpeg;
     })();
   }
 
   return loadPromise;
+}
+
+function bgmStorageName(runId: string, blob: Blob): string {
+  const ext = bgmFileName(blob).split(".").pop() || "mp3";
+  return `bgm_${runId}.${ext}`;
 }
 
 function bgmFileName(blob: Blob): string {
@@ -41,10 +50,6 @@ function bgmFileName(blob: Blob): string {
   return "bgm.mp3";
 }
 
-function outputBaseName(id: string): string {
-  return `out_${id}`;
-}
-
 async function safeDeleteFile(ffmpeg: FFmpeg, name: string): Promise<void> {
   try {
     await ffmpeg.deleteFile(name);
@@ -53,7 +58,7 @@ async function safeDeleteFile(ffmpeg: FFmpeg, name: string): Promise<void> {
   }
 }
 
-type MergeStrategy = "mp4_encode" | "webm_copy";
+type MergeStrategy = "webm_copy" | "mp4_encode";
 
 async function execMerge(
   ffmpeg: FFmpeg,
@@ -63,8 +68,30 @@ async function execMerge(
   strategy: MergeStrategy,
 ): Promise<void> {
   const outputArgs: string[] =
-    strategy === "mp4_encode"
+    strategy === "webm_copy"
       ? [
+          "-i",
+          videoName,
+          "-stream_loop",
+          "-1",
+          "-i",
+          bgmName,
+          "-map",
+          "0:v:0",
+          "-map",
+          "1:a:0",
+          "-c:v",
+          "copy",
+          "-c:a",
+          "libopus",
+          "-b:a",
+          "128k",
+          "-shortest",
+          "-f",
+          "webm",
+          outName,
+        ]
+      : [
           "-i",
           videoName,
           "-stream_loop",
@@ -87,37 +114,11 @@ async function execMerge(
           "aac",
           "-b:a",
           "128k",
-          "-ar",
-          "44100",
-          "-ac",
-          "2",
           "-shortest",
           "-movflags",
           "+faststart",
           "-f",
           "mp4",
-          outName,
-        ]
-      : [
-          "-i",
-          videoName,
-          "-stream_loop",
-          "-1",
-          "-i",
-          bgmName,
-          "-map",
-          "0:v:0",
-          "-map",
-          "1:a:0",
-          "-c:v",
-          "copy",
-          "-c:a",
-          "libopus",
-          "-b:a",
-          "128k",
-          "-shortest",
-          "-f",
-          "webm",
           outName,
         ];
 
@@ -130,7 +131,7 @@ async function execMerge(
   try {
     const code = await ffmpeg.exec(outputArgs);
     if (code !== 0) {
-      const tail = logs.slice(-5).join(" ").trim();
+      const tail = logs.filter((l) => l.trim()).slice(-3).join(" ").trim();
       throw new Error(tail || `ffmpeg exit ${code}`);
     }
   } finally {
@@ -138,30 +139,8 @@ async function execMerge(
   }
 }
 
-async function validatePlayableVideo(blob: Blob): Promise<void> {
-  const url = URL.createObjectURL(blob);
-  try {
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.muted = true;
-    video.src = url;
-    await new Promise<void>((resolve, reject) => {
-      video.onloadedmetadata = () => {
-        if (!Number.isFinite(video.duration) || video.duration <= 0) {
-          reject(new Error("動画の長さを読み取れませんでした"));
-          return;
-        }
-        resolve();
-      };
-      video.onerror = () => reject(new Error("合成動画を再生できません"));
-    });
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 /**
- * 動画に BGM を合成（BGM のみ・MP4 出力を優先）
+ * 動画に BGM を合成（WebM 優先、失敗時 MP4）
  */
 export async function mergeVideoWithBgm(
   videoFile: File,
@@ -174,9 +153,9 @@ export async function mergeVideoWithBgm(
 
   const videoExt = videoFile.name.split(".").pop() || "webm";
   const videoName = `vin_${runId}.${videoExt}`;
-  const bgmName = `bgm_${runId}.${bgmFileName(bgmBlob).replace("bgm.", "")}`;
-  const outMp4 = `${outputBaseName(runId)}.mp4`;
-  const outWebm = `${outputBaseName(runId)}.webm`;
+  const bgmName = bgmStorageName(runId, bgmBlob);
+  const outWebm = `out_${runId}.webm`;
+  const outMp4 = `out_${runId}.mp4`;
 
   await ffmpeg.writeFile(videoName, await fetchFile(videoFile));
   await ffmpeg.writeFile(bgmName, await fetchFile(bgmBlob));
@@ -189,32 +168,41 @@ export async function mergeVideoWithBgm(
   };
   ffmpeg.on("progress", onFfmpegProgress);
 
+  const strategies: MergeStrategy[] = ["webm_copy", "mp4_encode"];
   let outName: string | null = null;
-  let lastError = "";
+  const errors: string[] = [];
 
   try {
-    try {
-      await execMerge(ffmpeg, videoName, bgmName, outMp4, "mp4_encode");
-      outName = outMp4;
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-      await safeDeleteFile(ffmpeg, outMp4);
-      await execMerge(ffmpeg, videoName, bgmName, outWebm, "webm_copy");
-      outName = outWebm;
+    for (const strategy of strategies) {
+      const target = strategy === "webm_copy" ? outWebm : outMp4;
+      await safeDeleteFile(ffmpeg, target);
+      try {
+        await execMerge(ffmpeg, videoName, bgmName, target, strategy);
+        outName = target;
+        break;
+      } catch (err) {
+        errors.push(
+          `${strategy}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `BGM合成に失敗しました: ${detail || lastError || "不明なエラー"}`,
-    );
+    throw new Error(`BGM合成に失敗しました: ${detail}`);
   } finally {
     ffmpeg.off("progress", onFfmpegProgress);
     await safeDeleteFile(ffmpeg, videoName);
     await safeDeleteFile(ffmpeg, bgmName);
+    if (!outName) {
+      await safeDeleteFile(ffmpeg, outWebm);
+      await safeDeleteFile(ffmpeg, outMp4);
+    }
   }
 
   if (!outName) {
-    throw new Error("BGM合成に失敗しました");
+    throw new Error(
+      `BGM合成に失敗しました: ${errors.join(" / ") || "不明なエラー"}`,
+    );
   }
 
   onProgress?.(0.9);
@@ -227,18 +215,15 @@ export async function mergeVideoWithBgm(
 
   await safeDeleteFile(ffmpeg, outName);
 
-  if (bytes.byteLength === 0) {
-    throw new Error("BGM合成の結果が空です");
+  if (bytes.byteLength < 1024) {
+    throw new Error("BGM合成の結果が小さすぎます（合成失敗の可能性）");
   }
 
   const isMp4 = outName.endsWith(".mp4");
   const mime = isMp4 ? "video/mp4" : "video/webm";
   const baseName = videoFile.name.replace(/\.[^.]+$/, "") || "clip";
   const outFileName = `${baseName}${isMp4 ? ".mp4" : ".webm"}`;
-  const blob = new Blob([bytes], { type: mime });
 
-  await validatePlayableVideo(blob);
   onProgress?.(1);
-
-  return new File([blob], outFileName, { type: mime });
+  return new File([bytes], outFileName, { type: mime });
 }
