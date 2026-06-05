@@ -35,4 +35,11 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
       "投稿した動画はすぐには見えません。翌日の朝7時（あなたのタイムゾーン）に公開され、みんなのシャボン玉に載ります。",
     visualLabel: "公開",
   },
+  {
+    id: "viral",
+    title: "王冠のシャボン玉",
+    description:
+      "王冠マークのついたシャボン玉は、その国で昨日いちばん視聴された動画（デイリーバイラル）です。各国の「いま話題」の一本を見つけてみましょう。",
+    visualLabel: "#1",
+  },
 ];

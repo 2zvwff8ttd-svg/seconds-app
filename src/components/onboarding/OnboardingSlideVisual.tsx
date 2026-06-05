@@ -1,3 +1,4 @@
+import { CrownIcon } from "@/components/home/CrownIcon";
 import type { OnboardingSlide } from "@/lib/onboarding/slides";
 
 type OnboardingSlideVisualProps = {
@@ -57,6 +58,30 @@ export function OnboardingSlideVisual({ slide }: OnboardingSlideVisualProps) {
               明日 {slide.visualLabel}
             </p>
           </div>
+        </div>
+      );
+    case "viral":
+      return (
+        <div className="relative flex h-44 w-44 items-center justify-center">
+          <div className="absolute inset-0 rounded-full bg-gold/15 blur-2xl" />
+          <div className="relative">
+            <span className="crown-glow absolute -top-2 left-1/2 z-10 -translate-x-1/2 text-gold">
+              <CrownIcon className="h-9 w-9 drop-shadow-lg" />
+            </span>
+            <div className="flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-gold/90 via-amber-200/50 to-violet-400/40 p-[3px] shadow-[0_0_32px_var(--gold-glow)]">
+              <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-black ring-1 ring-gold/40">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-gold">
+                  Daily Viral
+                </span>
+                <span className="mt-0.5 text-xs font-bold text-amber-200/90">
+                  {slide.visualLabel}
+                </span>
+              </div>
+            </div>
+          </div>
+          <span className="absolute -bottom-1 rounded-full border border-border bg-surface-elevated px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted">
+            JP
+          </span>
         </div>
       );
     default:
