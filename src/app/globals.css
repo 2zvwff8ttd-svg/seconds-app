@@ -16,6 +16,7 @@
   --z-header: 10;
   --z-bottom-nav: 100;
   --z-fullscreen: 200;
+  --z-onboarding: 300;
 }
 
 @theme inline {
@@ -61,6 +62,19 @@ body {
 
 .z-fullscreen {
   z-index: var(--z-fullscreen);
+}
+
+.z-onboarding {
+  z-index: var(--z-onboarding);
+}
+
+.onboarding-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.onboarding-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 @keyframes bubble-float-x {

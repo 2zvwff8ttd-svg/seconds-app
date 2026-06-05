@@ -1,3 +1,4 @@
+import { ClientAppGate } from "@/components/layout/ClientAppGate";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -40,7 +41,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
     >
       <body className="h-full overflow-hidden bg-black text-foreground antialiased">
-        {children}
+        <ClientAppGate>{children}</ClientAppGate>
       </body>
     </html>
   );
