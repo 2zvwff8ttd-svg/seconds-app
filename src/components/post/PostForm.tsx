@@ -13,6 +13,10 @@ import {
   isRecordingBudgetExhausted,
   sumRecordedClipSeconds,
 } from "@/lib/recording/clip-budget";
+import {
+  checkDailyPostLimit,
+  DAILY_POST_LIMIT_MESSAGE,
+} from "@/lib/posting/daily-post-limit";
 import { postVideo } from "@/lib/videos/post";
 import { blobToBase64, extractFirstFrameBlob } from "@/lib/video/extract-frame";
 import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
@@ -67,6 +71,9 @@ export function PostForm() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ publishAt: string } | null>(null);
   const [assignedSeconds, setAssignedSeconds] = useState(15);
+  const [postLimit, setPostLimit] = useState<
+    "loading" | "allowed" | { blocked: true; nextPostingLabel: string }
+  >("loading");
 
   const [aiMusicEnabled, setAiMusicEnabled] = useState(false);
   const [aiStatus, setAiStatus] = useState<AiEnhanceStatus>("idle");
@@ -83,6 +90,30 @@ export function PostForm() {
       .then(setAssignedSeconds)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (success) return;
+    let cancelled = false;
+    setPostLimit("loading");
+    checkDailyPostLimit()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.allowed) {
+          setPostLimit("allowed");
+        } else {
+          setPostLimit({
+            blocked: true,
+            nextPostingLabel: result.nextPostingLabel,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPostLimit("allowed");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [success]);
 
   const isUploading = stage !== "idle" && stage !== "error" && stage !== "done";
   const hasContent = clips.length > 0;
@@ -285,6 +316,42 @@ export function PostForm() {
         <Link
           href="/"
           className="mt-8 w-full max-w-xs rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25"
+        >
+          ホームに戻る
+        </Link>
+      </div>
+    );
+  }
+
+  if (postLimit === "loading") {
+    return (
+      <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+        <span className="h-8 w-8 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+        <p className="mt-4 text-sm text-muted">投稿可能か確認しています…</p>
+      </div>
+    );
+  }
+
+  if (postLimit !== "allowed") {
+    return (
+      <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+        <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/15 text-amber-200">
+          <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5M12 16h.01" />
+          </svg>
+        </span>
+        <h2 className="text-lg font-semibold text-foreground">
+          {DAILY_POST_LIMIT_MESSAGE}
+        </h2>
+        <p className="mt-3 text-sm text-muted">
+          次の投稿は{" "}
+          <span className="text-foreground/90">{postLimit.nextPostingLabel}</span>
+          から可能です
+        </p>
+        <Link
+          href="/"
+          className="mt-8 w-full max-w-xs rounded-xl border border-border bg-surface px-4 py-3.5 text-base font-semibold text-foreground transition hover:bg-surface-elevated"
         >
           ホームに戻る
         </Link>

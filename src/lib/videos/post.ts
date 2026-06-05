@@ -1,4 +1,5 @@
 import { detectCountryCode } from "@/lib/country/detect";
+import { assertCanPostToday } from "@/lib/posting/daily-post-limit";
 import {
   clearVideoSchemaCache,
   computeNextPublishAtJst,
@@ -205,6 +206,13 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
 
   if (userError || !user) {
     throw new Error("ログインが必要です");
+  }
+
+  try {
+    await assertCanPostToday();
+  } catch (err) {
+    if (err instanceof Error) throw err;
+    throw new Error("投稿回数の確認に失敗しました");
   }
 
   try {
