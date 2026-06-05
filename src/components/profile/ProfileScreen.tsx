@@ -15,6 +15,7 @@ import {
 } from "@/lib/videos/profile-feed";
 import type { FeedVideo } from "@/types/feed";
 import type { FollowListKind, FollowStats, ProfileData } from "@/types/profile";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 type Tab = "likes" | "videos";
@@ -159,12 +160,22 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
                   Edit Profile
                 </button>
               )}
-              {!isOwnProfile && followStats && (
-                <FollowButton
-                  userId={profile.userId}
-                  initialStats={followStats}
-                  onStatsChange={setFollowStats}
-                />
+              {!isOwnProfile && (
+                <div className="flex flex-col gap-2 sm:items-end">
+                  {followStats && (
+                    <FollowButton
+                      userId={profile.userId}
+                      initialStats={followStats}
+                      onStatsChange={setFollowStats}
+                    />
+                  )}
+                  <Link
+                    href={`/messages/with/${profile.userId}`}
+                    className="rounded-xl border border-border bg-surface px-4 py-2 text-center text-sm font-medium text-foreground transition hover:border-violet-400/40 hover:bg-violet-500/10"
+                  >
+                    メッセージ
+                  </Link>
+                </div>
               )}
             </div>
           </div>

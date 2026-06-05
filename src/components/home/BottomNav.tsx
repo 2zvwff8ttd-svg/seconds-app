@@ -1,13 +1,16 @@
 "use client";
 
+import { fetchDmUnreadCount } from "@/lib/dm/unread";
+import { subscribeDmUnreadCount } from "@/lib/dm/subscribe";
+import { createClient } from "@/lib/supabase/client";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const NAV_ITEMS = [
   { id: "home", label: "Home", href: "/" },
   { id: "search", label: "Search", href: "/search" },
   { id: "camera", label: "Record", href: "/post", primary: true },
-  { id: "messages", label: "Messages", href: "#", disabled: true },
+  { id: "messages", label: "Messages", href: "/messages" },
   { id: "profile", label: "Profile", href: "/profile" },
 ] as const;
 
@@ -59,6 +62,34 @@ export function BottomNav({ onInsetChange }: BottomNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const navRef = useRef<HTMLElement>(null);
+  const [dmUnreadCount, setDmUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let channel: ReturnType<typeof subscribeDmUnreadCount> | null = null;
+
+    const setup = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      try {
+        const count = await fetchDmUnreadCount();
+        setDmUnreadCount(count);
+      } catch {
+        setDmUnreadCount(0);
+      }
+
+      channel = subscribeDmUnreadCount(user.id, setDmUnreadCount);
+    };
+
+    void setup();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     const nav = navRef.current;
@@ -98,12 +129,11 @@ export function BottomNav({ onInsetChange }: BottomNavProps) {
     >
       {NAV_ITEMS.map((item) => {
         const isActive =
-          item.href !== "#" &&
-          (item.href === "/"
+          item.href === "/"
             ? pathname === "/"
-            : pathname.startsWith(item.href));
+            : pathname.startsWith(item.href);
         const isPrimary = "primary" in item && item.primary;
-        const isDisabled = "disabled" in item && item.disabled;
+        const showDmBadge = item.id === "messages" && dmUnreadCount > 0;
 
         const className = isPrimary
           ? "relative z-0 -mt-5 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/30 touch-manipulation"
@@ -112,19 +142,6 @@ export function BottomNav({ onInsetChange }: BottomNavProps) {
                 ? "text-foreground"
                 : "text-muted hover:text-foreground/80"
             }`;
-
-        if (isDisabled) {
-          return (
-            <span
-              key={item.id}
-              className={`${className} cursor-not-allowed opacity-40`}
-              aria-label={item.label}
-            >
-              <NavIcon id={item.id} />
-              <span>{item.label}</span>
-            </span>
-          );
-        }
 
         if (isPrimary) {
           return (
@@ -148,10 +165,22 @@ export function BottomNav({ onInsetChange }: BottomNavProps) {
             type="button"
             onClick={() => navigate(item.href)}
             className={className}
-            aria-label={item.label}
+            aria-label={
+              showDmBadge ? `${item.label}（未読${dmUnreadCount}件）` : item.label
+            }
             aria-current={isActive ? "page" : undefined}
           >
-            <NavIcon id={item.id} />
+            <span className="relative">
+              <NavIcon id={item.id} />
+              {showDmBadge && (
+                <span
+                  className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-violet-500 px-1 text-[9px] font-bold text-white ring-2 ring-surface"
+                  aria-hidden
+                >
+                  {dmUnreadCount > 9 ? "9+" : dmUnreadCount}
+                </span>
+              )}
+            </span>
             <span>{item.label}</span>
           </button>
         );
