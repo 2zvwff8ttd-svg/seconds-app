@@ -1,5 +1,6 @@
 "use client";
 
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { useBgmPlayback } from "@/components/video/useBgmPlayback";
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
 import { fetchVideoClipUrls } from "@/lib/videos/clips";
@@ -134,9 +135,14 @@ export function FullscreenPlayer({
           <Link
             href={`/profile/${video.creatorId}`}
             onClick={handleClose}
-            className="mt-0.5 inline-block text-sm text-violet-300 transition hover:text-violet-200 hover:underline"
+            className="mt-1 inline-flex items-center gap-2 text-sm text-violet-300 transition hover:text-violet-200"
           >
-            @{video.creatorName}
+            <ProfileAvatar
+              username={video.creatorName}
+              avatarUrl={video.creatorAvatar}
+              size="sm"
+            />
+            <span className="hover:underline">@{video.creatorName}</span>
           </Link>
           {video.isViralTop && (
             <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1 text-xs font-medium text-gold">

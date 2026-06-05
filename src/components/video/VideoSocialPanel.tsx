@@ -1,5 +1,6 @@
 "use client";
 
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { fetchComments, postComment, subscribeCommentUpdates } from "@/lib/videos/comments";
 import { fetchLikeState, subscribeLikeUpdates, toggleLike } from "@/lib/videos/likes";
 import type { CommentItem, LikeState } from "@/types/social";
@@ -136,14 +137,23 @@ export function VideoSocialPanel({
 
       <ul className="mt-3 max-h-36 flex-1 space-y-3 overflow-y-auto overscroll-contain">
         {comments.map((comment) => (
-          <li key={comment.id} className="text-sm">
-            <div className="flex items-baseline gap-2">
-              <span className="font-medium text-foreground">@{comment.username}</span>
-              <time className="text-[10px] text-muted" dateTime={comment.createdAt}>
-                {formatRelativeTime(comment.createdAt)}
-              </time>
+          <li key={comment.id} className="flex gap-2.5 text-sm">
+            <ProfileAvatar
+              username={comment.username}
+              avatarUrl={comment.avatarUrl}
+              size="sm"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className="font-medium text-foreground">@{comment.username}</span>
+                <time className="text-[10px] text-muted" dateTime={comment.createdAt}>
+                  {formatRelativeTime(comment.createdAt)}
+                </time>
+              </div>
+              <p className="mt-0.5 leading-relaxed text-foreground/90">
+                {comment.content}
+              </p>
             </div>
-            <p className="mt-0.5 leading-relaxed text-foreground/90">{comment.content}</p>
           </li>
         ))}
       </ul>

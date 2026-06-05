@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeedVideo } from "@/types/feed";
 import type { BubblePlacement } from "@/lib/bubble-layout";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { CrownIcon } from "./CrownIcon";
 import { BurstEffect } from "./BurstEffect";
 
@@ -116,6 +117,14 @@ export function VideoBubble({
           <CrownIcon className="h-7 w-7 drop-shadow-lg sm:h-6 sm:w-6" />
         </span>
       )}
+
+      <span className="pointer-events-none absolute bottom-1 right-1 rounded-full ring-2 ring-black/60">
+        <ProfileAvatar
+          username={video.creatorName}
+          avatarUrl={video.creatorAvatar}
+          size="xs"
+        />
+      </span>
 
       {isBursting && <BurstEffect size={diameter} />}
     </button>

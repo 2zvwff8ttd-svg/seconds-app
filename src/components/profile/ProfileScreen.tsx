@@ -1,7 +1,9 @@
 "use client";
 
+import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import { FollowButton } from "@/components/profile/FollowButton";
 import { FollowListModal } from "@/components/profile/FollowListModal";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { ProfileStats } from "@/components/profile/ProfileStats";
 import { FullscreenPlayer } from "@/components/home/FullscreenPlayer";
 import { fetchFollowStats } from "@/lib/social/follows";
@@ -78,6 +80,7 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,9 +128,11 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
         ) : profile ? (
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-4">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500/30 to-fuchsia-500/30 text-xl font-bold text-violet-200">
-                {profile.username.slice(0, 1).toUpperCase()}
-              </div>
+              <ProfileAvatar
+                username={profile.username}
+                avatarUrl={profile.avatarUrl}
+                size="lg"
+              />
               <div>
                 <h2 className="text-lg font-bold text-foreground">@{profile.username}</h2>
                 {profile.bio && (
@@ -144,13 +149,24 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
               </div>
             </div>
 
-            {!isOwnProfile && followStats && (
-              <FollowButton
-                userId={profile.userId}
-                initialStats={followStats}
-                onStatsChange={setFollowStats}
-              />
-            )}
+            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+              {isOwnProfile && (
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition hover:border-violet-400/40 hover:bg-violet-500/10"
+                >
+                  Edit Profile
+                </button>
+              )}
+              {!isOwnProfile && followStats && (
+                <FollowButton
+                  userId={profile.userId}
+                  initialStats={followStats}
+                  onStatsChange={setFollowStats}
+                />
+              )}
+            </div>
           </div>
         ) : null}
 
@@ -227,6 +243,18 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
           userId={profile.userId}
           kind={followListKind}
           onClose={() => setFollowListKind(null)}
+        />
+      )}
+
+      {editOpen && profile && isOwnProfile && (
+        <EditProfileModal
+          profile={profile}
+          onClose={() => setEditOpen(false)}
+          onUpdated={(avatarUrl) =>
+            setProfile((prev) =>
+              prev ? { ...prev, avatarUrl } : prev,
+            )
+          }
         />
       )}
     </div>

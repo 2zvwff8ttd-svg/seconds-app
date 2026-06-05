@@ -1,5 +1,6 @@
 "use client";
 
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { fetchFollowers, fetchFollowing } from "@/lib/social/follows";
 import type { FollowListKind, FollowListUser } from "@/types/profile";
 import { useRouter } from "next/navigation";
@@ -29,18 +30,11 @@ function UserRow({
       onClick={() => onSelect(user.userId)}
       className="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition hover:border-border hover:bg-surface-elevated"
     >
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-violet-500/30 to-fuchsia-500/30 text-sm font-bold text-violet-200">
-        {user.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={user.avatarUrl}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          user.username.slice(0, 1).toUpperCase()
-        )}
-      </div>
+      <ProfileAvatar
+        username={user.username}
+        avatarUrl={user.avatarUrl}
+        size="sm"
+      />
       <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
         @{user.username}
       </span>
