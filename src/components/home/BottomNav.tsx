@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 
@@ -86,10 +85,15 @@ export function BottomNav({ onInsetChange }: BottomNavProps) {
     };
   }, [onInsetChange]);
 
+  const navigate = (href: string) => {
+    if (href === "#") return;
+    router.push(href);
+  };
+
   return (
     <nav
       ref={navRef}
-      className="z-bottom-nav fixed inset-x-0 bottom-0 flex items-center justify-around border-t border-border bg-surface/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-lg sm:px-2 sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pt-2"
+      className="z-bottom-nav pointer-events-auto fixed inset-x-0 bottom-0 grid grid-cols-5 items-end border-t border-border bg-surface/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 backdrop-blur-lg sm:px-2 sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pt-2"
       aria-label="Main"
     >
       {NAV_ITEMS.map((item) => {
@@ -99,16 +103,17 @@ export function BottomNav({ onInsetChange }: BottomNavProps) {
             ? pathname === "/"
             : pathname.startsWith(item.href));
         const isPrimary = "primary" in item && item.primary;
+        const isDisabled = "disabled" in item && item.disabled;
 
         const className = isPrimary
-          ? "relative -mt-5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/30 touch-manipulation"
-          : `flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] transition touch-manipulation ${
+          ? "relative z-0 -mt-5 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/30 touch-manipulation"
+          : `relative z-10 flex min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 px-1 py-1 text-[10px] transition touch-manipulation ${
               isActive
                 ? "text-foreground"
                 : "text-muted hover:text-foreground/80"
             }`;
 
-        if ("disabled" in item && item.disabled) {
+        if (isDisabled) {
           return (
             <span
               key={item.id}
@@ -116,7 +121,7 @@ export function BottomNav({ onInsetChange }: BottomNavProps) {
               aria-label={item.label}
             >
               <NavIcon id={item.id} />
-              {!isPrimary && <span>{item.label}</span>}
+              <span>{item.label}</span>
             </span>
           );
         }
@@ -127,7 +132,7 @@ export function BottomNav({ onInsetChange }: BottomNavProps) {
               key={item.id}
               type="button"
               data-record-button
-              onClick={() => router.push(item.href)}
+              onClick={() => navigate(item.href)}
               className={className}
               aria-label={item.label}
               aria-current={isActive ? "page" : undefined}
@@ -138,16 +143,17 @@ export function BottomNav({ onInsetChange }: BottomNavProps) {
         }
 
         return (
-          <Link
+          <button
             key={item.id}
-            href={item.href}
+            type="button"
+            onClick={() => navigate(item.href)}
             className={className}
             aria-label={item.label}
             aria-current={isActive ? "page" : undefined}
           >
             <NavIcon id={item.id} />
             <span>{item.label}</span>
-          </Link>
+          </button>
         );
       })}
     </nav>
