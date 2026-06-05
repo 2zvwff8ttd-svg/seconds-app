@@ -168,3 +168,65 @@ body {
 .fullscreen-enter {
   animation: fullscreen-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/* ホーム — ノイズ入りダーク背景（シャボン玉エリア） */
+.home-noise-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-color: #07070a;
+  background-image:
+    radial-gradient(
+      ellipse 110% 75% at 50% -12%,
+      rgba(58, 50, 82, 0.2),
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 55% 45% at 100% 95%,
+      rgba(28, 24, 42, 0.14),
+      transparent 52%
+    ),
+    radial-gradient(
+      ellipse 45% 35% at 0% 88%,
+      rgba(22, 20, 36, 0.1),
+      transparent 48%
+    );
+}
+
+.home-noise-grain {
+  position: absolute;
+  inset: -40%;
+  width: 180%;
+  height: 180%;
+  opacity: 0.042;
+  filter: url(#seconds-home-grain);
+  background-color: #c8c8c8;
+  mix-blend-mode: overlay;
+  animation: home-grain-drift 0.55s steps(4) infinite;
+  will-change: transform;
+}
+
+@keyframes home-grain-drift {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-1.2%, 0.8%);
+  }
+  50% {
+    transform: translate(0.9%, -1%);
+  }
+  75% {
+    transform: translate(-0.6%, -0.5%);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-noise-grain {
+    animation: none;
+  }
+}

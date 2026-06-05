@@ -4,6 +4,7 @@ import { SignOutButton } from "@/components/auth/SignOutButton";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { BubbleField } from "./BubbleField";
 import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "./BottomNav";
+import { HomeNoiseBackground } from "./HomeNoiseBackground";
 import { useState } from "react";
 
 export function HomeScreen() {
@@ -11,7 +12,8 @@ export function HomeScreen() {
   const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-black">
+    <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-[#07070a]">
+      <HomeNoiseBackground />
       <header className="z-header relative flex shrink-0 items-center justify-between px-4 pb-1 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-5 sm:pb-2 sm:pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div>
           <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">
