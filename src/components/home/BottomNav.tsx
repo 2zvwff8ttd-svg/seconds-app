@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 
 const NAV_ITEMS = [
   { id: "home", label: "Home", href: "/" },
-  { id: "search", label: "Search", href: "#", disabled: true },
+  { id: "search", label: "Search", href: "/search" },
   { id: "camera", label: "Record", href: "/post", primary: true },
   { id: "messages", label: "Messages", href: "#", disabled: true },
   { id: "profile", label: "Profile", href: "/profile" },
