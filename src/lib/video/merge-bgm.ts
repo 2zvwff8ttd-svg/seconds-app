@@ -1,6 +1,10 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 
+/** @ffmpeg/ffmpeg パッケージと揃える（const.js の CORE_VERSION） */
+const FFMPEG_CORE_VERSION = "0.12.9";
+const FFMPEG_CORE_BASE = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`;
+
 let ffmpegInstance: FFmpeg | null = null;
 let loadPromise: Promise<FFmpeg> | null = null;
 
@@ -10,11 +14,13 @@ async function getFfmpeg(): Promise<FFmpeg> {
   if (!loadPromise) {
     loadPromise = (async () => {
       const ffmpeg = new FFmpeg();
-      const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
       await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+        coreURL: await toBlobURL(
+          `${FFMPEG_CORE_BASE}/ffmpeg-core.js`,
+          "text/javascript",
+        ),
         wasmURL: await toBlobURL(
-          `${baseURL}/ffmpeg-core.wasm`,
+          `${FFMPEG_CORE_BASE}/ffmpeg-core.wasm`,
           "application/wasm",
         ),
       });
@@ -35,55 +41,29 @@ function bgmFileName(blob: Blob): string {
   return "bgm.mp3";
 }
 
-/** 録画クリップに音声トラックがあるか（不明時は false） */
-async function videoHasAudioTrack(file: File): Promise<boolean> {
-  const url = URL.createObjectURL(file);
+function outputBaseName(id: string): string {
+  return `out_${id}`;
+}
+
+async function safeDeleteFile(ffmpeg: FFmpeg, name: string): Promise<void> {
   try {
-    const video = document.createElement("video");
-    video.muted = true;
-    video.preload = "metadata";
-    video.src = url;
-
-    await new Promise<void>((resolve, reject) => {
-      video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error("metadata"));
-    });
-
-    const withTracks = video as HTMLVideoElement & {
-      audioTracks?: { length: number };
-      mozHasAudio?: boolean;
-      webkitAudioDecodedByteCount?: number;
-    };
-
-    if (withTracks.audioTracks && withTracks.audioTracks.length > 0) {
-      return true;
-    }
-    if (typeof withTracks.mozHasAudio === "boolean") {
-      return withTracks.mozHasAudio;
-    }
-
-    await new Promise((r) => setTimeout(r, 150));
-    if (withTracks.webkitAudioDecodedByteCount !== undefined) {
-      return withTracks.webkitAudioDecodedByteCount > 0;
-    }
-
-    return false;
+    await ffmpeg.deleteFile(name);
   } catch {
-    return false;
-  } finally {
-    URL.revokeObjectURL(url);
+    /* ignore */
   }
 }
+
+type MergeStrategy = "mp4_encode" | "webm_copy";
 
 async function execMerge(
   ffmpeg: FFmpeg,
   videoName: string,
   bgmName: string,
   outName: string,
-  mode: "mix" | "bgm_only",
+  strategy: MergeStrategy,
 ): Promise<void> {
-  const outputArgs =
-    mode === "mix"
+  const outputArgs: string[] =
+    strategy === "mp4_encode"
       ? [
           "-i",
           videoName,
@@ -91,19 +71,31 @@ async function execMerge(
           "-1",
           "-i",
           bgmName,
-          "-filter_complex",
-          "[1:a]volume=0.35[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]",
           "-map",
-          "0:v",
+          "0:v:0",
           "-map",
-          "[aout]",
+          "1:a:0",
           "-c:v",
-          "copy",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-crf",
+          "28",
+          "-pix_fmt",
+          "yuv420p",
           "-c:a",
-          "libopus",
+          "aac",
           "-b:a",
           "128k",
+          "-ar",
+          "44100",
+          "-ac",
+          "2",
           "-shortest",
+          "-movflags",
+          "+faststart",
+          "-f",
+          "mp4",
           outName,
         ]
       : [
@@ -114,9 +106,9 @@ async function execMerge(
           "-i",
           bgmName,
           "-map",
-          "0:v",
+          "0:v:0",
           "-map",
-          "1:a",
+          "1:a:0",
           "-c:v",
           "copy",
           "-c:a",
@@ -124,27 +116,52 @@ async function execMerge(
           "-b:a",
           "128k",
           "-shortest",
+          "-f",
+          "webm",
           outName,
         ];
 
-  let lastLog = "";
+  const logs: string[] = [];
   const onLog = ({ message }: { message: string }) => {
-    lastLog = message;
+    logs.push(message);
   };
   ffmpeg.on("log", onLog);
 
   try {
     const code = await ffmpeg.exec(outputArgs);
     if (code !== 0) {
-      throw new Error(lastLog || `ffmpeg exit ${code}`);
+      const tail = logs.slice(-5).join(" ").trim();
+      throw new Error(tail || `ffmpeg exit ${code}`);
     }
   } finally {
     ffmpeg.off("log", onLog);
   }
 }
 
+async function validatePlayableVideo(blob: Blob): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  try {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.src = url;
+    await new Promise<void>((resolve, reject) => {
+      video.onloadedmetadata = () => {
+        if (!Number.isFinite(video.duration) || video.duration <= 0) {
+          reject(new Error("動画の長さを読み取れませんでした"));
+          return;
+        }
+        resolve();
+      };
+      video.onerror = () => reject(new Error("合成動画を再生できません"));
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 /**
- * 動画に BGM をミックス（元音声がある場合は amix、ない場合は BGM のみ）
+ * 動画に BGM を合成（BGM のみ・MP4 出力を優先）
  */
 export async function mergeVideoWithBgm(
   videoFile: File,
@@ -152,18 +169,18 @@ export async function mergeVideoWithBgm(
   onProgress?: (ratio: number) => void,
 ): Promise<File> {
   const ffmpeg = await getFfmpeg();
+  const runId = crypto.randomUUID().slice(0, 8);
   onProgress?.(0.05);
 
   const videoExt = videoFile.name.split(".").pop() || "webm";
-  const videoName = `input.${videoExt}`;
-  const bgmName = bgmFileName(bgmBlob);
-  const outName = `output.${videoExt}`;
+  const videoName = `vin_${runId}.${videoExt}`;
+  const bgmName = `bgm_${runId}.${bgmFileName(bgmBlob).replace("bgm.", "")}`;
+  const outMp4 = `${outputBaseName(runId)}.mp4`;
+  const outWebm = `${outputBaseName(runId)}.webm`;
 
   await ffmpeg.writeFile(videoName, await fetchFile(videoFile));
   await ffmpeg.writeFile(bgmName, await fetchFile(bgmBlob));
   onProgress?.(0.2);
-
-  const hasAudio = await videoHasAudioTrack(videoFile);
 
   const onFfmpegProgress = ({ progress }: { progress: number }) => {
     if (typeof progress === "number") {
@@ -172,23 +189,32 @@ export async function mergeVideoWithBgm(
   };
   ffmpeg.on("progress", onFfmpegProgress);
 
+  let outName: string | null = null;
+  let lastError = "";
+
   try {
-    if (hasAudio) {
-      try {
-        await execMerge(ffmpeg, videoName, bgmName, outName, "mix");
-      } catch {
-        await execMerge(ffmpeg, videoName, bgmName, outName, "bgm_only");
-      }
-    } else {
-      await execMerge(ffmpeg, videoName, bgmName, outName, "bgm_only");
+    try {
+      await execMerge(ffmpeg, videoName, bgmName, outMp4, "mp4_encode");
+      outName = outMp4;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      await safeDeleteFile(ffmpeg, outMp4);
+      await execMerge(ffmpeg, videoName, bgmName, outWebm, "webm_copy");
+      outName = outWebm;
     }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
-      detail ? `BGM合成に失敗しました: ${detail}` : "BGM合成に失敗しました",
+      `BGM合成に失敗しました: ${detail || lastError || "不明なエラー"}`,
     );
   } finally {
     ffmpeg.off("progress", onFfmpegProgress);
+    await safeDeleteFile(ffmpeg, videoName);
+    await safeDeleteFile(ffmpeg, bgmName);
+  }
+
+  if (!outName) {
+    throw new Error("BGM合成に失敗しました");
   }
 
   onProgress?.(0.9);
@@ -199,17 +225,20 @@ export async function mergeVideoWithBgm(
       ? new Uint8Array(data)
       : new TextEncoder().encode(String(data));
 
+  await safeDeleteFile(ffmpeg, outName);
+
   if (bytes.byteLength === 0) {
     throw new Error("BGM合成の結果が空です");
   }
 
-  await ffmpeg.deleteFile(videoName);
-  await ffmpeg.deleteFile(bgmName);
-  await ffmpeg.deleteFile(outName);
-
-  const mime = videoFile.type || "video/webm";
+  const isMp4 = outName.endsWith(".mp4");
+  const mime = isMp4 ? "video/mp4" : "video/webm";
+  const baseName = videoFile.name.replace(/\.[^.]+$/, "") || "clip";
+  const outFileName = `${baseName}${isMp4 ? ".mp4" : ".webm"}`;
   const blob = new Blob([bytes], { type: mime });
+
+  await validatePlayableVideo(blob);
   onProgress?.(1);
 
-  return new File([blob], videoFile.name, { type: mime });
+  return new File([blob], outFileName, { type: mime });
 }

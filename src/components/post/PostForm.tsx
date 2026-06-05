@@ -261,8 +261,14 @@ export function PostForm() {
     try {
       const uploadClips = await prepareClipsForUpload();
 
+      const usedBgm =
+        aiMusicEnabled &&
+        bgmBlob &&
+        (AI_BGM_GENERATION_ENABLED || PRESET_BGM_ENABLED);
+
       const result = await postVideo({
         clips: uploadClips,
+        thumbnailSource: usedBgm ? clips[0]?.file : undefined,
         title,
         visibility,
         onStageChange: setStage,
@@ -275,10 +281,7 @@ export function PostForm() {
       setSuccess({ publishAt: result.publishAt });
     } catch (err) {
       setStage("error");
-      const message = err instanceof Error ? err.message : "投稿に失敗しました";
-      setError(
-        message.includes("BGM") ? message : `投稿に失敗しました: ${message}`,
-      );
+      setError(err instanceof Error ? err.message : "投稿に失敗しました");
     }
   };
 

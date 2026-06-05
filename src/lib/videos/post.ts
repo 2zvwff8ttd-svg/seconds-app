@@ -24,6 +24,8 @@ export type PostClipInput = {
 export type PostVideoInput = {
   /** カメラで撮影したクリップ（vlog） */
   clips: PostClipInput[];
+  /** サムネイル生成用（BGM 合成前の元クリップを渡すと安全） */
+  thumbnailSource?: File;
   title: string;
   visibility: VideoVisibility;
   onStageChange: (stage: PostUploadStage) => void;
@@ -186,9 +188,10 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   onStageChange("preparing");
   onProgress(5, "動画を解析中…");
 
+  const thumbnailFile = input.thumbnailSource ?? clipFiles[0];
   const [country, thumbnailBlob] = await Promise.all([
     detectCountryCode(),
-    captureVideoThumbnail(clipFiles[0]),
+    captureVideoThumbnail(thumbnailFile),
   ]);
 
   const videoId = crypto.randomUUID();
