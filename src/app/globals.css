@@ -196,37 +196,66 @@ body {
 
 .home-noise-grain {
   position: absolute;
-  inset: -40%;
-  width: 180%;
-  height: 180%;
-  opacity: 0.042;
-  filter: url(#seconds-home-grain);
-  background-color: #c8c8c8;
-  mix-blend-mode: overlay;
-  animation: home-grain-drift 0.55s steps(4) infinite;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  background-color: #e0e0e0;
   will-change: transform;
+}
+
+.home-noise-grain--coarse {
+  opacity: 0.16;
+  filter: url(#seconds-home-grain-coarse);
+  mix-blend-mode: overlay;
+  animation: home-grain-drift 0.42s steps(6) infinite;
+}
+
+.home-noise-grain--fine {
+  opacity: 0.1;
+  filter: url(#seconds-home-grain-fine);
+  mix-blend-mode: soft-light;
+  animation: home-grain-drift-alt 0.38s steps(5) infinite reverse;
 }
 
 @keyframes home-grain-drift {
   0% {
     transform: translate(0, 0);
   }
-  25% {
-    transform: translate(-1.2%, 0.8%);
+  20% {
+    transform: translate(-2.5%, 1.5%);
   }
-  50% {
-    transform: translate(0.9%, -1%);
+  40% {
+    transform: translate(2%, -2%);
   }
-  75% {
-    transform: translate(-0.6%, -0.5%);
+  60% {
+    transform: translate(-1.5%, -2.5%);
+  }
+  80% {
+    transform: translate(2.5%, 1%);
   }
   100% {
     transform: translate(0, 0);
   }
 }
 
+@keyframes home-grain-drift-alt {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(1.8%, -1.2%) scale(1.01);
+  }
+  66% {
+    transform: translate(-2%, 1.8%) scale(0.99);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .home-noise-grain {
+  .home-noise-grain--coarse,
+  .home-noise-grain--fine {
     animation: none;
   }
 }
