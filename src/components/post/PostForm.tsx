@@ -94,6 +94,7 @@ export function PostForm() {
     !aiMusicEnabled ||
     (AI_BGM_GENERATION_ENABLED ? Boolean(bgmBlob) : Boolean(selectedPreset && bgmBlob));
   const canPost = hasContent && budgetExhausted && !isUploading && bgmReady;
+  const showPostDetails = budgetExhausted && hasContent;
   const clipKey = useMemo(() => clips.map((c) => c.id).join(","), [clips]);
 
   const runMusicGeneration = useCallback(
@@ -155,6 +156,7 @@ export function PostForm() {
       setAiStatus("idle");
       setAnalyzeResult(null);
       setBgmBlob(null);
+      setSelectedPreset(null);
       setAiError(null);
       return;
     }
@@ -273,7 +275,10 @@ export function PostForm() {
       setSuccess({ publishAt: result.publishAt });
     } catch (err) {
       setStage("error");
-      setError(err instanceof Error ? err.message : "投稿に失敗しました");
+      const message = err instanceof Error ? err.message : "投稿に失敗しました";
+      setError(
+        message.includes("BGM") ? message : `投稿に失敗しました: ${message}`,
+      );
     }
   };
 
@@ -309,60 +314,79 @@ export function PostForm() {
   return (
     <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 sm:px-5">
-        <CameraRecorder
-          clips={clips}
-          onClipAdded={handleClipAdded}
-          disabled={isUploading}
-        />
-        <ClipStrip
-          clips={clips}
-          onRemove={handleRemoveClip}
-          disabled={isUploading}
-        />
-
-        {budgetExhausted && hasContent && (
-          <AiEnhancePanel
-            status={aiStatus}
-            aiMusicEnabled={aiMusicEnabled}
-            onAiMusicChange={handleAiMusicChange}
-            analyzeResult={analyzeResult}
-            error={aiError}
-            onRegenerate={() => void runAiPipeline()}
-            disabled={isUploading}
-            selectedPresetId={selectedPreset?.id ?? null}
-            onPresetSelect={handlePresetSelect}
-          />
-        )}
-
-        {hasContent && (
-          <div className="mt-4">
-            <label htmlFor="title" className="mb-1.5 flex items-baseline gap-2">
-              <span className="text-xs font-medium text-foreground">タイトル</span>
-              <span className="text-[10px] text-muted">
-                {analyzeResult && !titleTouched ? "AI提案" : "任意"}
-              </span>
-            </label>
-            <input
-              id="title"
-              type="text"
-              value={title}
-              onChange={(e) => {
-                setTitleTouched(true);
-                setTitle(e.target.value);
-              }}
-              maxLength={120}
+        {!showPostDetails ? (
+          <>
+            <CameraRecorder
+              clips={clips}
+              onClipAdded={handleClipAdded}
               disabled={isUploading}
-              placeholder={
-                analyzeResult?.title || "未入力の場合は「無題のvlog」になります"
-              }
-              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none placeholder:text-muted/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/30 disabled:opacity-50"
             />
-          </div>
+            <ClipStrip
+              clips={clips}
+              onRemove={handleRemoveClip}
+              disabled={isUploading}
+            />
+            {hasContent && !isUploading && (
+              <p className="mt-4 text-center text-xs leading-relaxed text-muted">
+                割り当て時間（{assignedSeconds}秒）をすべて使うと、
+                <br />
+                タイトル・BGM・公開範囲の設定に進みます
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="mb-3 rounded-xl border border-violet-400/30 bg-violet-500/10 px-3 py-2.5">
+              <p className="text-xs font-medium text-violet-200">撮影完了</p>
+              <p className="mt-0.5 text-[10px] text-muted">
+                {usedSeconds}秒のクリップ {clips.length}本 — 投稿内容を設定してください
+              </p>
+            </div>
+            <ClipStrip
+              clips={clips}
+              onRemove={handleRemoveClip}
+              disabled={isUploading}
+            />
+            <AiEnhancePanel
+              status={aiStatus}
+              aiMusicEnabled={aiMusicEnabled}
+              onAiMusicChange={handleAiMusicChange}
+              analyzeResult={analyzeResult}
+              error={aiError}
+              onRegenerate={() => void runAiPipeline()}
+              disabled={isUploading}
+              selectedPresetId={selectedPreset?.id ?? null}
+              onPresetSelect={handlePresetSelect}
+            />
+            <div className="mt-4">
+              <label htmlFor="title" className="mb-1.5 flex items-baseline gap-2">
+                <span className="text-xs font-medium text-foreground">タイトル</span>
+                <span className="text-[10px] text-muted">
+                  {analyzeResult && !titleTouched ? "AI提案" : "任意"}
+                </span>
+              </label>
+              <input
+                id="title"
+                type="text"
+                value={title}
+                onChange={(e) => {
+                  setTitleTouched(true);
+                  setTitle(e.target.value);
+                }}
+                maxLength={120}
+                disabled={isUploading}
+                placeholder={
+                  analyzeResult?.title || "未入力の場合は「無題のvlog」になります"
+                }
+                className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none placeholder:text-muted/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/30 disabled:opacity-50"
+              />
+            </div>
+          </>
         )}
       </div>
 
       <div className="shrink-0 border-t border-border bg-surface-elevated/95 px-4 py-4 backdrop-blur-lg sm:px-5">
-        {hasContent && (
+        {showPostDetails && (
           <section aria-labelledby="visibility-label">
             <h2 id="visibility-label" className="mb-1 text-xs font-semibold text-foreground">
               公開範囲
@@ -414,27 +438,23 @@ export function PostForm() {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={!canPost}
-          className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {isUploading ? "投稿中…" : "投稿"}
-        </button>
+        {showPostDetails && (
+          <button
+            type="submit"
+            disabled={!canPost}
+            className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {isUploading ? "投稿中…" : "投稿"}
+          </button>
+        )}
 
-        {!hasContent && !isUploading && (
+        {!showPostDetails && !hasContent && !isUploading && (
           <p className="mt-2 text-center text-[10px] text-muted">
             録画ボタンでクリップを撮影してください
           </p>
         )}
 
-        {hasContent && !budgetExhausted && !isUploading && (
-          <p className="mt-2 text-center text-[10px] text-muted">
-            割り当て時間をすべて使うと投稿できます
-          </p>
-        )}
-
-        {hasContent && budgetExhausted && aiMusicEnabled && !bgmReady && !isUploading && (
+        {showPostDetails && aiMusicEnabled && !bgmReady && !isUploading && (
           <p className="mt-2 text-center text-[10px] text-amber-200/90">
             BGM を ON にした場合は曲を選択してください
           </p>
