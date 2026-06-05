@@ -12,7 +12,7 @@ export function HomeScreen() {
   const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
 
   return (
-    <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-[#04060f]">
+    <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-[#020208]">
       <HomeStarfieldBackground />
       <header className="z-header relative flex shrink-0 items-center justify-between px-4 pb-1 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-5 sm:pb-2 sm:pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div>
