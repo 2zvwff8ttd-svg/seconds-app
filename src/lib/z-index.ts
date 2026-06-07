@@ -10,4 +10,5 @@ export const Z_INDEX = {
   bottomNav: 100,
   fullscreen: 200,
   onboarding: 300,
+  opening: 350,
 } as const;
