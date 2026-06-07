@@ -134,6 +134,28 @@ export function getPostingPeriodBounds(
   return { start, end, timeZone };
 }
 
+/**
+ * 投稿日（ローカル 7:00 区切り）の date カラム用 YYYY-MM-DD。
+ * daily_assignments.date との照合に使う。
+ */
+export function getPostingDayDateString(
+  now: Date = new Date(),
+  timeZone: string = getDeviceTimeZone(),
+): string {
+  const { year, month, day, hour } = getZonedParts(now, timeZone);
+
+  if (hour < 7) {
+    const prev = addCalendarDays(year, month, day, -1);
+    return formatDateParts(prev.year, prev.month, prev.day);
+  }
+
+  return formatDateParts(year, month, day);
+}
+
+function formatDateParts(year: number, month: number, day: number): string {
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function formatLocalDateTime(
   date: Date,
   timeZone: string,

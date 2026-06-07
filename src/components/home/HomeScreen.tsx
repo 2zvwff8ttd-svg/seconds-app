@@ -2,14 +2,22 @@
 
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { BubbleField } from "./BubbleField";
 import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "./BottomNav";
 import { HomeStarfieldBackground } from "./HomeStarfieldBackground";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function HomeScreen() {
   const [countryCode, setCountryCode] = useState("JP");
   const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
+  const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchTodayAssignedSeconds()
+      .then(setAssignedSeconds)
+      .catch(() => setAssignedSeconds(null));
+  }, []);
 
   return (
     <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-[#020208]">
@@ -19,7 +27,13 @@ export function HomeScreen() {
           <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">
             ?Seconds
           </h1>
-          <p className="text-[10px] text-muted sm:text-xs">Yesterday&apos;s moments</p>
+          {assignedSeconds !== null ? (
+            <p className="text-[10px] text-violet-200/90 sm:text-xs">
+              今日の撮影時間は{assignedSeconds}秒です
+            </p>
+          ) : (
+            <p className="text-[10px] text-muted sm:text-xs">Yesterday&apos;s moments</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span className="rounded-full border border-border bg-surface-elevated px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted sm:px-3 sm:py-1 sm:text-[10px]">
