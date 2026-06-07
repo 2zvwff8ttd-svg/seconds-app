@@ -13,3 +13,7 @@ export function isPublicRoute(pathname: string): boolean {
 export function isAuthRoute(pathname: string): boolean {
   return pathname === "/login";
 }
+
+export function isAdminRoute(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}

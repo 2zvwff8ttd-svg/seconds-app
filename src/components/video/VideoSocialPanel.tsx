@@ -1,5 +1,6 @@
 "use client";
 
+import { ReportButton } from "@/components/reports/ReportButton";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { fetchComments, postComment, subscribeCommentUpdates } from "@/lib/videos/comments";
 import { fetchLikeState, subscribeLikeUpdates, toggleLike } from "@/lib/videos/likes";
@@ -19,12 +20,14 @@ function formatRelativeTime(iso: string): string {
 
 type VideoSocialPanelProps = {
   videoId: string;
+  currentUserId?: string | null;
   onLikeEngagement?: () => void;
   onCommentEngagement?: () => void;
 };
 
 export function VideoSocialPanel({
   videoId,
+  currentUserId = null,
   onLikeEngagement,
   onCommentEngagement,
 }: VideoSocialPanelProps) {
@@ -144,11 +147,21 @@ export function VideoSocialPanel({
               size="sm"
             />
             <div className="min-w-0 flex-1">
-              <div className="flex items-baseline gap-2">
-                <span className="font-medium text-foreground">@{comment.username}</span>
-                <time className="text-[10px] text-muted" dateTime={comment.createdAt}>
-                  {formatRelativeTime(comment.createdAt)}
-                </time>
+              <div className="flex items-baseline justify-between gap-2">
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <span className="font-medium text-foreground">@{comment.username}</span>
+                  <time className="text-[10px] text-muted" dateTime={comment.createdAt}>
+                    {formatRelativeTime(comment.createdAt)}
+                  </time>
+                </div>
+                {currentUserId && currentUserId !== comment.userId && (
+                  <ReportButton
+                    targetType="comment"
+                    targetId={comment.id}
+                    targetLabel={`コメント「${comment.content.slice(0, 40)}」`}
+                    compact
+                  />
+                )}
               </div>
               <p className="mt-0.5 leading-relaxed text-foreground/90">
                 {comment.content}

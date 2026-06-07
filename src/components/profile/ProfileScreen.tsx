@@ -1,5 +1,6 @@
 "use client";
 
+import { ReportButton } from "@/components/reports/ReportButton";
 import { ConfirmDeleteVideoDialog } from "@/components/profile/ConfirmDeleteVideoDialog";
 import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import { FollowButton } from "@/components/profile/FollowButton";
@@ -191,6 +192,11 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
                   >
                     メッセージ
                   </Link>
+                  <ReportButton
+                    targetType="profile"
+                    targetId={profile.userId}
+                    targetLabel={`ユーザー @${profile.username}`}
+                  />
                 </div>
               )}
             </div>

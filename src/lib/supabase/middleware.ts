@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import {
   DEFAULT_AUTH_REDIRECT,
+  isAdminRoute,
   isAuthRoute,
   isPublicRoute,
 } from "@/lib/auth/routes";
@@ -50,6 +51,28 @@ export async function updateSession(request: NextRequest) {
     homeUrl.pathname = redirectTo.startsWith("/") ? redirectTo : DEFAULT_AUTH_REDIRECT;
     homeUrl.searchParams.delete("redirect");
     return NextResponse.redirect(homeUrl);
+  }
+
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_admin, is_banned")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profile?.is_banned && !isPublicRoute(pathname)) {
+      await supabase.auth.signOut();
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("banned", "1");
+      return NextResponse.redirect(loginUrl);
+    }
+
+    if (isAdminRoute(pathname) && !profile?.is_admin) {
+      const homeUrl = request.nextUrl.clone();
+      homeUrl.pathname = "/";
+      return NextResponse.redirect(homeUrl);
+    }
   }
 
   return supabaseResponse;

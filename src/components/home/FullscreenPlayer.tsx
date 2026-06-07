@@ -1,7 +1,9 @@
 "use client";
 
+import { ReportButton } from "@/components/reports/ReportButton";
 import { useBgmPlayback } from "@/components/video/useBgmPlayback";
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
+import { createClient } from "@/lib/supabase/client";
 import { fetchVideoClipUrls } from "@/lib/videos/clips";
 import type { FeedVideo } from "@/types/feed";
 import type { WatchReport } from "@/types/recommendation";
@@ -26,8 +28,16 @@ export function FullscreenPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [clipUrls, setClipUrls] = useState<string[]>([video.videoUrl]);
   const [clipIndex, setClipIndex] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const maxProgressRef = useRef(0);
   const allClipsCompletedRef = useRef(false);
+
+  useEffect(() => {
+    createClient()
+      .auth.getUser()
+      .then(({ data: { user } }) => setCurrentUserId(user?.id ?? null))
+      .catch(() => setCurrentUserId(null));
+  }, []);
 
   useBgmPlayback(videoRef, { bgmUrl: video.bgmUrl, active: true });
 
@@ -126,6 +136,16 @@ export function FullscreenPlayer({
             <path d="M6 6l12 12M18 6L6 18" />
           </svg>
         </button>
+        {currentUserId && currentUserId !== video.creatorId && (
+          <div className="absolute right-4 top-4">
+            <ReportButton
+              targetType="video"
+              targetId={video.id}
+              targetLabel={`動画「${video.title}」`}
+              className="rounded-full bg-black/50 px-3 py-2 text-xs font-medium text-white backdrop-blur-md transition hover:bg-black/70 hover:text-red-300"
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col border-t border-border bg-surface-elevated px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
@@ -149,6 +169,7 @@ export function FullscreenPlayer({
         <div className="mt-3 min-h-0 flex-1">
           <VideoSocialPanel
             videoId={video.id}
+            currentUserId={currentUserId}
             onLikeEngagement={onLikeEngagement}
             onCommentEngagement={onCommentEngagement}
           />
