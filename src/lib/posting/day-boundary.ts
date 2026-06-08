@@ -142,13 +142,8 @@ export function getPostingDayDateString(
   now: Date = new Date(),
   timeZone: string = getDeviceTimeZone(),
 ): string {
-  const { year, month, day, hour } = getZonedParts(now, timeZone);
-
-  if (hour < 7) {
-    const prev = addCalendarDays(year, month, day, -1);
-    return formatDateParts(prev.year, prev.month, prev.day);
-  }
-
+  const { start } = getPostingPeriodBounds(now, timeZone);
+  const { year, month, day } = getZonedParts(start, timeZone);
   return formatDateParts(year, month, day);
 }
 

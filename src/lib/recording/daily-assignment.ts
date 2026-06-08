@@ -1,5 +1,11 @@
-import { getDeviceTimeZone, getPostingDayDateString } from "@/lib/posting/day-boundary";
+import {
+  getDeviceTimeZone,
+  getPostingDayDateString,
+} from "@/lib/posting/day-boundary";
 import { createClient } from "@/lib/supabase/client";
+
+/** daily_assignments.date は毎朝7時 JST の cron で付与される日付キー */
+const ASSIGNMENT_TIME_ZONE = "Asia/Tokyo";
 
 /** DB に行がない場合のフォールバック（通常は cron で割当済み） */
 export const DEFAULT_ASSIGNED_SECONDS = 15;
@@ -23,7 +29,17 @@ export function parseAssignedSeconds(value: unknown): number | null {
   return seconds;
 }
 
-async function queryAssignedSeconds(
+/** 照合候補日（デバイスTZの投稿日 → cron と同じ JST 投稿日の順） */
+export function getAssignmentLookupDays(
+  now: Date = new Date(),
+  timeZone: string = getDeviceTimeZone(),
+): string[] {
+  const deviceDay = getPostingDayDateString(now, timeZone);
+  const jstDay = getPostingDayDateString(now, ASSIGNMENT_TIME_ZONE);
+  return [...new Set([deviceDay, jstDay])];
+}
+
+async function queryAssignedSecondsForDay(
   userId: string,
   postingDay: string,
 ): Promise<number | null> {
@@ -41,6 +57,7 @@ async function queryAssignedSeconds(
 
 /**
  * ログイン中ユーザーの、投稿日（デバイス TZ・朝7時区切り）の撮影秒数を返す。
+ * DB の date は JST 7時 cron 基準のため、デバイス日付で見つからない場合は JST 投稿日も照合する。
  */
 export async function fetchTodayAssignedSeconds(
   now: Date = new Date(),
@@ -56,13 +73,16 @@ export async function fetchTodayAssignedSeconds(
   }
 
   const timeZone = getDeviceTimeZone();
-  const postingDay = getPostingDayDateString(now, timeZone);
+  const lookupDays = getAssignmentLookupDays(now, timeZone);
 
-  const seconds = await queryAssignedSeconds(user.id, postingDay);
-  if (seconds !== null) return seconds;
+  for (const day of lookupDays) {
+    const seconds = await queryAssignedSecondsForDay(user.id, day);
+    if (seconds !== null) return seconds;
+  }
 
+  const tried = lookupDays.join(", ");
   throw new Error(
-    `今日（${postingDay}）の撮影秒数が割り当てられていません`,
+    `今日の撮影秒数が割り当てられていません（照合日: ${tried}）`,
   );
 }
 
