@@ -4,7 +4,7 @@ import {
 } from "@/lib/posting/day-boundary";
 import { createClient } from "@/lib/supabase/client";
 
-/** daily_assignments.date は毎朝7時 JST の cron で付与される日付キー */
+/** 毎朝7時 JST cron の date キー照合用（オンデマンド生成はデバイスTZの投稿日） */
 const ASSIGNMENT_TIME_ZONE = "Asia/Tokyo";
 
 /** DB に行がない場合のフォールバック（通常は cron で割当済み） */
@@ -55,9 +55,28 @@ async function queryAssignedSecondsForDay(
   return parseAssignedSeconds(data?.assigned_seconds);
 }
 
+/** デバイスTZの投稿日で割り当てが無ければ RPC 経由で作成（既存行はそのまま返す） */
+async function ensureDailyAssignmentForDay(
+  postingDay: string,
+): Promise<number> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("ensure_daily_assignment", {
+    p_date: postingDay,
+  });
+
+  if (error) throw new Error(error.message);
+
+  const seconds = parseAssignedSeconds(data);
+  if (seconds === null) {
+    throw new Error("撮影秒数の取得に失敗しました");
+  }
+  return seconds;
+}
+
 /**
  * ログイン中ユーザーの、投稿日（デバイス TZ・朝7時区切り）の撮影秒数を返す。
- * DB の date は JST 7時 cron 基準のため、デバイス日付で見つからない場合は JST 投稿日も照合する。
+ * 割り当てが無い場合は ensure_daily_assignment RPC で当日分を補完する。
+ * cron 由来の JST 日付キーとも照合する。
  */
 export async function fetchTodayAssignedSeconds(
   now: Date = new Date(),
@@ -74,6 +93,18 @@ export async function fetchTodayAssignedSeconds(
 
   const timeZone = getDeviceTimeZone();
   const lookupDays = getAssignmentLookupDays(now, timeZone);
+
+  for (const day of lookupDays) {
+    const seconds = await queryAssignedSecondsForDay(user.id, day);
+    if (seconds !== null) return seconds;
+  }
+
+  const devicePostingDay = getPostingDayDateString(now, timeZone);
+  try {
+    return await ensureDailyAssignmentForDay(devicePostingDay);
+  } catch {
+    // RPC 未デプロイ時など: 直前に cron が入れた行を再照合
+  }
 
   for (const day of lookupDays) {
     const seconds = await queryAssignedSecondsForDay(user.id, day);
