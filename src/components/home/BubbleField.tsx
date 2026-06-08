@@ -22,7 +22,7 @@ import {
   applySessionWatchSignal,
   createEmptySessionPreference,
 } from "@/lib/recommendation/score";
-import { VideoBubble } from "./VideoBubble";
+import { VideoBubble, type BubbleVideoPreview } from "./VideoBubble";
 import { FullscreenPlayer } from "./FullscreenPlayer";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -206,6 +206,17 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
 
   const slotCount = Math.min(BUBBLE_SLOT_COUNT, placements.length);
 
+  const toBubblePreview = useCallback(
+    (video: FeedVideo): BubbleVideoPreview => ({
+      id: video.id,
+      title: video.title,
+      creatorName: video.creatorName,
+      thumbnailUrl: video.thumbnailUrl,
+      isViralTop: video.isViralTop,
+    }),
+    [],
+  );
+
   return (
     <>
       <div
@@ -269,7 +280,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
               return (
                 <VideoBubble
                   key={`${index}-${video.id}`}
-                  video={video}
+                  video={toBubblePreview(video)}
                   placement={placement}
                   floatStyle={floatStyle}
                   isBursting={burstingId === video.id}

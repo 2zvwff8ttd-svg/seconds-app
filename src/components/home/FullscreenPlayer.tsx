@@ -121,11 +121,6 @@ export function FullscreenPlayer({
           onTimeUpdate={updateProgress}
           onEnded={handleEnded}
         />
-        {clipUrls.length > 1 && (
-          <div className="absolute right-4 top-14 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white backdrop-blur-md">
-            {clipIndex + 1} / {clipUrls.length}
-          </div>
-        )}
         <button
           type="button"
           onClick={handleClose}

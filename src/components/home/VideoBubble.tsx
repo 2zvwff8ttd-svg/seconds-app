@@ -1,13 +1,22 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { FeedVideo } from "@/types/feed";
 import type { BubblePlacement } from "@/lib/bubble-layout";
+import { resolveBubbleThumbnailUrl } from "@/lib/videos/bubble-thumbnail";
 import { CrownIcon } from "./CrownIcon";
 import { BurstEffect } from "./BurstEffect";
 
+/** シャボン玉表示用（動画 URL は含めない） */
+export type BubbleVideoPreview = {
+  id: string;
+  title: string;
+  creatorName: string;
+  thumbnailUrl?: string;
+  isViralTop?: boolean;
+};
+
 type VideoBubbleProps = {
-  video: FeedVideo;
+  video: BubbleVideoPreview;
   placement: BubblePlacement;
   floatStyle: React.CSSProperties;
   isBursting: boolean;
@@ -27,6 +36,7 @@ export function VideoBubble({
   const [isPressed, setIsPressed] = useState(false);
   const diameter = placement.radius * 2;
   const isViral = video.isViralTop;
+  const thumbnailSrc = resolveBubbleThumbnailUrl(video.thumbnailUrl);
 
   const handleClick = useCallback(() => {
     if (isBursting) return;
@@ -73,10 +83,10 @@ export function VideoBubble({
               isViral ? "ring-1 ring-gold/40" : "ring-1 ring-white/10"
             }`}
           >
-            {video.thumbnailUrl ? (
+            {thumbnailSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={video.thumbnailUrl}
+                src={thumbnailSrc}
                 alt=""
                 className="h-full w-full object-cover"
                 loading="lazy"

@@ -19,39 +19,48 @@ export function ClientAppGate({ children }: { children: React.ReactNode }) {
   const publicRoute = isPublicRoute(pathname);
   const [phase, setPhase] = useState<GatePhase>(publicRoute ? "ready" : "loading");
   const needsOnboardingRef = useRef(false);
+  /** オープニングを一度スケジュールしたら、画面遷移では再実行しない */
+  const openingScheduledRef = useRef(false);
 
-  const evaluateGate = useCallback(async () => {
+  useEffect(() => {
     if (isPublicRoute(pathname)) {
       setPhase("ready");
       return;
     }
 
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setPhase("ready");
-      return;
-    }
-
-    needsOnboardingRef.current = !isOnboardingComplete(user);
-
     if (hasSeenOpeningQuestionThisSession()) {
-      setPhase((current) => {
-        if (current === "ready" || current === "onboarding") return current;
-        return needsOnboardingRef.current ? "onboarding" : "ready";
-      });
       return;
     }
 
-    setPhase((current) => (current === "ready" ? "ready" : "opening"));
-  }, [pathname]);
+    if (openingScheduledRef.current) {
+      return;
+    }
 
-  useEffect(() => {
-    void evaluateGate();
-  }, [evaluateGate]);
+    openingScheduledRef.current = true;
+
+    const run = async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        openingScheduledRef.current = false;
+        setPhase("ready");
+        return;
+      }
+
+      if (hasSeenOpeningQuestionThisSession()) {
+        setPhase("ready");
+        return;
+      }
+
+      needsOnboardingRef.current = !isOnboardingComplete(user);
+      setPhase("opening");
+    };
+
+    void run();
+  }, [pathname]);
 
   const handleOpeningComplete = useCallback(() => {
     markOpeningQuestionSeenThisSession();
