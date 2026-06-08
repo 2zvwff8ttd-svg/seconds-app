@@ -1,5 +1,11 @@
 /** Routes accessible without authentication */
-export const PUBLIC_ROUTES = ["/login", "/auth/callback"] as const;
+export const PUBLIC_ROUTES = [
+  "/login",
+  "/auth/callback",
+  "/privacy",
+  "/terms",
+  "/guidelines",
+] as const;
 
 /** Default redirect after successful login */
 export const DEFAULT_AUTH_REDIRECT = "/";

@@ -1,6 +1,8 @@
 "use client";
 
+import { AppFooter } from "@/components/layout/AppFooter";
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState } from "react";
 
@@ -40,6 +42,7 @@ export function AuthForm() {
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(
     urlError === "auth_callback_failed"
@@ -56,6 +59,11 @@ export function AuthForm() {
   }, [redirectTo]);
 
   const handleGoogleSignIn = async () => {
+    if (mode === "signup" && !acceptedTerms) {
+      setError("利用規約とプライバシーポリシーへの同意が必要です");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setMessage(null);
@@ -80,6 +88,12 @@ export function AuthForm() {
     setMessage(null);
 
     if (mode === "signup") {
+      if (!acceptedTerms) {
+        setError("利用規約とプライバシーポリシーへの同意が必要です");
+        setLoading(false);
+        return;
+      }
+
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -139,7 +153,8 @@ export function AuthForm() {
   };
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center px-5 py-12">
+    <div className="relative flex min-h-[100dvh] flex-col overflow-y-auto">
+      <div className="relative flex flex-1 flex-col items-center justify-center px-5 py-12">
       <div
         className="pointer-events-none absolute inset-0 overflow-hidden"
         aria-hidden
@@ -164,6 +179,7 @@ export function AuthForm() {
               type="button"
               onClick={() => {
                 setMode("signin");
+                setAcceptedTerms(false);
                 setError(null);
                 setMessage(null);
               }}
@@ -179,6 +195,7 @@ export function AuthForm() {
               type="button"
               onClick={() => {
                 setMode("signup");
+                setAcceptedTerms(false);
                 setError(null);
                 setMessage(null);
               }}
@@ -195,7 +212,7 @@ export function AuthForm() {
           <button
             type="button"
             onClick={handleGoogleSignIn}
-            disabled={loading}
+            disabled={loading || (mode === "signup" && !acceptedTerms)}
             className="flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium text-foreground transition hover:bg-white/5 disabled:opacity-50"
           >
             <GoogleIcon className="h-5 w-5" />
@@ -282,9 +299,30 @@ export function AuthForm() {
               </p>
             )}
 
+            {mode === "signup" && (
+              <label className="flex items-start gap-3 rounded-xl border border-border bg-surface px-3 py-3 text-xs leading-relaxed text-muted">
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-border bg-surface accent-violet-500"
+                />
+                <span>
+                  <Link href="/terms" className="text-violet-300 hover:text-violet-200 hover:underline">
+                    利用規約
+                  </Link>
+                  と
+                  <Link href="/privacy" className="text-violet-300 hover:text-violet-200 hover:underline">
+                    プライバシーポリシー
+                  </Link>
+                  に同意する
+                </span>
+              </label>
+            )}
+
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (mode === "signup" && !acceptedTerms)}
               className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:opacity-90 disabled:opacity-50"
             >
               {loading
@@ -296,10 +334,23 @@ export function AuthForm() {
           </form>
         </div>
 
-        <p className="mt-6 text-center text-xs text-muted">
-          続行することで、利用規約とプライバシーポリシーに同意したものとみなされます。
-        </p>
+        {mode === "signin" && (
+          <p className="mt-6 text-center text-xs text-muted">
+            ログインすることで、
+            <Link href="/terms" className="text-violet-300 hover:underline">
+              利用規約
+            </Link>
+            と
+            <Link href="/privacy" className="text-violet-300 hover:underline">
+              プライバシーポリシー
+            </Link>
+            に同意したものとみなされます。
+          </p>
+        )}
       </div>
+      </div>
+
+      <AppFooter />
     </div>
   );
 }
