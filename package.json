@@ -12,7 +12,8 @@
     "db:apply-fixes": "node scripts/apply-db-fixes.mjs",
     "db:enable-realtime": "node scripts/enable-realtime.mjs",
     "functions:deploy-daily-morning": "npx --yes supabase functions deploy daily-morning --no-verify-jwt",
-    "functions:invoke-daily-morning": "node scripts/invoke-daily-morning.mjs"
+    "functions:invoke-daily-morning": "node scripts/invoke-daily-morning.mjs",
+    "icons:generate": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
     "@ffmpeg/core": "^0.12.9",
@@ -34,6 +35,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "postgres": "^3.4.7",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
