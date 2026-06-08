@@ -1,5 +1,18 @@
 import { getPostingDayDateString } from "@/lib/posting/day-boundary";
 
+/**
+ * ページロード単位のセッション（SPA 内の画面遷移では維持、フルリロードでリセット）
+ */
+let openingQuestionShownThisSession = false;
+
+export function hasSeenOpeningQuestionThisSession(): boolean {
+  return openingQuestionShownThisSession;
+}
+
+export function markOpeningQuestionSeenThisSession(): void {
+  openingQuestionShownThisSession = true;
+}
+
 const STORAGE_PREFIX = "seconds_opening_seconds_seen:";
 
 export function getOpeningSecondsSeenKey(now: Date = new Date()): string {

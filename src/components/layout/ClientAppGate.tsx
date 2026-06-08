@@ -3,6 +3,10 @@
 import { OpeningOverlay } from "@/components/opening/OpeningOverlay";
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { isPublicRoute } from "@/lib/auth/routes";
+import {
+  hasSeenOpeningQuestionThisSession,
+  markOpeningQuestionSeenThisSession,
+} from "@/lib/opening/state";
 import { isOnboardingComplete } from "@/lib/onboarding/state";
 import { createClient } from "@/lib/supabase/client";
 import { usePathname } from "next/navigation";
@@ -33,7 +37,16 @@ export function ClientAppGate({ children }: { children: React.ReactNode }) {
     }
 
     needsOnboardingRef.current = !isOnboardingComplete(user);
-    setPhase("opening");
+
+    if (hasSeenOpeningQuestionThisSession()) {
+      setPhase((current) => {
+        if (current === "ready" || current === "onboarding") return current;
+        return needsOnboardingRef.current ? "onboarding" : "ready";
+      });
+      return;
+    }
+
+    setPhase((current) => (current === "ready" ? "ready" : "opening"));
   }, [pathname]);
 
   useEffect(() => {
@@ -41,6 +54,7 @@ export function ClientAppGate({ children }: { children: React.ReactNode }) {
   }, [evaluateGate]);
 
   const handleOpeningComplete = useCallback(() => {
+    markOpeningQuestionSeenThisSession();
     setPhase(needsOnboardingRef.current ? "onboarding" : "ready");
   }, []);
 

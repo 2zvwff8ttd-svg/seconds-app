@@ -148,18 +148,6 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
     [size.width, size.height],
   );
 
-  useEffect(() => {
-    const links = displayVideos.map((v) => {
-      const link = document.createElement("link");
-      link.rel = "preload";
-      link.as = "video";
-      link.href = v.videoUrl;
-      document.head.appendChild(link);
-      return link;
-    });
-    return () => links.forEach((link) => link.remove());
-  }, [displayVideos]);
-
   const handleSelect = useCallback((video: FeedVideo) => {
     setBurstingId(video.id);
     setTimeout(() => {

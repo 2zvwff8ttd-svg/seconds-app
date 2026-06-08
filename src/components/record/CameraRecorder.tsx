@@ -2,9 +2,12 @@
 
 import type { RecordedClip } from "@/types/recording";
 import {
+  createMediaRecorder,
   facingModeLabel,
   getPreferredMimeType,
   mimeToExtension,
+  openCameraStream,
+  verifyRecordedBlobPlayback,
 } from "@/lib/recording/recorder-utils";
 import { normalizeStorageContentType } from "@/lib/video/media";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
@@ -100,10 +103,7 @@ export function CameraRecorder({
       setCameraStarting(true);
       stopStream();
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: mode },
-          audio: true,
-        });
+        const stream = await openCameraStream(mode);
         streamRef.current = stream;
         await ensurePreview();
         setCameraReady(true);
@@ -166,6 +166,18 @@ export function CameraRecorder({
     const mime = mimeRef.current;
     const storageType = normalizeStorageContentType(mime);
     const blob = new Blob(chunks, { type: storageType });
+
+    try {
+      await verifyRecordedBlobPlayback(blob);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "録画した動画を再生できません",
+      );
+      finishingRef.current = false;
+      await ensurePreview();
+      return;
+    }
+
     const ext = mimeToExtension(mime);
     const file = new File([blob], `clip-${Date.now()}.${ext}`, {
       type: storageType,
@@ -208,14 +220,8 @@ export function CameraRecorder({
     mimeRef.current = getPreferredMimeType();
     recordBudgetRef.current = budget;
 
-    let recorder: MediaRecorder;
-    try {
-      recorder = new MediaRecorder(stream, { mimeType: mimeRef.current });
-    } catch {
-      mimeRef.current = "video/webm";
-      recorder = new MediaRecorder(stream, { mimeType: mimeRef.current });
-    }
-
+    const recorder = createMediaRecorder(stream, mimeRef.current);
+    mimeRef.current = recorder.mimeType || mimeRef.current;
     recorderRef.current = recorder;
 
     recorder.ondataavailable = (e) => {

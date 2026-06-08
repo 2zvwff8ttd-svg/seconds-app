@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { FeedVideo } from "@/types/feed";
 import type { BubblePlacement } from "@/lib/bubble-layout";
 import { CrownIcon } from "./CrownIcon";
@@ -24,26 +24,9 @@ export function VideoBubble({
   zIndex,
 }: VideoBubbleProps) {
   const bubbleRef = useRef<HTMLButtonElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const [isPressed, setIsPressed] = useState(false);
   const diameter = placement.radius * 2;
   const isViral = video.isViralTop;
-
-  useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    el.muted = true;
-    el.playsInline = true;
-    el.loop = true;
-    el.preload = "auto";
-
-    const play = () => {
-      el.play().catch(() => {});
-    };
-    play();
-    el.addEventListener("canplay", play);
-    return () => el.removeEventListener("canplay", play);
-  }, [video.videoUrl]);
 
   const handleClick = useCallback(() => {
     if (isBursting) return;
@@ -66,59 +49,64 @@ export function VideoBubble({
         ...floatStyle,
       }}
     >
-    <button
-      ref={bubbleRef}
-      type="button"
-      aria-label={`${video.title} by ${video.creatorName}`}
-      onClick={handleClick}
-      disabled={isBursting}
-      className="group relative h-full w-full touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/80 rounded-full"
-      style={{
-        transform: isPressed ? "scale(1.12)" : undefined,
-        transition: "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)",
-      }}
-    >
-      <span
-        className={`bubble-shimmer relative block h-full w-full rounded-full p-[2px] ${
-          isViral
-            ? "bg-gradient-to-br from-gold/90 via-amber-200/50 to-violet-400/40 shadow-[0_0_32px_var(--gold-glow)]"
-            : "bg-gradient-to-br from-white/50 via-white/15 to-violet-300/25 shadow-[0_0_20px_rgba(167,139,250,0.15)]"
-        }`}
+      <button
+        ref={bubbleRef}
+        type="button"
+        aria-label={`${video.title} by ${video.creatorName}`}
+        onClick={handleClick}
+        disabled={isBursting}
+        className="group relative h-full w-full touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/80 rounded-full"
+        style={{
+          transform: isPressed ? "scale(1.12)" : undefined,
+          transition: "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
       >
         <span
-          className={`relative block h-full w-full overflow-hidden rounded-full bg-black ${
-            isViral ? "ring-1 ring-gold/40" : "ring-1 ring-white/10"
+          className={`bubble-shimmer relative block h-full w-full rounded-full p-[2px] ${
+            isViral
+              ? "bg-gradient-to-br from-gold/90 via-amber-200/50 to-violet-400/40 shadow-[0_0_32px_var(--gold-glow)]"
+              : "bg-gradient-to-br from-white/50 via-white/15 to-violet-300/25 shadow-[0_0_20px_rgba(167,139,250,0.15)]"
           }`}
         >
-          <video
-            ref={videoRef}
-            src={video.videoUrl}
-            poster={video.thumbnailUrl}
-            className="h-full w-full object-cover"
-            muted
-            playsInline
-            loop
-            preload="auto"
-          />
           <span
-            className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-white/25 via-transparent to-transparent opacity-60"
-            aria-hidden
-          />
-          <span
-            className="pointer-events-none absolute -left-[20%] top-[8%] h-[35%] w-[45%] rotate-[-24deg] rounded-full bg-white/20 blur-md"
-            aria-hidden
-          />
+            className={`relative block h-full w-full overflow-hidden rounded-full bg-black ${
+              isViral ? "ring-1 ring-gold/40" : "ring-1 ring-white/10"
+            }`}
+          >
+            {video.thumbnailUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={video.thumbnailUrl}
+                alt=""
+                className="h-full w-full object-cover"
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+              />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center bg-surface text-[10px] text-muted">
+                No thumb
+              </span>
+            )}
+            <span
+              className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-white/25 via-transparent to-transparent opacity-60"
+              aria-hidden
+            />
+            <span
+              className="pointer-events-none absolute -left-[20%] top-[8%] h-[35%] w-[45%] rotate-[-24deg] rounded-full bg-white/20 blur-md"
+              aria-hidden
+            />
+          </span>
         </span>
-      </span>
 
-      {isViral && (
-        <span className="crown-glow absolute -top-1 left-1/2 -translate-x-1/2 text-gold">
-          <CrownIcon className="h-7 w-7 drop-shadow-lg sm:h-6 sm:w-6" />
-        </span>
-      )}
+        {isViral && (
+          <span className="crown-glow absolute -top-1 left-1/2 -translate-x-1/2 text-gold">
+            <CrownIcon className="h-7 w-7 drop-shadow-lg sm:h-6 sm:w-6" />
+          </span>
+        )}
 
-      {isBursting && <BurstEffect size={diameter} />}
-    </button>
+        {isBursting && <BurstEffect size={diameter} />}
+      </button>
     </div>
   );
 }
