@@ -70,7 +70,7 @@ export function PostForm() {
   const [progressLabel, setProgressLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ publishAt: string } | null>(null);
-  const [assignedSeconds, setAssignedSeconds] = useState(15);
+  const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [postLimit, setPostLimit] = useState<
     "loading" | "allowed" | { blocked: true; nextPostingLabel: string }
   >("loading");
@@ -88,7 +88,9 @@ export function PostForm() {
   useEffect(() => {
     fetchTodayAssignedSeconds()
       .then(setAssignedSeconds)
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("[PostForm] assigned seconds", err);
+      });
   }, []);
 
   useEffect(() => {
@@ -119,7 +121,9 @@ export function PostForm() {
   const hasContent = clips.length > 0;
   const usedSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
   const budgetExhausted = useMemo(
-    () => isRecordingBudgetExhausted(usedSeconds, assignedSeconds),
+    () =>
+      assignedSeconds !== null &&
+      isRecordingBudgetExhausted(usedSeconds, assignedSeconds),
     [usedSeconds, assignedSeconds],
   );
   const bgmReady =
@@ -374,7 +378,7 @@ export function PostForm() {
               onRemove={handleRemoveClip}
               disabled={isUploading}
             />
-            {hasContent && !isUploading && (
+            {hasContent && !isUploading && assignedSeconds !== null && (
               <p className="mt-4 text-center text-xs leading-relaxed text-muted">
                 割り当て時間（{assignedSeconds}秒）をすべて使うと、
                 <br />

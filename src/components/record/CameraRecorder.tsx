@@ -48,7 +48,7 @@ export function CameraRecorder({
   const finishingRef = useRef(false);
   const mimeRef = useRef(getPreferredMimeType());
 
-  const [assignedSeconds, setAssignedSeconds] = useState(15);
+  const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [isRecording, setIsRecording] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -60,6 +60,7 @@ export function CameraRecorder({
 
   const remainingSeconds = useMemo(() => {
     void tick;
+    if (assignedSeconds === null) return 0;
     const elapsed =
       isRecording && recordingStartRef.current
         ? measureRecordingSeconds(recordingStartRef.current)
@@ -211,6 +212,7 @@ export function CameraRecorder({
 
   const beginRecording = useCallback(() => {
     const stream = streamRef.current;
+    if (assignedSeconds === null) return;
     const budget = assignedSeconds - usedClipSeconds;
     if (!stream || isRecording || disabled || budget <= 0) return;
 
@@ -246,7 +248,7 @@ export function CameraRecorder({
     }, 100);
 
     timerRef.current = setInterval(() => {
-      if (!recordingStartRef.current) return;
+      if (!recordingStartRef.current || assignedSeconds === null) return;
       const left =
         assignedSeconds -
         usedClipSeconds -
@@ -301,7 +303,11 @@ export function CameraRecorder({
       : 0;
 
   const canRecord =
-    remainingSeconds > 0 && !disabled && !cameraStarting && !finishingRef.current;
+    assignedSeconds !== null &&
+    remainingSeconds > 0 &&
+    !disabled &&
+    !cameraStarting &&
+    !finishingRef.current;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-black">
@@ -366,7 +372,10 @@ export function CameraRecorder({
             </span>
           )}
 
-          {!canRecord && !isRecording && usedClipSeconds >= assignedSeconds && (
+          {!canRecord &&
+            !isRecording &&
+            assignedSeconds !== null &&
+            usedClipSeconds >= assignedSeconds && (
             <p className="mb-3 text-xs text-red-400">撮影時間を使い切りました</p>
           )}
 

@@ -18,25 +18,35 @@ type OpeningOverlayProps = {
 
 export function OpeningOverlay({ onComplete }: OpeningOverlayProps) {
   const [step, setStep] = useState<OpeningStep>("question");
-  const [assignedSeconds, setAssignedSeconds] = useState<number>(15);
+  const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [showSecondsStep, setShowSecondsStep] = useState(false);
+  const [secondsReady, setSecondsReady] = useState(false);
 
   useEffect(() => {
     const firstOpenToday = !hasSeenOpeningSecondsToday();
     setShowSecondsStep(firstOpenToday);
 
-    if (firstOpenToday) {
-      fetchTodayAssignedSeconds()
-        .then(setAssignedSeconds)
-        .catch(() => setAssignedSeconds(15));
+    if (!firstOpenToday) {
+      setSecondsReady(true);
+      return;
     }
+
+    fetchTodayAssignedSeconds()
+      .then((seconds) => {
+        setAssignedSeconds(seconds);
+        setSecondsReady(true);
+      })
+      .catch((err) => {
+        console.warn("[OpeningOverlay] assigned seconds", err);
+        setSecondsReady(true);
+      });
   }, []);
 
   useEffect(() => {
-    if (step !== "question") return;
+    if (step !== "question" || !secondsReady) return;
 
     const timer = window.setTimeout(() => {
-      if (showSecondsStep) {
+      if (showSecondsStep && assignedSeconds !== null) {
         setStep("seconds");
         return;
       }
@@ -44,7 +54,7 @@ export function OpeningOverlay({ onComplete }: OpeningOverlayProps) {
     }, QUESTION_DURATION_MS);
 
     return () => window.clearTimeout(timer);
-  }, [step, showSecondsStep, onComplete]);
+  }, [step, showSecondsStep, secondsReady, assignedSeconds, onComplete]);
 
   useEffect(() => {
     if (step !== "seconds") return;

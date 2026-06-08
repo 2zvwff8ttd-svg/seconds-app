@@ -1,7 +1,7 @@
 "use client";
 
 type TimeBudgetGaugeProps = {
-  assignedSeconds: number;
+  assignedSeconds: number | null;
   usedSeconds: number;
   /** 録画中の経過秒（未録画時は 0） */
   recordingElapsed?: number;
@@ -15,6 +15,14 @@ export function TimeBudgetGauge({
   usedSeconds,
   recordingElapsed = 0,
 }: TimeBudgetGaugeProps) {
+  if (assignedSeconds === null) {
+    return (
+      <div className="absolute inset-x-0 top-0 z-20" aria-hidden>
+        <div className="h-[3px] w-full bg-white/10" />
+      </div>
+    );
+  }
+
   const remaining = Math.max(
     0,
     assignedSeconds - usedSeconds - recordingElapsed,
