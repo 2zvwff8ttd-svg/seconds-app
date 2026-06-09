@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">&#63;Seconds</string>
+    <string name="title_activity_main">&#63;Seconds</string>
+    <string name="package_name">com.seconds.app</string>
+    <string name="custom_url_scheme">com.seconds.app</string>
+</resources>
