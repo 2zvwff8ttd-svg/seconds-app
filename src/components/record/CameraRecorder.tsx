@@ -5,9 +5,11 @@ import {
   createMediaRecorder,
   facingModeLabel,
   getPreferredMimeType,
+  getRecorderTimesliceMs,
   mimeToExtension,
   openCameraStream,
   verifyRecordedBlobPlayback,
+  waitForRecorderDataSettled,
 } from "@/lib/recording/recorder-utils";
 import { normalizeStorageContentType } from "@/lib/video/media";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
@@ -20,6 +22,8 @@ type CameraRecorderProps = {
   onClipAdded: (clip: RecordedClip) => void;
   disabled?: boolean;
 };
+
+const STOP_FALLBACK_MS = 600;
 
 function isStreamLive(stream: MediaStream | null): boolean {
   return Boolean(
@@ -46,6 +50,8 @@ export function CameraRecorder({
   const recordingStartRef = useRef<number | null>(null);
   const recordBudgetRef = useRef(0);
   const finishingRef = useRef(false);
+  const stopFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRecordActionRef = useRef(0);
   const mimeRef = useRef(getPreferredMimeType());
 
   const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
@@ -67,6 +73,13 @@ export function CameraRecorder({
         : 0;
     return Math.max(0, assignedSeconds - usedClipSeconds - elapsed);
   }, [assignedSeconds, usedClipSeconds, isRecording, tick]);
+
+  const clearStopFallback = useCallback(() => {
+    if (stopFallbackRef.current) {
+      clearTimeout(stopFallbackRef.current);
+      stopFallbackRef.current = null;
+    }
+  }, []);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -132,28 +145,38 @@ export function CameraRecorder({
 
   useEffect(() => {
     return () => {
+      clearStopFallback();
       clearTimer();
       if (recorderRef.current?.state === "recording") {
+        try {
+          recorderRef.current.requestData();
+        } catch {
+          // ignore
+        }
         recorderRef.current.stop();
       }
       stopStream();
     };
-  }, [clearTimer, stopStream]);
+  }, [clearStopFallback, clearTimer, stopStream]);
 
   const finishRecording = useCallback(async () => {
     if (finishingRef.current) return;
     finishingRef.current = true;
+    clearStopFallback();
 
     const elapsed = measureRecordingSeconds(recordingStartRef.current);
     const budget = recordBudgetRef.current;
     clearTimer();
     setIsRecording(false);
+
+    await waitForRecorderDataSettled();
+
+    const chunks = [...chunksRef.current];
+    chunksRef.current = [];
     recorderRef.current = null;
 
-    const chunks = chunksRef.current;
-    chunksRef.current = [];
-
     if (chunks.length === 0) {
+      setError("録画データを取得できませんでした。もう一度お試しください");
       finishingRef.current = false;
       await ensurePreview();
       return;
@@ -195,20 +218,55 @@ export function CameraRecorder({
     finishingRef.current = false;
     setTick((t) => t + 1);
     await ensurePreview();
-  }, [clearTimer, ensurePreview, onClipAdded]);
+  }, [clearStopFallback, clearTimer, ensurePreview, onClipAdded]);
+
+  const finishRecordingRef = useRef(finishRecording);
+  finishRecordingRef.current = finishRecording;
+
+  const scheduleStopFallback = useCallback(() => {
+    clearStopFallback();
+    stopFallbackRef.current = window.setTimeout(() => {
+      if (!finishingRef.current) {
+        void finishRecordingRef.current();
+      }
+    }, STOP_FALLBACK_MS);
+  }, [clearStopFallback]);
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
-    if (!recorder || recorder.state !== "recording") {
+    if (!recorder) return;
+
+    if (recorder.state === "inactive") {
+      if (!finishingRef.current) {
+        void finishRecordingRef.current();
+      }
       return;
     }
+
+    if (recorder.state !== "recording") return;
+
+    clearTimer();
+    setIsRecording(false);
+
     try {
       recorder.requestData();
     } catch {
       // ignore
     }
-    recorder.stop();
-  }, []);
+
+    try {
+      recorder.stop();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "録画の停止に失敗しました",
+      );
+      finishingRef.current = false;
+      recorderRef.current = null;
+      return;
+    }
+
+    scheduleStopFallback();
+  }, [clearTimer, scheduleStopFallback]);
 
   const beginRecording = useCallback(() => {
     const stream = streamRef.current;
@@ -219,6 +277,7 @@ export function CameraRecorder({
     setError(null);
     chunksRef.current = [];
     finishingRef.current = false;
+    clearStopFallback();
     mimeRef.current = getPreferredMimeType();
     recordBudgetRef.current = budget;
 
@@ -230,16 +289,25 @@ export function CameraRecorder({
       if (e.data.size > 0) chunksRef.current.push(e.data);
     };
     recorder.onstop = () => {
-      void finishRecording();
+      clearStopFallback();
+      void finishRecordingRef.current();
     };
     recorder.onerror = () => {
+      clearStopFallback();
       setError("録画に失敗しました");
       clearTimer();
       setIsRecording(false);
       recorderRef.current = null;
+      finishingRef.current = false;
     };
 
-    recorder.start(200);
+    const timeslice = getRecorderTimesliceMs();
+    if (timeslice !== undefined) {
+      recorder.start(timeslice);
+    } else {
+      recorder.start();
+    }
+
     setIsRecording(true);
     recordingStartRef.current = Date.now();
 
@@ -259,15 +327,15 @@ export function CameraRecorder({
     }, 200);
   }, [
     assignedSeconds,
+    clearStopFallback,
     clearTimer,
     disabled,
-    finishRecording,
     isRecording,
     stopRecording,
     usedClipSeconds,
   ]);
 
-  const handleRecordPress = async () => {
+  const handleRecordPress = useCallback(async () => {
     if (disabled || cameraStarting || finishingRef.current) return;
 
     if (isRecording) {
@@ -286,7 +354,24 @@ export function CameraRecorder({
     }
 
     beginRecording();
-  };
+  }, [
+    beginRecording,
+    cameraReady,
+    cameraStarting,
+    disabled,
+    facingMode,
+    isRecording,
+    remainingSeconds,
+    startCamera,
+    stopRecording,
+  ]);
+
+  const invokeRecordPress = useCallback(() => {
+    const now = Date.now();
+    if (now - lastRecordActionRef.current < 350) return;
+    lastRecordActionRef.current = now;
+    void handleRecordPress();
+  }, [handleRecordPress]);
 
   const switchCamera = async () => {
     if (isRecording || disabled || cameraStarting) return;
@@ -323,14 +408,14 @@ export function CameraRecorder({
           muted
           playsInline
           autoPlay
-          className="h-full w-full object-cover"
+          className="pointer-events-none h-full w-full object-cover"
           style={{
             transform: facingMode === "user" ? "scaleX(-1)" : undefined,
           }}
         />
 
         {!cameraReady && !isRecording && !error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-elevated/90 px-6 pt-2 text-center">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-surface-elevated/90 px-6 pt-2 text-center">
             <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-violet-500/15 text-violet-300">
               <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M4 7h4l2-3h8l2 3h4v12H4V7z" />
@@ -343,17 +428,17 @@ export function CameraRecorder({
         )}
 
         {cameraStarting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-sm text-muted">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/80 text-sm text-muted">
             カメラを起動中…
           </div>
         )}
 
-        <div className="absolute inset-x-0 top-0 flex justify-end bg-gradient-to-b from-black/50 to-transparent px-3 pb-6 pt-5">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-end bg-gradient-to-b from-black/50 to-transparent px-3 pb-6 pt-5">
           <button
             type="button"
             onClick={() => void switchCamera()}
             disabled={isRecording || cameraStarting || disabled}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70 disabled:opacity-40"
+            className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70 disabled:opacity-40"
             aria-label="カメラ切り替え"
             title={facingModeLabel(facingMode === "user" ? "environment" : "user")}
           >
@@ -364,7 +449,7 @@ export function CameraRecorder({
           </button>
         </div>
 
-        <div className="absolute inset-x-0 bottom-0 flex flex-col items-center bg-gradient-to-t from-black/80 to-transparent pb-6 pt-10">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center bg-gradient-to-t from-black/80 to-transparent pb-6 pt-10">
           {isRecording && (
             <span className="mb-3 flex items-center gap-2 text-xs font-medium text-red-400">
               <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
@@ -381,9 +466,15 @@ export function CameraRecorder({
 
           <button
             type="button"
-            onClick={() => void handleRecordPress()}
+            onClick={invokeRecordPress}
+            onPointerUp={(e) => {
+              if (e.pointerType === "touch") {
+                e.preventDefault();
+                invokeRecordPress();
+              }
+            }}
             disabled={(!canRecord && !isRecording) || cameraStarting}
-            className={`relative flex h-16 w-16 items-center justify-center rounded-full border-4 transition touch-manipulation disabled:cursor-not-allowed disabled:opacity-40 ${
+            className={`pointer-events-auto relative flex h-16 w-16 items-center justify-center rounded-full border-4 transition touch-manipulation select-none disabled:cursor-not-allowed disabled:opacity-40 ${
               isRecording
                 ? "border-red-500/80 bg-red-500/20"
                 : "border-white/90 bg-white/10 hover:bg-white/20"
