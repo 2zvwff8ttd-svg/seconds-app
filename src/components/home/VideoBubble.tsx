@@ -24,6 +24,38 @@ type VideoBubbleProps = {
   zIndex: number;
 };
 
+type DecorativeMiniBubbleProps = {
+  size: number;
+  isViral: boolean;
+  style: React.CSSProperties;
+};
+
+/** 大きいシャボン玉に付く装飾用の小さな泡（中身なし・CSS のみ） */
+function DecorativeMiniBubble({ size, isViral, style }: DecorativeMiniBubbleProps) {
+  return (
+    <span
+      className="pointer-events-none absolute"
+      style={{ width: size, height: size, ...style }}
+      aria-hidden
+    >
+      <span
+        className={`block h-full w-full rounded-full p-[1.5px] ${
+          isViral
+            ? "bg-gradient-to-br from-amber-100/80 via-white/45 to-violet-300/35 shadow-[0_0_10px_rgba(251,191,36,0.2)]"
+            : "bg-gradient-to-br from-white/75 via-white/35 to-violet-300/40 shadow-[0_0_10px_rgba(167,139,250,0.22)]"
+        }`}
+      >
+        <span className="relative block h-full w-full overflow-hidden rounded-full bg-gradient-to-br from-white/20 via-violet-100/10 to-violet-400/5">
+          <span className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/40" />
+          <span className="absolute inset-0 rounded-full bg-gradient-to-br from-white/30 via-transparent to-transparent opacity-70" />
+          <span className="absolute left-[16%] top-[14%] h-[34%] w-[40%] rotate-[-18deg] rounded-full bg-white/50 blur-[1.5px]" />
+          <span className="absolute bottom-[18%] right-[20%] h-[18%] w-[22%] rounded-full bg-violet-200/25 blur-[1px]" />
+        </span>
+      </span>
+    </span>
+  );
+}
+
 export function VideoBubble({
   video,
   placement,
@@ -37,6 +69,10 @@ export function VideoBubble({
   const diameter = placement.radius * 2;
   const isViral = video.isViralTop;
   const thumbnailSrc = resolveBubbleThumbnailUrl(video.thumbnailUrl);
+  const miniPad = Math.round(diameter * 0.14);
+  const outerSize = diameter + miniPad * 2;
+  const miniSizeLarge = Math.round(diameter * 0.28);
+  const miniSizeSmall = Math.round(diameter * 0.22);
 
   const handleClick = useCallback(() => {
     if (isBursting) return;
@@ -51,10 +87,10 @@ export function VideoBubble({
     <div
       className="bubble-float pointer-events-auto absolute"
       style={{
-        left: placement.x - placement.radius,
-        top: placement.y - placement.radius,
-        width: diameter,
-        height: diameter,
+        left: placement.x - placement.radius - miniPad,
+        top: placement.y - placement.radius - miniPad,
+        width: outerSize,
+        height: outerSize,
         zIndex,
         ...floatStyle,
       }}
@@ -65,8 +101,12 @@ export function VideoBubble({
         aria-label={`${video.title} by ${video.creatorName}`}
         onClick={handleClick}
         disabled={isBursting}
-        className="group relative h-full w-full touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/80 rounded-full"
+        className="group absolute overflow-visible touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/80 rounded-full"
         style={{
+          left: miniPad,
+          top: miniPad,
+          width: diameter,
+          height: diameter,
           transform: isPressed ? "scale(1.12)" : undefined,
           transition: "transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)",
         }}
@@ -108,6 +148,23 @@ export function VideoBubble({
             />
           </span>
         </span>
+
+        <DecorativeMiniBubble
+          isViral={isViral}
+          size={miniSizeLarge}
+          style={{
+            right: -miniSizeLarge * 0.38,
+            top: diameter * 0.1,
+          }}
+        />
+        <DecorativeMiniBubble
+          isViral={isViral}
+          size={miniSizeSmall}
+          style={{
+            left: -miniSizeSmall * 0.42,
+            bottom: diameter * 0.14,
+          }}
+        />
 
         {isViral && (
           <span className="crown-glow absolute -top-1 left-1/2 -translate-x-1/2 text-gold">
