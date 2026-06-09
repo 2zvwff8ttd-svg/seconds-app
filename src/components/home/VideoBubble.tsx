@@ -25,9 +25,12 @@ type VideoBubbleProps = {
 };
 
 /** 7層のガラスオーバーレイ（球体シェード・影・玉虫色・ハイライト・リム） */
-function BubbleGlassLayers() {
+function BubbleGlassLayers({ edgeOnly = false }: { edgeOnly?: boolean }) {
   return (
-    <span className="bubble-glass" aria-hidden>
+    <span
+      className={`bubble-glass${edgeOnly ? " bubble-glass--thumb" : ""}`}
+      aria-hidden
+    >
       <span className="bubble-glass__sphere" />
       <span className="bubble-glass__shadow" />
       <span className="bubble-glass__iris-conic" />
@@ -142,7 +145,7 @@ export function VideoBubble({
                 No thumb
               </span>
             )}
-            <BubbleGlassLayers />
+            <BubbleGlassLayers edgeOnly />
           </span>
         </span>
 

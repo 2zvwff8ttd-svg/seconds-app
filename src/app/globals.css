@@ -500,6 +500,119 @@ body {
     inset 0 -8px 20px rgba(0, 0, 0, 0.5);
 }
 
+/* 大シャボン玉：中央サムネはクリア、光は縁リングのみ */
+.bubble-glass--thumb {
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0%,
+    transparent 47%,
+    rgba(0, 0, 0, 0.4) 56%,
+    black 72%,
+    black 100%
+  );
+  mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0%,
+    transparent 47%,
+    rgba(0, 0, 0, 0.4) 56%,
+    black 72%,
+    black 100%
+  );
+}
+
+.bubble-3d .bubble-glass--thumb .bubble-glass__sphere {
+  background: radial-gradient(
+    circle at 50% 50%,
+    transparent 0%,
+    transparent 54%,
+    rgba(0, 0, 0, 0.18) 72%,
+    rgba(255, 255, 255, 0.42) 86%,
+    rgba(255, 255, 255, 0.68) 94%,
+    rgba(235, 228, 255, 0.55) 100%
+  );
+  mix-blend-mode: normal;
+  opacity: 1;
+}
+
+.bubble-3d .bubble-glass--thumb .bubble-glass__shadow {
+  background: radial-gradient(
+    ellipse 50% 38% at 82% 94%,
+    rgba(0, 0, 0, 0.65) 0%,
+    rgba(0, 0, 0, 0.38) 45%,
+    transparent 72%
+  );
+  opacity: 0.8;
+}
+
+.bubble-3d .bubble-glass--thumb .bubble-glass__iris-conic {
+  inset: -4%;
+  opacity: 0.75;
+}
+
+.bubble-3d .bubble-glass--thumb .bubble-glass__iris-edge {
+  opacity: 0.7;
+}
+
+.bubble-3d .bubble-glass--thumb .bubble-glass__highlight {
+  top: -6%;
+  left: 0%;
+  width: 44%;
+  height: 32%;
+  transform: rotate(-28deg);
+  background: radial-gradient(
+    ellipse 65% 55% at 78% 88%,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 255, 255, 0.75) 30%,
+    rgba(255, 255, 255, 0.2) 55%,
+    transparent 68%
+  );
+  filter: blur(2px);
+  opacity: 0.9;
+}
+
+.bubble-3d .bubble-glass--thumb .bubble-glass__highlight-spec {
+  top: 4%;
+  left: 14%;
+  right: auto;
+  width: 9%;
+  height: 6%;
+  opacity: 0.85;
+}
+
+.bubble-3d .bubble-glass--thumb .bubble-glass__rim {
+  background: radial-gradient(
+    circle at 50% 50%,
+    transparent 0%,
+    transparent 54%,
+    rgba(255, 255, 255, 0.15) 80%,
+    rgba(255, 255, 255, 0.42) 92%,
+    rgba(220, 210, 255, 0.38) 100%
+  );
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.92),
+    inset 0 0 0 3.5px rgba(186, 170, 255, 0.28);
+}
+
+/* shimmer は大玉の縁だけ（中央サムネにかからない） */
+.bubble-3d.bubble-shimmer::before {
+  -webkit-mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.5) 60%,
+    black 74%,
+    black 100%
+  );
+  mask-image: radial-gradient(
+    circle at 50% 50%,
+    transparent 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.5) 60%,
+    black 74%,
+    black 100%
+  );
+}
+
 .bubble-shimmer::before {
   content: "";
   position: absolute;
