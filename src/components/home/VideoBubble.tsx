@@ -24,6 +24,21 @@ type VideoBubbleProps = {
   zIndex: number;
 };
 
+/** 7層のガラスオーバーレイ（球体シェード・影・玉虫色・ハイライト・リム） */
+function BubbleGlassLayers() {
+  return (
+    <span className="bubble-glass" aria-hidden>
+      <span className="bubble-glass__sphere" />
+      <span className="bubble-glass__shadow" />
+      <span className="bubble-glass__iris-conic" />
+      <span className="bubble-glass__iris-edge" />
+      <span className="bubble-glass__highlight" />
+      <span className="bubble-glass__highlight-spec" />
+      <span className="bubble-glass__rim" />
+    </span>
+  );
+}
+
 type DecorativeMiniBubbleProps = {
   size: number;
   isViral: boolean;
@@ -39,17 +54,12 @@ function DecorativeMiniBubble({ size, isViral, style }: DecorativeMiniBubbleProp
       aria-hidden
     >
       <span
-        className={`block h-full w-full rounded-full p-[1.5px] ${
-          isViral
-            ? "bg-gradient-to-br from-amber-100/80 via-white/45 to-violet-300/35 shadow-[0_0_10px_rgba(251,191,36,0.2)]"
-            : "bg-gradient-to-br from-white/75 via-white/35 to-violet-300/40 shadow-[0_0_10px_rgba(167,139,250,0.22)]"
+        className={`bubble-3d-mini bubble-shimmer ${
+          isViral ? "bubble-3d-mini--viral" : ""
         }`}
       >
-        <span className="relative block h-full w-full overflow-hidden rounded-full bg-gradient-to-br from-white/20 via-violet-100/10 to-violet-400/5">
-          <span className="absolute inset-0 rounded-full ring-1 ring-inset ring-white/40" />
-          <span className="absolute inset-0 rounded-full bg-gradient-to-br from-white/30 via-transparent to-transparent opacity-70" />
-          <span className="absolute left-[16%] top-[14%] h-[34%] w-[40%] rotate-[-18deg] rounded-full bg-white/50 blur-[1.5px]" />
-          <span className="absolute bottom-[18%] right-[20%] h-[18%] w-[22%] rounded-full bg-violet-200/25 blur-[1px]" />
+        <span className="bubble-3d-mini__body">
+          <BubbleGlassLayers />
         </span>
       </span>
     </span>
@@ -112,17 +122,11 @@ export function VideoBubble({
         }}
       >
         <span
-          className={`bubble-shimmer relative block h-full w-full rounded-full p-[2px] ${
-            isViral
-              ? "bg-gradient-to-br from-gold/90 via-amber-200/50 to-violet-400/40 shadow-[0_0_32px_var(--gold-glow)]"
-              : "bg-gradient-to-br from-white/50 via-white/15 to-violet-300/25 shadow-[0_0_20px_rgba(167,139,250,0.15)]"
+          className={`bubble-3d bubble-shimmer ${
+            isViral ? "bubble-3d--viral" : ""
           }`}
         >
-          <span
-            className={`relative block h-full w-full overflow-hidden rounded-full bg-black ${
-              isViral ? "ring-1 ring-gold/40" : "ring-1 ring-white/10"
-            }`}
-          >
+          <span className="bubble-3d__body">
             {thumbnailSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -138,19 +142,12 @@ export function VideoBubble({
                 No thumb
               </span>
             )}
-            <span
-              className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-white/25 via-transparent to-transparent opacity-60"
-              aria-hidden
-            />
-            <span
-              className="pointer-events-none absolute -left-[20%] top-[8%] h-[35%] w-[45%] rotate-[-24deg] rounded-full bg-white/20 blur-md"
-              aria-hidden
-            />
+            <BubbleGlassLayers />
           </span>
         </span>
 
         <DecorativeMiniBubble
-          isViral={isViral}
+          isViral={isViral ?? false}
           size={miniSizeLarge}
           style={{
             right: -miniSizeLarge * 0.38,
@@ -158,7 +155,7 @@ export function VideoBubble({
           }}
         />
         <DecorativeMiniBubble
-          isViral={isViral}
+          isViral={isViral ?? false}
           size={miniSizeSmall}
           style={{
             left: -miniSizeSmall * 0.42,
@@ -167,7 +164,7 @@ export function VideoBubble({
         />
 
         {isViral && (
-          <span className="crown-glow absolute -top-1 left-1/2 -translate-x-1/2 text-gold">
+          <span className="crown-glow absolute -top-1 left-1/2 z-10 -translate-x-1/2 text-gold">
             <CrownIcon className="h-7 w-7 drop-shadow-lg sm:h-6 sm:w-6" />
           </span>
         )}
