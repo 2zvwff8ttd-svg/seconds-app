@@ -67,7 +67,7 @@ export function VideoBubble({
   const bubbleRef = useRef<HTMLButtonElement>(null);
   const [isPressed, setIsPressed] = useState(false);
   const diameter = placement.radius * 2;
-  const isViral = video.isViralTop;
+  const isViral = video.isViralTop ?? false;
   const thumbnailSrc = resolveBubbleThumbnailUrl(video.thumbnailUrl);
   const miniPad = Math.round(diameter * 0.14);
   const outerSize = diameter + miniPad * 2;

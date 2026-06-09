@@ -50,7 +50,7 @@ export function CameraRecorder({
   const recordingStartRef = useRef<number | null>(null);
   const recordBudgetRef = useRef(0);
   const finishingRef = useRef(false);
-  const stopFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopFallbackRef = useRef<number | null>(null);
   const lastRecordActionRef = useRef(0);
   const mimeRef = useRef(getPreferredMimeType());
 
