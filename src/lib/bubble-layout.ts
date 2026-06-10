@@ -4,8 +4,36 @@ export type BubblePlacement = {
   radius: number;
 };
 
+export type DecorativeMiniSides = {
+  /** 大きい装飾泡を主泡の左か右に置く */
+  large: "left" | "right";
+  /** 小さい装飾泡を主泡の左か右に置く */
+  small: "left" | "right";
+};
+
+/** メイン泡の外側パディング（VideoBubble と同期） */
+export const BUBBLE_MINI_PAD_RATIO = 0.14;
+
 /** Relative sizes for 6 bubbles (viral is index 0 when viralFirst). */
 const SIZE_VARIANTS = [1, 0.9, 0.95, 0.88, 0.93, 0.86] as const;
+
+/**
+ * 画面を6ゾーンに分け、中央寄りに偏らないよう配置する。
+ * index 0 はバイラル用（上寄り・やや大きめゾーン）。
+ */
+const PLACEMENT_ZONES: ReadonlyArray<{
+  cx: number;
+  cy: number;
+  spreadX: number;
+  spreadY: number;
+}> = [
+  { cx: 0.5, cy: 0.14, spreadX: 0.22, spreadY: 0.1 },
+  { cx: 0.84, cy: 0.24, spreadX: 0.12, spreadY: 0.12 },
+  { cx: 0.16, cy: 0.42, spreadX: 0.12, spreadY: 0.14 },
+  { cx: 0.8, cy: 0.56, spreadX: 0.12, spreadY: 0.14 },
+  { cx: 0.22, cy: 0.76, spreadX: 0.14, spreadY: 0.12 },
+  { cx: 0.72, cy: 0.84, spreadX: 0.14, spreadY: 0.1 },
+];
 
 function createSeededRandom(seed: number) {
   let state = seed % 2147483646 || 1;
@@ -13,6 +41,16 @@ function createSeededRandom(seed: number) {
     state = (state * 16807) % 2147483647;
     return (state - 1) / 2147483646;
   };
+}
+
+export function getMiniPad(diameter: number): number {
+  return Math.round(diameter * BUBBLE_MINI_PAD_RATIO);
+}
+
+/** 装飾ミニ泡を含む当たり判定半径（中心 = メイン泡の中心） */
+export function getCollisionRadius(radius: number): number {
+  const diameter = radius * 2;
+  return radius + getMiniPad(diameter);
 }
 
 function circlesOverlap(
@@ -33,22 +71,61 @@ function circlesOverlap(
 function fitsInBounds(
   x: number,
   y: number,
-  radius: number,
+  collisionRadius: number,
   width: number,
   height: number,
   inset: number,
 ): boolean {
   return (
-    x - radius >= inset &&
-    x + radius <= width - inset &&
-    y - radius >= inset &&
-    y + radius <= height - inset
+    x - collisionRadius >= inset &&
+    x + collisionRadius <= width - inset &&
+    y - collisionRadius >= inset &&
+    y + collisionRadius <= height - inset
   );
+}
+
+function sampleInZone(
+  zone: (typeof PLACEMENT_ZONES)[number],
+  collisionRadius: number,
+  width: number,
+  height: number,
+  inset: number,
+  random: () => number,
+): { x: number; y: number } {
+  const jitterX = (random() - 0.5) * 2 * zone.spreadX * width;
+  const jitterY = (random() - 0.5) * 2 * zone.spreadY * height;
+  const x = Math.min(
+    width - collisionRadius - inset,
+    Math.max(collisionRadius + inset, zone.cx * width + jitterX),
+  );
+  const y = Math.min(
+    height - collisionRadius - inset,
+    Math.max(collisionRadius + inset, zone.cy * height + jitterY),
+  );
+  return { x, y };
+}
+
+function zoneFallbackPosition(
+  zone: (typeof PLACEMENT_ZONES)[number],
+  radius: number,
+  collisionRadius: number,
+  width: number,
+  height: number,
+  inset: number,
+): BubblePlacement {
+  const x = Math.min(
+    width - collisionRadius - inset,
+    Math.max(collisionRadius + inset, zone.cx * width),
+  );
+  const y = Math.min(
+    height - collisionRadius - inset,
+    Math.max(collisionRadius + inset, zone.cy * height),
+  );
+  return { x, y, radius };
 }
 
 /**
  * Radii tuned for phone-first (375px). Scales up on tablets/desktop.
- * At 375×~520 field: viral ~78px, others ~54–68px diameter range.
  */
 export function getBubbleRadii(
   width: number,
@@ -59,8 +136,8 @@ export function getBubbleRadii(
   const minDim = Math.min(width, height);
   const isCompact = width <= 430;
 
-  const baseRadius = minDim * (isCompact ? 0.178 : 0.13);
-  const viralRadius = minDim * (isCompact ? 0.222 : 0.165);
+  const baseRadius = minDim * (isCompact ? 0.16 : 0.12);
+  const viralRadius = minDim * (isCompact ? 0.26 : 0.19);
 
   return Array.from({ length: count }, (_, i) => {
     const variant = SIZE_VARIANTS[i % SIZE_VARIANTS.length];
@@ -74,14 +151,14 @@ export function getBubbleRadii(
 function getLayoutInsets(width: number) {
   const isCompact = width <= 430;
   return {
-    edge: isCompact ? 2 : 8,
-    gap: isCompact ? 5 : 10,
+    edge: isCompact ? 6 : 10,
+    gap: isCompact ? 14 : 18,
   };
 }
 
 /**
- * Places N non-overlapping circles inside a rectangle using rejection sampling.
- * First bubble (viral top) gets a larger radius and is pinned toward the upper area.
+ * Places N non-overlapping circles across the full viewport.
+ * Uses zone-based sampling so bubbles spread edge-to-edge, not clustered in the center.
  */
 export function computeBubbleLayout(
   width: number,
@@ -96,31 +173,47 @@ export function computeBubbleLayout(
   const { edge: inset, gap } = getLayoutInsets(width);
 
   const placed: BubblePlacement[] = [];
-  const maxAttempts = 1500;
+  const maxAttempts = 2000;
   const random = createSeededRandom(
     Math.round(width) * 997 + Math.round(height) * 991 + count * 17,
   );
 
   for (let i = 0; i < count; i++) {
     const radius = radii[i];
+    const collisionRadius = getCollisionRadius(radius);
+    const zone = PLACEMENT_ZONES[i % PLACEMENT_ZONES.length];
     let position: BubblePlacement | null = null;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       let x: number;
       let y: number;
 
-      if (viralFirst && i === 0) {
-        x = width * (0.32 + random() * 0.36);
-        y = height * (0.12 + random() * 0.28);
+      if (attempt < 900) {
+        ({ x, y } = sampleInZone(
+          zone,
+          collisionRadius,
+          width,
+          height,
+          inset,
+          random,
+        ));
       } else {
-        x = radius + inset + random() * (width - 2 * (radius + inset));
-        y = radius + inset + random() * (height - 2 * (radius + inset));
+        x = collisionRadius + inset + random() * (width - 2 * (collisionRadius + inset));
+        y = collisionRadius + inset + random() * (height - 2 * (collisionRadius + inset));
       }
 
-      if (!fitsInBounds(x, y, radius, width, height, inset)) continue;
+      if (!fitsInBounds(x, y, collisionRadius, width, height, inset)) continue;
 
       const overlaps = placed.some((p) =>
-        circlesOverlap(x, y, radius, p.x, p.y, p.radius, gap),
+        circlesOverlap(
+          x,
+          y,
+          collisionRadius,
+          p.x,
+          p.y,
+          getCollisionRadius(p.radius),
+          gap,
+        ),
       );
       if (overlaps) continue;
 
@@ -129,21 +222,67 @@ export function computeBubbleLayout(
     }
 
     if (!position) {
-      const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
-      const cx = width / 2;
-      const cy = height / 2;
-      const orbit = Math.min(width, height) * 0.36 + i * 4;
-      position = {
-        x: cx + Math.cos(angle) * orbit,
-        y: cy + Math.sin(angle) * orbit,
+      position = zoneFallbackPosition(
+        zone,
         radius,
-      };
+        collisionRadius,
+        width,
+        height,
+        inset,
+      );
     }
 
     placed.push(position);
   }
 
   return placed;
+}
+
+/**
+ * 近いメイン泡と重ならないよう、装飾ミニ泡を「離れた側」に寄せる。
+ */
+export function getDecorativeMiniSides(
+  self: BubblePlacement,
+  others: BubblePlacement[],
+): DecorativeMiniSides {
+  if (others.length === 0) {
+    return { large: "right", small: "left" };
+  }
+
+  let nearest: BubblePlacement | null = null;
+  let nearestDx = 0;
+  let minDistSq = Number.POSITIVE_INFINITY;
+
+  for (const other of others) {
+    const dx = other.x - self.x;
+    const dy = other.y - self.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq < minDistSq) {
+      minDistSq = distSq;
+      nearestDx = dx;
+      nearest = other;
+    }
+  }
+
+  const awayHorizontal: "left" | "right" =
+    nearestDx >= 0 ? "left" : "right";
+
+  if (!nearest) {
+    return { large: "right", small: "left" };
+  }
+
+  const neighborDist = Math.sqrt(minDistSq);
+  const touchDistance =
+    getCollisionRadius(self.radius) + getCollisionRadius(nearest.radius) + 8;
+
+  if (neighborDist < touchDistance * 1.08) {
+    return { large: awayHorizontal, small: awayHorizontal };
+  }
+
+  return {
+    large: awayHorizontal,
+    small: awayHorizontal === "left" ? "right" : "left",
+  };
 }
 
 /** Float distance scales slightly with viewport for larger bubbles. */

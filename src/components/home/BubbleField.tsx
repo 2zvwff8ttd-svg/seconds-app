@@ -7,6 +7,7 @@ import { fetchHomeFeed } from "@/lib/videos/feed";
 import { BUBBLE_SLOT_COUNT, pickBubbleVideos } from "@/lib/bubble-session";
 import {
   computeBubbleLayout,
+  getDecorativeMiniSides,
   getFloatPresets,
   type BubblePlacement,
 } from "@/lib/bubble-layout";
@@ -277,15 +278,23 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
                 "--delay-y": preset.delayY,
               } as CSSProperties;
 
+              const decorativeMiniSides = getDecorativeMiniSides(
+                placement,
+                placements.filter((_, i) => i !== index),
+              );
+
               return (
                 <VideoBubble
                   key={`${index}-${video.id}`}
                   video={toBubblePreview(video)}
                   placement={placement}
+                  decorativeMiniSides={decorativeMiniSides}
                   floatStyle={floatStyle}
                   isBursting={burstingId === video.id}
                   onSelect={() => handleSelect(video)}
-                  zIndex={index + 1}
+                  zIndex={
+                    video.isViralTop ? slotCount + 2 : index + 1
+                  }
                 />
               );
             })}

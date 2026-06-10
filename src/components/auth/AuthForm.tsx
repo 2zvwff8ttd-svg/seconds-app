@@ -1,6 +1,10 @@
 "use client";
 
 import { AppFooter } from "@/components/layout/AppFooter";
+import {
+  sanitizeSignupUsername,
+  validateSignupUsername,
+} from "@/lib/auth/username";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -94,12 +98,21 @@ export function AuthForm() {
         return;
       }
 
+      const usernameError = validateSignupUsername(username);
+      if (usernameError) {
+        setError(usernameError);
+        setLoading(false);
+        return;
+      }
+
+      const sanitizedUsername = sanitizeSignupUsername(username);
+
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            username: username.trim() || undefined,
+            username: sanitizedUsername || undefined,
             country: "JP",
           },
         },
@@ -240,7 +253,7 @@ export function AuthForm() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   autoComplete="username"
-                  placeholder="yuki_tokyo"
+                  placeholder="yuki_tokyo（英数字と_、2〜30文字）"
                   className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder:text-muted/60 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
                 />
               </div>

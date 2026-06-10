@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { BubblePlacement } from "@/lib/bubble-layout";
+import {
+  BUBBLE_MINI_PAD_RATIO,
+  type BubblePlacement,
+  type DecorativeMiniSides,
+} from "@/lib/bubble-layout";
 import { resolveBubbleThumbnailUrl } from "@/lib/videos/bubble-thumbnail";
 import { CrownIcon } from "./CrownIcon";
 import { BurstEffect } from "./BurstEffect";
@@ -18,6 +22,7 @@ export type BubbleVideoPreview = {
 type VideoBubbleProps = {
   video: BubbleVideoPreview;
   placement: BubblePlacement;
+  decorativeMiniSides: DecorativeMiniSides;
   floatStyle: React.CSSProperties;
   isBursting: boolean;
   onSelect: () => void;
@@ -45,15 +50,33 @@ function BubbleGlassLayers({ edgeOnly = false }: { edgeOnly?: boolean }) {
 type DecorativeMiniBubbleProps = {
   size: number;
   isViral: boolean;
-  style: React.CSSProperties;
+  side: "left" | "right";
+  vertical: "top" | "bottom";
+  mainDiameter: number;
 };
 
 /** 大きいシャボン玉に付く装飾用の小さな泡（中身なし・CSS のみ） */
-function DecorativeMiniBubble({ size, isViral, style }: DecorativeMiniBubbleProps) {
+function DecorativeMiniBubble({
+  size,
+  isViral,
+  side,
+  vertical,
+  mainDiameter,
+}: DecorativeMiniBubbleProps) {
+  const offset = Math.round(size * (side === "right" ? 0.28 : 0.32));
+  const style: React.CSSProperties = {
+    width: size,
+    height: size,
+    ...(side === "right" ? { right: -offset } : { left: -offset }),
+    ...(vertical === "top"
+      ? { top: Math.round(mainDiameter * 0.1) }
+      : { bottom: Math.round(mainDiameter * 0.14) }),
+  };
+
   return (
     <span
       className="pointer-events-none absolute"
-      style={{ width: size, height: size, ...style }}
+      style={style}
       aria-hidden
     >
       <span
@@ -72,6 +95,7 @@ function DecorativeMiniBubble({ size, isViral, style }: DecorativeMiniBubbleProp
 export function VideoBubble({
   video,
   placement,
+  decorativeMiniSides,
   floatStyle,
   isBursting,
   onSelect,
@@ -82,7 +106,7 @@ export function VideoBubble({
   const diameter = placement.radius * 2;
   const isViral = video.isViralTop ?? false;
   const thumbnailSrc = resolveBubbleThumbnailUrl(video.thumbnailUrl);
-  const miniPad = Math.round(diameter * 0.14);
+  const miniPad = Math.round(diameter * BUBBLE_MINI_PAD_RATIO);
   const outerSize = diameter + miniPad * 2;
   const miniSizeLarge = Math.round(diameter * 0.28);
   const miniSizeSmall = Math.round(diameter * 0.22);
@@ -126,7 +150,7 @@ export function VideoBubble({
       >
         <span
           className={`bubble-3d bubble-shimmer ${
-            isViral ? "bubble-3d--viral" : ""
+            isViral ? "bubble-3d--viral bubble-3d--viral-hero" : ""
           }`}
         >
           <span className="bubble-3d__body">
@@ -150,25 +174,26 @@ export function VideoBubble({
         </span>
 
         <DecorativeMiniBubble
-          isViral={isViral ?? false}
+          isViral={isViral}
           size={miniSizeLarge}
-          style={{
-            right: -miniSizeLarge * 0.38,
-            top: diameter * 0.1,
-          }}
+          side={decorativeMiniSides.large}
+          vertical="top"
+          mainDiameter={diameter}
         />
         <DecorativeMiniBubble
-          isViral={isViral ?? false}
+          isViral={isViral}
           size={miniSizeSmall}
-          style={{
-            left: -miniSizeSmall * 0.42,
-            bottom: diameter * 0.14,
-          }}
+          side={decorativeMiniSides.small}
+          vertical="bottom"
+          mainDiameter={diameter}
         />
 
         {isViral && (
-          <span className="crown-glow absolute -top-1 left-1/2 z-10 -translate-x-1/2 text-gold">
-            <CrownIcon className="h-7 w-7 drop-shadow-lg sm:h-6 sm:w-6" />
+          <span
+            className="crown-glow crown-glow--hero absolute left-1/2 z-20 -translate-x-1/2 text-gold"
+            style={{ top: -Math.round(diameter * 0.14) }}
+          >
+            <CrownIcon className="h-9 w-9 drop-shadow-[0_2px_8px_rgba(0,0,0,0.55)] sm:h-10 sm:w-10" />
           </span>
         )}
 
