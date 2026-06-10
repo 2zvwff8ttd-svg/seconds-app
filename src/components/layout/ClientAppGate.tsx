@@ -18,6 +18,7 @@ export function ClientAppGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const publicRoute = isPublicRoute(pathname);
   const [phase, setPhase] = useState<GatePhase>(publicRoute ? "ready" : "loading");
+  const [homeRevealing, setHomeRevealing] = useState(false);
   const needsOnboardingRef = useRef(false);
   /** オープニングを一度スケジュールしたら、画面遷移では再実行しない */
   const openingScheduledRef = useRef(false);
@@ -75,16 +76,31 @@ export function ClientAppGate({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
+  const showChildren = phase === "opening" || phase === "ready";
+  const homeBehindClass =
+    phase === "opening" && !homeRevealing
+      ? "pointer-events-none scale-[1.05] opacity-0 blur-2xl"
+      : "scale-100 opacity-100 blur-0";
+
   return (
     <>
-      {phase === "ready" ? children : null}
+      {showChildren && (
+        <div
+          className={`transition-[filter,opacity,transform] duration-700 ease-out ${homeBehindClass}`}
+        >
+          {children}
+        </div>
+      )}
       {phase === "loading" && (
         <div className="z-onboarding fixed inset-0 flex items-center justify-center bg-black">
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
         </div>
       )}
       {phase === "opening" && (
-        <OpeningOverlay onComplete={handleOpeningComplete} />
+        <OpeningOverlay
+          onRevealStart={() => setHomeRevealing(true)}
+          onComplete={handleOpeningComplete}
+        />
       )}
       {phase === "onboarding" && (
         <OnboardingOverlay onComplete={handleOnboardingComplete} />
