@@ -5,6 +5,7 @@ import type { FeedVideo } from "@/types/feed";
 import type { UserRecommendationContext, WatchReport } from "@/types/recommendation";
 import { fetchHomeFeed } from "@/lib/videos/feed";
 import { BUBBLE_SLOT_COUNT, pickBubbleVideos } from "@/lib/bubble-session";
+import { getBubbleGlassStyle } from "@/lib/bubble-glass-vars";
 import {
   computeBubbleLayout,
   getFloatPresets,
@@ -276,6 +277,11 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
                 "--delay-x": preset.delayX,
                 "--delay-y": preset.delayY,
               } as CSSProperties;
+              const glassStyle = getBubbleGlassStyle(
+                index,
+                placement.y / size.height,
+                Boolean(video.isViralTop),
+              );
 
               return (
                 <VideoBubble
@@ -283,6 +289,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
                   video={toBubblePreview(video)}
                   placement={placement}
                   floatStyle={floatStyle}
+                  glassStyle={glassStyle}
                   isBursting={burstingId === video.id}
                   onSelect={() => handleSelect(video)}
                   zIndex={

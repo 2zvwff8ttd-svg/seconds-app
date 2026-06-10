@@ -23,6 +23,8 @@ type VideoSocialPanelProps = {
   currentUserId?: string | null;
   onLikeEngagement?: () => void;
   onCommentEngagement?: () => void;
+  /** 全画面動画の上に重ねるときのスタイル */
+  variant?: "default" | "overlay";
 };
 
 export function VideoSocialPanel({
@@ -30,7 +32,9 @@ export function VideoSocialPanel({
   currentUserId = null,
   onLikeEngagement,
   onCommentEngagement,
+  variant = "default",
 }: VideoSocialPanelProps) {
+  const isOverlay = variant === "overlay";
   const [likeState, setLikeState] = useState<LikeState>({ count: 0, likedByMe: false });
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [draft, setDraft] = useState("");
@@ -104,15 +108,23 @@ export function VideoSocialPanel({
 
   return (
     <div className="flex min-h-0 flex-col">
-      <div className="flex items-center gap-4 border-b border-border pb-3">
+      <div
+        className={`flex items-center gap-4 pb-3 ${
+          isOverlay ? "border-b border-white/15" : "border-b border-border"
+        }`}
+      >
         <button
           type="button"
           onClick={handleLike}
           disabled={likeLoading}
           className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition touch-manipulation disabled:opacity-50 ${
             likeState.likedByMe
-              ? "bg-red-500/20 text-red-400"
-              : "bg-surface text-foreground hover:bg-white/10"
+              ? isOverlay
+                ? "bg-red-500/35 text-red-300 backdrop-blur-md"
+                : "bg-red-500/20 text-red-400"
+              : isOverlay
+                ? "bg-white/15 text-white backdrop-blur-md hover:bg-white/25"
+                : "bg-surface text-foreground hover:bg-white/10"
           }`}
           aria-pressed={likeState.likedByMe}
           aria-label={likeState.likedByMe ? "いいねを取り消す" : "いいねする"}
@@ -127,18 +139,28 @@ export function VideoSocialPanel({
           </svg>
           <span>{likeState.count}</span>
         </button>
-        <span className="text-xs text-muted">
+        <span className={`text-xs ${isOverlay ? "text-white/65" : "text-muted"}`}>
           {comments.length > 0 ? `${comments.length}件のコメント` : "コメントはまだありません"}
         </span>
       </div>
 
       {error && (
-        <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+        <p
+          className={`mt-2 rounded-lg px-3 py-2 text-xs ${
+            isOverlay
+              ? "bg-red-500/25 text-red-200 backdrop-blur-sm"
+              : "bg-red-500/10 text-red-400"
+          }`}
+        >
           {error}
         </p>
       )}
 
-      <ul className="mt-3 max-h-36 flex-1 space-y-3 overflow-y-auto overscroll-contain">
+      <ul
+        className={`mt-3 flex-1 space-y-3 overflow-y-auto overscroll-contain ${
+          isOverlay ? "max-h-28" : "max-h-36"
+        }`}
+      >
         {comments.map((comment) => (
           <li key={comment.id} className="flex gap-2.5 text-sm">
             <ProfileAvatar
@@ -149,8 +171,15 @@ export function VideoSocialPanel({
             <div className="min-w-0 flex-1">
               <div className="flex items-baseline justify-between gap-2">
                 <div className="flex min-w-0 items-baseline gap-2">
-                  <span className="font-medium text-foreground">@{comment.username}</span>
-                  <time className="text-[10px] text-muted" dateTime={comment.createdAt}>
+                  <span
+                    className={`font-medium ${isOverlay ? "text-white" : "text-foreground"}`}
+                  >
+                    @{comment.username}
+                  </span>
+                  <time
+                    className={`text-[10px] ${isOverlay ? "text-white/50" : "text-muted"}`}
+                    dateTime={comment.createdAt}
+                  >
                     {formatRelativeTime(comment.createdAt)}
                   </time>
                 </div>
@@ -160,10 +189,19 @@ export function VideoSocialPanel({
                     targetId={comment.id}
                     targetLabel={`コメント「${comment.content.slice(0, 40)}」`}
                     compact
+                    className={
+                      isOverlay
+                        ? "text-white/55 hover:text-red-300"
+                        : undefined
+                    }
                   />
                 )}
               </div>
-              <p className="mt-0.5 leading-relaxed text-foreground/90">
+              <p
+                className={`mt-0.5 leading-relaxed ${
+                  isOverlay ? "text-white/90" : "text-foreground/90"
+                }`}
+              >
                 {comment.content}
               </p>
             </div>
@@ -171,7 +209,12 @@ export function VideoSocialPanel({
         ))}
       </ul>
 
-      <form onSubmit={handleSubmitComment} className="mt-3 flex gap-2 border-t border-border pt-3">
+      <form
+        onSubmit={handleSubmitComment}
+        className={`mt-3 flex gap-2 pt-3 ${
+          isOverlay ? "border-t border-white/15" : "border-t border-border"
+        }`}
+      >
         <input
           type="text"
           value={draft}
@@ -179,7 +222,11 @@ export function VideoSocialPanel({
           maxLength={500}
           placeholder="コメントを追加…"
           disabled={commentLoading}
-          className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted/60 focus:border-accent/50 focus:ring-1 focus:ring-accent/30 disabled:opacity-50"
+          className={`min-w-0 flex-1 rounded-xl border px-3 py-2.5 text-sm outline-none disabled:opacity-50 ${
+            isOverlay
+              ? "border-white/20 bg-black/45 text-white backdrop-blur-md placeholder:text-white/45 focus:border-violet-300/50 focus:ring-1 focus:ring-violet-300/30"
+              : "border-border bg-surface text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
+          }`}
         />
         <button
           type="submit"

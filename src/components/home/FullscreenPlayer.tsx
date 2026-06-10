@@ -52,6 +52,7 @@ export function FullscreenPlayer({
   const [clipIndex, setClipIndex] = useState(0);
   const [activeSlot, setActiveSlot] = useState<VideoSlot>(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
   const clipIndexRef = useRef(0);
   const activeSlotRef = useRef<VideoSlot>(0);
   const maxProgressRef = useRef(0);
@@ -76,6 +77,7 @@ export function FullscreenPlayer({
     activeSlotRef.current = 0;
     maxProgressRef.current = 0;
     allClipsCompletedRef.current = false;
+    setIsPaused(false);
     fetchVideoClipUrls(video.id)
       .then((urls) => {
         if (urls.length > 0) setClipUrls(urls);
@@ -119,6 +121,33 @@ export function FullscreenPlayer({
   useEffect(() => {
     startPlayback();
   }, [startPlayback, video.id]);
+
+  useEffect(() => {
+    const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
+    if (!el) return;
+
+    const onPlay = () => setIsPaused(false);
+    const onPause = () => setIsPaused(true);
+
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
+    setIsPaused(el.paused);
+
+    return () => {
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
+    };
+  }, [activeSlot]);
+
+  const handleVideoTap = useCallback(() => {
+    const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
+    if (!el) return;
+    if (el.paused) {
+      void el.play().catch(() => {});
+    } else {
+      el.pause();
+    }
+  }, []);
 
   const updateProgress = useCallback(() => {
     const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
@@ -205,7 +234,7 @@ export function FullscreenPlayer({
 
   const slotClassName = (slot: VideoSlot) =>
     [
-      "absolute inset-0 h-full w-full object-contain",
+      "absolute inset-0 h-full w-full object-cover",
       activeSlot === slot
         ? "z-10 opacity-100"
         : "pointer-events-none z-0 opacity-0",
@@ -213,19 +242,24 @@ export function FullscreenPlayer({
 
   return (
     <div
-      className="fullscreen-enter z-fullscreen fixed inset-0 flex flex-col bg-black"
+      className="fullscreen-player fullscreen-enter z-fullscreen fixed inset-0 h-[100dvh] w-full overflow-hidden bg-black"
       role="dialog"
       aria-modal
       aria-label={video.title}
     >
-      <div className="relative min-h-0 flex-[1.1] shrink-0 bg-black">
+      <div className="absolute inset-0 bg-black">
         <video
           ref={slotARef}
-          poster={clipIndex === 0 && activeSlot === 0 ? video.thumbnailUrl : undefined}
+          poster={
+            clipIndex === 0 && activeSlot === 0 ? video.thumbnailUrl : undefined
+          }
           className={slotClassName(0)}
           playsInline
           preload="auto"
-          controls={activeSlot === 0}
+          controls={false}
+          controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
+          disablePictureInPicture
+          disableRemotePlayback
           onTimeUpdate={activeSlot === 0 ? updateProgress : undefined}
           onEnded={() => handleEnded(0)}
         />
@@ -234,56 +268,98 @@ export function FullscreenPlayer({
           className={slotClassName(1)}
           playsInline
           preload="auto"
-          controls={activeSlot === 1}
+          controls={false}
+          controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
+          disablePictureInPicture
+          disableRemotePlayback
           onTimeUpdate={activeSlot === 1 ? updateProgress : undefined}
           onEnded={() => handleEnded(1)}
         />
-        <button
-          type="button"
-          onClick={handleClose}
-          className="absolute left-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70"
-          aria-label="閉じる"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
-        {currentUserId && currentUserId !== video.creatorId && (
-          <div className="absolute right-4 top-4 z-20">
-            <ReportButton
-              targetType="video"
-              targetId={video.id}
-              targetLabel={`動画「${video.title}」`}
-              className="rounded-full bg-black/50 px-3 py-2 text-xs font-medium text-white backdrop-blur-md transition hover:bg-black/70 hover:text-red-300"
-            />
-          </div>
-        )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col border-t border-border bg-surface-elevated px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
+      <button
+        type="button"
+        className="absolute inset-0 z-[15] cursor-default touch-manipulation"
+        onClick={handleVideoTap}
+        aria-label={isPaused ? "再生" : "一時停止"}
+      />
+
+      {isPaused && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[25] flex items-center justify-center"
+          aria-hidden
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className="h-14 w-14 text-white/30 sm:h-16 sm:w-16"
+            fill="currentColor"
+          >
+            <rect x="5" y="4" width="5" height="16" rx="1.2" />
+            <rect x="14" y="4" width="5" height="16" rx="1.2" />
+          </svg>
+        </div>
+      )}
+
+      <div
+        className="pointer-events-none absolute inset-0 z-20 bg-gradient-to-b from-black/55 via-transparent via-35% to-black/85"
+        aria-hidden
+      />
+
+      <button
+        type="button"
+        onClick={handleClose}
+        className="absolute left-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md transition hover:bg-black/65"
+        aria-label="閉じる"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          className="h-5 w-5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
+
+      {currentUserId && currentUserId !== video.creatorId && (
+        <div className="absolute right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30">
+          <ReportButton
+            targetType="video"
+            targetId={video.id}
+            targetLabel={`動画「${video.title}」`}
+            className="rounded-full bg-black/45 px-3 py-2 text-xs font-medium text-white backdrop-blur-md transition hover:bg-black/65 hover:text-red-300"
+          />
+        </div>
+      )}
+
+      <div className="absolute inset-x-0 bottom-0 z-30 flex max-h-[min(52dvh,420px)] flex-col px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-16 sm:px-5">
         <div className="shrink-0">
-          <p className="text-base font-semibold text-foreground sm:text-lg">{video.title}</p>
+          <p className="text-base font-semibold text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.65)] sm:text-lg">
+            {video.title}
+          </p>
           <Link
             href={`/profile/${video.creatorId}`}
             onClick={handleClose}
-            className="mt-0.5 inline-block text-sm text-violet-300 transition hover:text-violet-200 hover:underline"
+            className="mt-0.5 inline-block text-sm text-violet-200 drop-shadow-[0_1px_4px_rgba(0,0,0,0.55)] transition hover:text-white hover:underline"
           >
             @{video.creatorName}
           </Link>
           {video.isViralTop && (
-            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gold/15 px-3 py-1 text-xs font-medium text-gold">
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gold/25 px-3 py-1 text-xs font-medium text-gold backdrop-blur-sm">
               <span aria-hidden>👑</span>
               昨日の国別 #1
             </p>
           )}
         </div>
 
-        <div className="mt-3 min-h-0 flex-1">
+        <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-2xl bg-black/35 p-3 backdrop-blur-md">
           <VideoSocialPanel
             videoId={video.id}
             currentUserId={currentUserId}
             onLikeEngagement={onLikeEngagement}
             onCommentEngagement={onCommentEngagement}
+            variant="overlay"
           />
         </div>
       </div>
