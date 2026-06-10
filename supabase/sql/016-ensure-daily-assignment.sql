@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 当日 daily_assignments のオンデマンド補完 RPC（SQL Editor で実行）
--- アプリ起動時に割り当てが無いユーザーへ、その場で 5〜30 秒を付与する
+-- 018_post_streak 適用後: ストリークに応じた秒数（10の倍数日は5〜60秒）
 -- =============================================================================
 
 create or replace function public.ensure_daily_assignment(p_date date)
@@ -11,6 +11,7 @@ set search_path = public
 as $$
 declare
   v_user_id uuid := auth.uid();
+  v_streak integer := 0;
   v_seconds integer;
 begin
   if v_user_id is null then
@@ -30,7 +31,11 @@ begin
     return v_seconds;
   end if;
 
-  v_seconds := 5 + floor(random() * 26)::int;
+  select coalesce(p.current_streak, 0) into v_streak
+  from public.profiles p
+  where p.id = v_user_id;
+
+  v_seconds := public.random_assigned_seconds(v_streak);
 
   insert into public.daily_assignments (user_id, assigned_seconds, date)
   values (v_user_id, v_seconds, p_date)
@@ -52,6 +57,3 @@ $$;
 grant execute on function public.ensure_daily_assignment(date) to authenticated;
 
 notify pgrst, 'reload schema';
-
--- 手動テスト（ログイン中の JWT で）:
--- select public.ensure_daily_assignment(current_date);

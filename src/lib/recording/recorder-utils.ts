@@ -1,6 +1,8 @@
-/** 録画の希望解像度（横長 720p）。環境によっては近似値になる */
+/** 録画の希望解像度（横長 720p）。結合時の -c copy 互換のためセッション内で統一 */
 export const RECORDING_TARGET_WIDTH = 1280;
 export const RECORDING_TARGET_HEIGHT = 720;
+
+/** 同一セッションのクリップは同じ MIME で録画され、投稿時 concat -c copy と相性が良い */
 
 /** 2〜2.5 Mbps の中央値 */
 export const RECORDING_VIDEO_BITS_PER_SECOND = 2_250_000;

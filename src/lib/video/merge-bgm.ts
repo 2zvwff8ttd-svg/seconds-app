@@ -1,40 +1,6 @@
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
-
-const FFMPEG_PUBLIC_BASE = "/ffmpeg";
-
-let ffmpegInstance: FFmpeg | null = null;
-let loadPromise: Promise<FFmpeg> | null = null;
-
-async function getFfmpeg(): Promise<FFmpeg> {
-  if (ffmpegInstance?.loaded) return ffmpegInstance;
-
-  if (!loadPromise) {
-    loadPromise = (async () => {
-      const ffmpeg = new FFmpeg();
-      try {
-        await ffmpeg.load({
-          coreURL: await toBlobURL(
-            `${FFMPEG_PUBLIC_BASE}/ffmpeg-core.js`,
-            "text/javascript",
-          ),
-          wasmURL: await toBlobURL(
-            `${FFMPEG_PUBLIC_BASE}/ffmpeg-core.wasm`,
-            "application/wasm",
-          ),
-        });
-      } catch {
-        throw new Error(
-          "動画合成エンジンの読み込みに失敗しました。`npm install` 後に開発サーバーを再起動してください。",
-        );
-      }
-      ffmpegInstance = ffmpeg;
-      return ffmpeg;
-    })();
-  }
-
-  return loadPromise;
-}
+import type { FFmpeg } from "@ffmpeg/ffmpeg";
+import { fetchFile } from "@ffmpeg/util";
+import { getFfmpeg, safeDeleteFile } from "@/lib/video/ffmpeg-client";
 
 function bgmStorageName(runId: string, blob: Blob): string {
   const ext = bgmFileName(blob).split(".").pop() || "mp3";
@@ -48,14 +14,6 @@ function bgmFileName(blob: Blob): string {
   if (type.includes("m4a") || type.includes("mp4")) return "bgm.m4a";
   if (type.includes("aac")) return "bgm.aac";
   return "bgm.mp3";
-}
-
-async function safeDeleteFile(ffmpeg: FFmpeg, name: string): Promise<void> {
-  try {
-    await ffmpeg.deleteFile(name);
-  } catch {
-    /* ignore */
-  }
 }
 
 type MergeStrategy = "webm_copy" | "mp4_encode";

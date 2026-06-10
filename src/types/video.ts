@@ -23,6 +23,7 @@ export type PostUploadStage =
   | "idle"
   | "ai_enhancing"
   | "merging_audio"
+  | "merging_clips"
   | "preparing"
   | "uploading_thumbnail"
   | "uploading_video"

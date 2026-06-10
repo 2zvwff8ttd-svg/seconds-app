@@ -2,6 +2,7 @@ import {
   getDeviceTimeZone,
   getPostingDayDateString,
 } from "@/lib/posting/day-boundary";
+import { ASSIGNED_SECONDS_MAX_BONUS } from "@/lib/posting/post-streak";
 import { createClient } from "@/lib/supabase/client";
 
 /** 毎朝7時 JST cron の date キー照合用（オンデマンド生成はデバイスTZの投稿日） */
@@ -25,7 +26,7 @@ export function parseAssignedSeconds(value: unknown): number | null {
   if (!Number.isFinite(parsed)) return null;
 
   const seconds = Math.round(parsed);
-  if (seconds < 5 || seconds > 30) return null;
+  if (seconds < 5 || seconds > ASSIGNED_SECONDS_MAX_BONUS) return null;
   return seconds;
 }
 

@@ -1,6 +1,6 @@
 -- =============================================================================
 -- 毎朝 7:00 JST 日次ジョブ RPC（SQL Editor で実行）
--- Edge Function daily-morning から service_role で呼び出されます
+-- 018_post_streak 適用後: ストリークに応じた秒数割当（10の倍数日は5〜60秒）
 -- =============================================================================
 
 create or replace function public.run_daily_morning_job()
@@ -18,6 +18,7 @@ declare
   v_notification_count integer := 0;
   v_had_video_published boolean;
   v_message text;
+  v_bonus boolean;
 begin
   with published as (
     update public.videos
@@ -32,8 +33,13 @@ begin
   )
   select count(*) into v_published_count from published;
 
-  for v_user in select id from public.profiles loop
-    v_seconds := 5 + floor(random() * 26)::int;
+  for v_user in
+    select p.id, coalesce(p.current_streak, 0) as current_streak
+    from public.profiles p
+  loop
+    v_seconds := public.random_assigned_seconds(v_user.current_streak);
+    v_bonus :=
+      v_user.current_streak >= 10 and mod(v_user.current_streak, 10) = 0;
 
     insert into public.daily_assignments (user_id, assigned_seconds, date)
     values (v_user.id, v_seconds, v_today)
@@ -51,14 +57,28 @@ begin
     ) into v_had_video_published;
 
     if v_had_video_published then
-      v_message := format(
-        '昨日の動画が公開されました！今日の撮影時間は%s秒です。',
-        v_seconds
-      );
+      if v_bonus then
+        v_message := format(
+          '昨日の動画が公開されました！連続投稿ボーナスで今日の撮影時間は%s秒です。',
+          v_seconds
+        );
+      else
+        v_message := format(
+          '昨日の動画が公開されました！今日の撮影時間は%s秒です。',
+          v_seconds
+        );
+      end if;
       insert into public.notifications (user_id, type, title, body)
       values (v_user.id, 'morning_digest', v_message, v_message);
     else
-      v_message := format('今日の撮影時間は%s秒です。', v_seconds);
+      if v_bonus then
+        v_message := format(
+          '連続投稿ボーナス！今日の撮影時間は%s秒です。',
+          v_seconds
+        );
+      else
+        v_message := format('今日の撮影時間は%s秒です。', v_seconds);
+      end if;
       insert into public.notifications (user_id, type, title, body)
       values (v_user.id, 'morning_digest', v_message, v_message);
     end if;
@@ -77,7 +97,3 @@ end;
 $$;
 
 grant execute on function public.run_daily_morning_job() to service_role;
-
-notify pgrst, 'reload schema';
-
--- 手動テスト: select public.run_daily_morning_job();

@@ -1,5 +1,6 @@
 import { detectCountryCode } from "@/lib/country/detect";
 import { assertCanPostToday } from "@/lib/posting/daily-post-limit";
+import { recordPostStreakForNow } from "@/lib/posting/post-streak";
 import {
   clearVideoSchemaCache,
   computeNextPublishAtJst,
@@ -8,6 +9,7 @@ import {
 } from "@/lib/supabase/video-schema";
 import { getMediaPublicUrl, uploadFileWithProgress } from "@/lib/storage/upload";
 import { totalDurationSecondsForDb } from "@/lib/recording/clip-budget";
+import { tryMergeClips } from "@/lib/video/merge-clips";
 import {
   captureVideoThumbnail,
   getVideoExtension,
@@ -221,8 +223,49 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     rethrowPostStage("プロフィール確認", err);
   }
 
+  type UploadTarget = { file: File; storageName: string };
+
+  let uploadTargets: UploadTarget[];
+
+  if (clipFiles.length > 1) {
+    onStageChange("merging_clips");
+    onProgress(8, "クリップを結合中…");
+
+    const mergeOutcome = await tryMergeClips(
+      clipFiles,
+      durationSeconds,
+      (ratio, label) => {
+        onProgress(8 + ratio * 12, label);
+      },
+    );
+
+    if (mergeOutcome.merged) {
+      const ext = getVideoExtension(mergeOutcome.file);
+      uploadTargets = [
+        { file: mergeOutcome.file, storageName: `video.${ext}` },
+      ];
+      onProgress(22, "クリップの結合が完了しました");
+    } else {
+      uploadTargets = clipFiles.map((file, i) => ({
+        file,
+        storageName: `clip-${i}.${clipExtension(file)}`,
+      }));
+      if (mergeOutcome.warning) {
+        onProgress(20, mergeOutcome.warning);
+      }
+    }
+  } else {
+    const file = clipFiles[0];
+    uploadTargets = [
+      {
+        file,
+        storageName: `clip-0.${clipExtension(file)}`,
+      },
+    ];
+  }
+
   onStageChange("preparing");
-  onProgress(5, "動画を解析中…");
+  onProgress(24, "動画を解析中…");
 
   const thumbnailFile = input.thumbnailSource ?? clipFiles[0];
   let country: string;
@@ -241,7 +284,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   const thumbnailPath = `${basePath}/thumb.jpg`;
 
   onStageChange("uploading_thumbnail");
-  onProgress(10, "サムネイルをアップロード中…");
+  onProgress(26, "サムネイルをアップロード中…");
 
   try {
     await uploadFileWithProgress(
@@ -250,7 +293,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
       thumbnailBlob,
       "image/jpeg",
       (ratio) => {
-        onProgress(10 + ratio * 10, "サムネイルをアップロード中…");
+        onProgress(26 + ratio * 8, "サムネイルをアップロード中…");
       },
     );
   } catch (err) {
@@ -258,18 +301,17 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   }
 
   const clipUrls: string[] = [];
-  const uploadShare = 70 / clipFiles.length;
+  const uploadShare = 58 / uploadTargets.length;
 
-  for (let i = 0; i < clipFiles.length; i++) {
-    const file = clipFiles[i];
-    const ext = clipExtension(file);
-    const clipPath = `${basePath}/clip-${i}.${ext}`;
+  for (let i = 0; i < uploadTargets.length; i++) {
+    const { file, storageName } = uploadTargets[i];
+    const clipPath = `${basePath}/${storageName}`;
 
     onStageChange("uploading_video");
     onProgress(
-      20 + uploadShare * i,
-      clipFiles.length > 1
-        ? `クリップ ${i + 1}/${clipFiles.length} をアップロード中…`
+      34 + uploadShare * i,
+      uploadTargets.length > 1
+        ? `クリップ ${i + 1}/${uploadTargets.length} をアップロード中…`
         : "動画をアップロード中…",
     );
 
@@ -280,12 +322,15 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
         file,
         normalizeStorageContentType(file.type || "video/webm"),
         (ratio) => {
-          onProgress(20 + uploadShare * i + uploadShare * ratio, "動画をアップロード中…");
+          onProgress(
+            34 + uploadShare * i + uploadShare * ratio,
+            "動画をアップロード中…",
+          );
         },
       );
     } catch (err) {
       rethrowPostStage(
-        clipFiles.length > 1
+        uploadTargets.length > 1
           ? `クリップ${i + 1}のアップロード`
           : "動画のアップロード",
         err,
@@ -295,7 +340,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     clipUrls.push(getMediaPublicUrl(clipPath));
   }
 
-  const videoUrl = clipUrls[0];
+  const videoUrl = clipUrls[0]!;
   const thumbnailUrl = getMediaPublicUrl(thumbnailPath);
 
   onStageChange("saving");
@@ -331,6 +376,12 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
       }
       rethrowPostStage("クリップ情報の保存", new Error(clipError.message));
     }
+  }
+
+  try {
+    await recordPostStreakForNow();
+  } catch (err) {
+    rethrowPostStage("連続投稿の記録", err);
   }
 
   onStageChange("done");
