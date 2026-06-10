@@ -266,6 +266,7 @@ function cellCenterPosition(
 
 /**
  * Radii tuned for phone-first (375px). Scales up on tablets/desktop.
+ * グリッドセル内に収まるよう上限を設けつつ、従来より一回り大きめ。
  */
 export function getBubbleRadii(
   width: number,
@@ -275,9 +276,23 @@ export function getBubbleRadii(
 ): number[] {
   const minDim = Math.min(width, height);
   const isCompact = width <= 430;
+  const { edge: inset } = getLayoutInsets(width);
+  const { cols, rows } = getGridShape(count, width, height);
 
-  const baseRadius = minDim * (isCompact ? 0.16 : 0.12);
-  const viralRadius = minDim * (isCompact ? 0.26 : 0.19);
+  const usableW = width - inset * 2;
+  const usableH = height - inset * 2;
+  const cellMin = Math.min(usableW / cols, usableH / rows);
+  const maxBaseRadius = cellMin * 0.41;
+  const maxViralRadius = cellMin * 0.48;
+
+  const baseRadius = Math.min(
+    minDim * (isCompact ? 0.19 : 0.15),
+    maxBaseRadius,
+  );
+  const viralRadius = Math.min(
+    minDim * (isCompact ? 0.29 : 0.22),
+    maxViralRadius,
+  );
 
   return Array.from({ length: count }, (_, i) => {
     const variant = SIZE_VARIANTS[i % SIZE_VARIANTS.length];
@@ -333,7 +348,7 @@ export function computeBubbleLayout(
     let position: BubblePlacement | null = null;
 
     for (let attempt = 0; attempt < maxAttemptsPerBubble; attempt++) {
-      const offsetRatio = attempt < 80 ? 0.38 : 0.12;
+      const offsetRatio = attempt < 80 ? 0.3 : 0.1;
       const { x, y } = sampleInCell(
         cell,
         cols,

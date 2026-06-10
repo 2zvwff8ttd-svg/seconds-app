@@ -57,8 +57,13 @@ export function FullscreenPlayer({
   const activeSlotRef = useRef<VideoSlot>(0);
   const maxProgressRef = useRef(0);
   const allClipsCompletedRef = useRef(false);
+  const clipSwappingRef = useRef(false);
 
-  const activeVideoRef = activeSlot === 0 ? slotARef : slotBRef;
+  const { play: playBgm, pause: pauseBgm } = useBgmPlayback({
+    bgmUrl: video.bgmUrl,
+    sessionKey: video.id,
+    active: true,
+  });
 
   useEffect(() => {
     createClient()
@@ -66,8 +71,6 @@ export function FullscreenPlayer({
       .then(({ data: { user } }) => setCurrentUserId(user?.id ?? null))
       .catch(() => setCurrentUserId(null));
   }, []);
-
-  useBgmPlayback(activeVideoRef, { bgmUrl: video.bgmUrl, active: true });
 
   useEffect(() => {
     setClipUrls([video.videoUrl]);
@@ -127,7 +130,10 @@ export function FullscreenPlayer({
     if (!el) return;
 
     const onPlay = () => setIsPaused(false);
-    const onPause = () => setIsPaused(true);
+    const onPause = () => {
+      if (clipSwappingRef.current) return;
+      setIsPaused(true);
+    };
 
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
@@ -144,10 +150,12 @@ export function FullscreenPlayer({
     if (!el) return;
     if (el.paused) {
       void el.play().catch(() => {});
+      if (video.bgmUrl) playBgm();
     } else {
       el.pause();
+      if (video.bgmUrl) pauseBgm();
     }
-  }, []);
+  }, [video.bgmUrl, playBgm, pauseBgm]);
 
   const updateProgress = useCallback(() => {
     const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
@@ -203,6 +211,7 @@ export function FullscreenPlayer({
       const afterNext = nextClipIndex(next, total);
 
       const swapToPreloaded = () => {
+        clipSwappingRef.current = true;
         oldActive.pause();
 
         activeSlotRef.current = newActiveSlot;
@@ -214,8 +223,10 @@ export function FullscreenPlayer({
 
         setActiveSlot(newActiveSlot);
         setClipIndex(next);
+        setIsPaused(false);
 
         preloadClipOnSlot(endedSlot, afterNext, clipUrls);
+        clipSwappingRef.current = false;
       };
 
       if (newActive.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {

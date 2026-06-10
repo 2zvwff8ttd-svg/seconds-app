@@ -1,26 +1,29 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 const BGM_VOLUME = 0.4;
 
 type UseBgmPlaybackOptions = {
   bgmUrl?: string;
+  /** プレイヤーセッション単位（動画 ID が変わったら BGM を作り直す） */
+  sessionKey: string;
   active: boolean;
 };
 
 /**
- * 動画と BGM を同期再生（動画はミュート、BGM をループ）
+ * BGM を動画クリップ切り替えから独立して連続再生する。
+ * video 要素の play/pause には追従せず、呼び出し側が明示的に制御する。
  */
-export function useBgmPlayback(
-  videoRef: React.RefObject<HTMLVideoElement | null>,
-  { bgmUrl, active }: UseBgmPlaybackOptions,
-) {
+export function useBgmPlayback({
+  bgmUrl,
+  sessionKey,
+  active,
+}: UseBgmPlaybackOptions) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !bgmUrl || !active) return;
+    if (!bgmUrl || !active) return;
 
     const audio = new Audio(bgmUrl);
     audio.loop = true;
@@ -28,39 +31,22 @@ export function useBgmPlayback(
     audio.preload = "auto";
     audioRef.current = audio;
 
-    video.muted = true;
-
-    const syncPlay = () => {
-      void audio.play().catch(() => {});
-    };
-    const syncPause = () => {
-      audio.pause();
-    };
-
-    const onSeeking = () => {
-      if (!Number.isFinite(video.duration) || video.duration <= 0) return;
-      const t = video.currentTime % (audio.duration || video.duration);
-      if (Number.isFinite(t)) audio.currentTime = t;
-    };
-
-    video.addEventListener("play", syncPlay);
-    video.addEventListener("pause", syncPause);
-    video.addEventListener("seeking", onSeeking);
-    video.addEventListener("ended", syncPause);
-
-    if (!video.paused) syncPlay();
+    void audio.play().catch(() => {});
 
     return () => {
-      video.removeEventListener("play", syncPlay);
-      video.removeEventListener("pause", syncPause);
-      video.removeEventListener("seeking", onSeeking);
-      video.removeEventListener("ended", syncPause);
       audio.pause();
       audio.src = "";
       audioRef.current = null;
-      video.muted = false;
     };
-  }, [videoRef, bgmUrl, active]);
+  }, [bgmUrl, sessionKey, active]);
 
-  return audioRef;
+  const play = useCallback(() => {
+    void audioRef.current?.play().catch(() => {});
+  }, []);
+
+  const pause = useCallback(() => {
+    audioRef.current?.pause();
+  }, []);
+
+  return { play, pause };
 }
