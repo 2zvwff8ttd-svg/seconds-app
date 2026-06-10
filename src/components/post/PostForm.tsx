@@ -1,6 +1,7 @@
 "use client";
 
 import { AiEnhancePanel } from "@/components/post/AiEnhancePanel";
+import { BonusDayCountdownNote } from "@/components/post/BonusDayCountdownNote";
 import { CameraRecorder } from "@/components/record/CameraRecorder";
 import { ClipStrip } from "@/components/record/ClipStrip";
 import { UploadProgress } from "@/components/post/UploadProgress";
@@ -17,6 +18,10 @@ import {
   checkDailyPostLimit,
   DAILY_POST_LIMIT_MESSAGE,
 } from "@/lib/posting/daily-post-limit";
+import {
+  bonusDayMessageFromStreak,
+  fetchCurrentStreak,
+} from "@/lib/posting/post-streak";
 import { postVideo } from "@/lib/videos/post";
 import { blobToBase64, extractFirstFrameBlob } from "@/lib/video/extract-frame";
 import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
@@ -69,7 +74,16 @@ export function PostForm() {
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ publishAt: string } | null>(null);
+  const [success, setSuccess] = useState<{
+    publishAt: string;
+    bonusCountdownMessage: string;
+  } | null>(null);
+  const [blockedBonusMessage, setBlockedBonusMessage] = useState<string | null>(
+    null,
+  );
+  const [submitBonusMessage, setSubmitBonusMessage] = useState<string | null>(
+    null,
+  );
   const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [postLimit, setPostLimit] = useState<
     "loading" | "allowed" | { blocked: true; nextPostingLabel: string }
@@ -116,6 +130,28 @@ export function PostForm() {
       cancelled = true;
     };
   }, [success]);
+
+  useEffect(() => {
+    if (postLimit === "loading" || postLimit === "allowed") {
+      setBlockedBonusMessage(null);
+      return;
+    }
+
+    let cancelled = false;
+    fetchCurrentStreak()
+      .then((streak) => {
+        if (!cancelled) {
+          setBlockedBonusMessage(bonusDayMessageFromStreak(streak));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBlockedBonusMessage(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [postLimit]);
 
   const isUploading = stage !== "idle" && stage !== "error" && stage !== "done";
   const hasContent = clips.length > 0;
@@ -258,6 +294,7 @@ export function PostForm() {
     if (!canPost) return;
 
     setError(null);
+    setSubmitBonusMessage(null);
     setAiError(null);
     setProgress(0);
     setProgressLabel("準備中…");
@@ -286,7 +323,10 @@ export function PostForm() {
         },
       });
 
-      setSuccess({ publishAt: result.publishAt });
+      setSuccess({
+        publishAt: result.publishAt,
+        bonusCountdownMessage: bonusDayMessageFromStreak(result.currentStreak),
+      });
     } catch (err) {
       setStage("error");
       setProgressLabel("");
@@ -295,6 +335,13 @@ export function PostForm() {
           ? err.message.trim()
           : "投稿に失敗しました";
       setError(message);
+      if (message === DAILY_POST_LIMIT_MESSAGE) {
+        void fetchCurrentStreak()
+          .then((streak) =>
+            setSubmitBonusMessage(bonusDayMessageFromStreak(streak)),
+          )
+          .catch(() => setSubmitBonusMessage(null));
+      }
     }
   };
 
@@ -317,9 +364,13 @@ export function PostForm() {
         <p className="mt-2 text-xs text-muted">
           公開されるまで他のユーザーには表示されません。
         </p>
+        <BonusDayCountdownNote
+          message={success.bonusCountdownMessage}
+          className="mt-6 w-full max-w-xs"
+        />
         <Link
           href="/"
-          className="mt-8 w-full max-w-xs rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25"
+          className="mt-6 w-full max-w-xs rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25"
         >
           ホームに戻る
         </Link>
@@ -353,9 +404,15 @@ export function PostForm() {
           <span className="text-foreground/90">{postLimit.nextPostingLabel}</span>
           から可能です
         </p>
+        {blockedBonusMessage && (
+          <BonusDayCountdownNote
+            message={blockedBonusMessage}
+            className="mt-6 w-full max-w-xs"
+          />
+        )}
         <Link
           href="/"
-          className="mt-8 w-full max-w-xs rounded-xl border border-border bg-surface px-4 py-3.5 text-base font-semibold text-foreground transition hover:bg-surface-elevated"
+          className="mt-6 w-full max-w-xs rounded-xl border border-border bg-surface px-4 py-3.5 text-base font-semibold text-foreground transition hover:bg-surface-elevated"
         >
           ホームに戻る
         </Link>
@@ -485,9 +542,14 @@ export function PostForm() {
         )}
 
         {error && (
-          <p className="mt-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
-            {error}
-          </p>
+          <div className="mt-4 space-y-3">
+            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
+              {error}
+            </p>
+            {submitBonusMessage && (
+              <BonusDayCountdownNote message={submitBonusMessage} />
+            )}
+          </div>
         )}
 
         {showPostDetails && (

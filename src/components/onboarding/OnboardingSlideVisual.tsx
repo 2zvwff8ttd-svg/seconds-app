@@ -84,6 +84,38 @@ export function OnboardingSlideVisual({ slide }: OnboardingSlideVisualProps) {
           </span>
         </div>
       );
+    case "bonus":
+      return (
+        <div className="relative flex h-44 w-52 flex-col items-center justify-center">
+          <div className="absolute inset-0 rounded-full bg-violet-500/15 blur-2xl" />
+          <div className="absolute -left-1 top-2 text-lg text-violet-300/60" aria-hidden>
+            ✦
+          </div>
+          <div className="absolute -right-1 top-8 text-sm text-gold/70" aria-hidden>
+            ✦
+          </div>
+          <div className="relative flex h-36 w-36 flex-col items-center justify-center rounded-full border-2 border-gold/50 bg-gradient-to-br from-violet-500/20 via-gold/20 to-fuchsia-500/15 shadow-[0_0_36px_rgba(251,191,36,0.28)]">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-gold/90">
+              Bonus Day
+            </span>
+            <span className="mt-1 text-3xl font-bold text-amber-100">
+              {slide.visualLabel}
+            </span>
+            <span className="mt-1 text-[10px] text-violet-200/80">最大撮影時間</span>
+          </div>
+          <div className="relative mt-4 flex items-center gap-3 text-[10px]">
+            <span className="rounded-full border border-border/80 bg-black/40 px-2.5 py-1 text-muted line-through decoration-muted/60">
+              5〜30秒
+            </span>
+            <span className="text-violet-300/80" aria-hidden>
+              →
+            </span>
+            <span className="rounded-full border border-gold/40 bg-gold/10 px-2.5 py-1 font-semibold text-amber-200/95">
+              5〜60秒
+            </span>
+          </div>
+        </div>
+      );
     default:
       return null;
   }

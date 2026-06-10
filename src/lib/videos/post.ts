@@ -40,6 +40,8 @@ export type PostVideoInput = {
 export type PostVideoResult = {
   videoId: string;
   publishAt: string;
+  /** 投稿直後に更新された連続投稿日数（ボーナス表示用） */
+  currentStreak: number;
 };
 
 const DB_FIX_HINT =
@@ -378,8 +380,9 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     }
   }
 
+  let currentStreak: number;
   try {
-    await recordPostStreakForNow();
+    currentStreak = await recordPostStreakForNow();
   } catch (err) {
     rethrowPostStage("連続投稿の記録", err);
   }
@@ -390,5 +393,6 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   return {
     videoId: inserted.id,
     publishAt: inserted.publishAt,
+    currentStreak,
   };
 }
