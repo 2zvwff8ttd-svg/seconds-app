@@ -14,6 +14,7 @@ import {
   stopNativeRecording,
   type NativePreviewRect,
 } from "@/lib/recording/native-camera-preview";
+import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
 import { nativeVideoPathToFile } from "@/lib/recording/native-recording-file";
 import {
   measureRecordingSeconds,
@@ -49,6 +50,7 @@ export function NativeCameraRecorder({
   const [isRecording, setIsRecording] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
+  const [recordingStarting, setRecordingStarting] = useState(false);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
@@ -187,9 +189,7 @@ export function NativeCameraRecorder({
       addRecordedClip(file, durationSeconds);
       setError(null);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "録画の保存に失敗しました",
-      );
+      setError(formatNativeRecordingError(err));
     } finally {
       finishingRef.current = false;
     }
@@ -231,6 +231,7 @@ export function NativeCameraRecorder({
     setError(null);
     finishingRef.current = false;
     recordBudgetRef.current = budget;
+    setRecordingStarting(true);
 
     try {
       await startNativeRecording({
@@ -238,10 +239,14 @@ export function NativeCameraRecorder({
         position: facingToPosition(facingMode),
       });
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "録画の開始に失敗しました",
-      );
+      clearAutoStop();
+      clearTick();
+      recordingStartRef.current = null;
+      setIsRecording(false);
+      setError(formatNativeRecordingError(err));
       return;
+    } finally {
+      setRecordingStarting(false);
     }
 
     setIsRecording(true);
@@ -268,7 +273,7 @@ export function NativeCameraRecorder({
   ]);
 
   const handleRecordPress = useCallback(async () => {
-    if (disabled || cameraStarting || finishingRef.current) return;
+    if (disabled || cameraStarting || recordingStarting || finishingRef.current) return;
 
     if (isRecording) {
       await stopRecording();
@@ -286,6 +291,7 @@ export function NativeCameraRecorder({
     cameraStarting,
     disabled,
     isRecording,
+    recordingStarting,
     remainingSeconds,
     stopRecording,
   ]);
@@ -322,6 +328,7 @@ export function NativeCameraRecorder({
     remainingSeconds > 0 &&
     !disabled &&
     !cameraStarting &&
+    !recordingStarting &&
     !finishingRef.current;
 
   return (
@@ -394,7 +401,7 @@ export function NativeCameraRecorder({
                 invokeRecordPress();
               }
             }}
-            disabled={(!canRecord && !isRecording) || cameraStarting}
+            disabled={(!canRecord && !isRecording) || cameraStarting || recordingStarting}
             className={`pointer-events-auto relative flex h-16 w-16 items-center justify-center rounded-full border-4 transition touch-manipulation select-none disabled:cursor-not-allowed disabled:opacity-40 ${
               isRecording
                 ? "border-red-500/80 bg-red-500/20"

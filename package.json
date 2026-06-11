@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "postinstall": "node scripts/copy-ffmpeg-core.mjs",
+    "postinstall": "node scripts/copy-ffmpeg-core.mjs && node scripts/patch-camera-preview-android.mjs",
     "build": "node scripts/copy-ffmpeg-core.mjs && next build",
     "start": "next start",
     "lint": "eslint",
@@ -15,7 +15,7 @@
     "functions:deploy-daily-morning": "npx --yes supabase functions deploy daily-morning --no-verify-jwt",
     "functions:invoke-daily-morning": "node scripts/invoke-daily-morning.mjs",
     "icons:generate": "node scripts/generate-pwa-icons.mjs",
-    "cap:sync": "npx cap sync android && node scripts/fix-android-strings.mjs",
+    "cap:sync": "npx cap sync android && node scripts/fix-android-strings.mjs && node scripts/patch-camera-preview-android.mjs",
     "cap:clean": "node scripts/clean-android-build.mjs",
     "cap:open": "npx cap open android",
     "cap:run": "npx cap run android"
