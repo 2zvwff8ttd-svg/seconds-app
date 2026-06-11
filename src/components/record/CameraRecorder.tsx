@@ -9,7 +9,7 @@ import {
   mimeToExtension,
   openCameraStream,
   verifyRecordedBlobPlayback,
-  waitForRecorderDataSettled,
+  waitForRecorderChunks,
 } from "@/lib/recording/recorder-utils";
 import { normalizeStorageContentType } from "@/lib/video/media";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
@@ -169,13 +169,20 @@ export function CameraRecorder({
     clearTimer();
     setIsRecording(false);
 
-    await waitForRecorderDataSettled();
+    await waitForRecorderChunks(() => chunksRef.current);
 
-    const chunks = [...chunksRef.current];
+    let chunks = [...chunksRef.current];
+    let totalBytes = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
+    if (totalBytes === 0) {
+      await waitForRecorderChunks(() => chunksRef.current, { maxMs: 500 });
+      chunks = [...chunksRef.current];
+      totalBytes = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
+    }
+
     chunksRef.current = [];
     recorderRef.current = null;
 
-    if (chunks.length === 0) {
+    if (chunks.length === 0 || totalBytes === 0) {
       setError("録画データを取得できませんでした。もう一度お試しください");
       finishingRef.current = false;
       await ensurePreview();

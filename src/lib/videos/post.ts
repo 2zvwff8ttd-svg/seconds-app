@@ -282,11 +282,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   onStageChange("preparing");
   onProgress(24, "サムネイルを作成中…");
 
-  const thumbnailSources = clips.map(
-    (clip, index) => input.thumbnailSource && index === 0
-      ? input.thumbnailSource
-      : clip.file,
-  );
+  const thumbnailSources = clips.map((clip) => clip.file);
 
   let country: string;
   let clipThumbnailBlobs: Blob[];

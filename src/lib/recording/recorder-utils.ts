@@ -90,11 +90,34 @@ export function createMediaRecorder(
   return new MediaRecorder(stream);
 }
 
-/** iOS Safari では onstop が ondataavailable より先に来ることがある */
-export function waitForRecorderDataSettled(): Promise<void> {
-  if (!isIOSSafari()) return Promise.resolve();
+/**
+ * stop() 後の最終 ondataavailable を待つ。
+ * iOS 以外でも onstop が先に来ると chunks が空のまま finish されることがある。
+ */
+export function waitForRecorderChunks(
+  getChunks: () => Blob[],
+  options?: { maxMs?: number; intervalMs?: number },
+): Promise<void> {
+  const maxMs = options?.maxMs ?? (isIOSSafari() ? 450 : 400);
+  const intervalMs = options?.intervalMs ?? 40;
+
   return new Promise((resolve) => {
-    window.setTimeout(resolve, 250);
+    const startedAt = Date.now();
+
+    const poll = () => {
+      const bytes = getChunks().reduce((sum, blob) => sum + blob.size, 0);
+      if (bytes > 0) {
+        resolve();
+        return;
+      }
+      if (Date.now() - startedAt >= maxMs) {
+        resolve();
+        return;
+      }
+      window.setTimeout(poll, intervalMs);
+    };
+
+    poll();
   });
 }
 

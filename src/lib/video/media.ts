@@ -36,7 +36,12 @@ export async function getVideoDuration(file: File): Promise<number> {
 }
 
 export async function captureVideoThumbnail(file: File): Promise<Blob> {
-  const url = URL.createObjectURL(file);
+  // 元の File を触らないようコピー Blob から静止画を生成（投稿用動画はそのまま）
+  const source =
+    typeof file.slice === "function"
+      ? file.slice(0, file.size, file.type || undefined)
+      : file;
+  const url = URL.createObjectURL(source);
   try {
     const video = document.createElement("video");
     video.preload = "auto";
