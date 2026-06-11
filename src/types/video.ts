@@ -7,6 +7,7 @@ export type VideoRow = {
   video_url: string;
   bgm_url?: string | null;
   thumbnail_url: string | null;
+  clip_thumbnail_urls?: string[] | null;
   title: string;
   duration_seconds: number;
   visibility: VideoVisibility;

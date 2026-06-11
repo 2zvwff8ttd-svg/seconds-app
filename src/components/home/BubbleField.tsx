@@ -213,6 +213,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
       title: video.title,
       creatorName: video.creatorName,
       thumbnailUrl: video.thumbnailUrl,
+      clipThumbnailUrls: video.clipThumbnailUrls,
       isViralTop: video.isViralTop,
     }),
     [],

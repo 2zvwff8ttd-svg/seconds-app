@@ -101,6 +101,7 @@ async function saveVideoRow(
     userId: string;
     videoUrl: string;
     thumbnailUrl: string;
+    clipThumbnailUrls?: string[] | null;
     title: string;
     durationSeconds: number;
     visibility: VideoVisibility;
@@ -111,6 +112,10 @@ async function saveVideoRow(
 ): Promise<{ id: string; publishAt: string }> {
   const caps = await probeVideoSchema(supabase, { force: retrying });
   const bgmUrl = payload.bgmUrl?.trim() || null;
+  const clipThumbnailUrls =
+    payload.clipThumbnailUrls && payload.clipThumbnailUrls.length > 1
+      ? payload.clipThumbnailUrls
+      : null;
 
   const baseInsert = {
     id: payload.id,
@@ -122,6 +127,9 @@ async function saveVideoRow(
     visibility: payload.visibility,
     country: payload.country,
     ...(caps.hasBgmUrl && bgmUrl ? { bgm_url: bgmUrl } : {}),
+    ...(caps.hasClipThumbnailUrls && clipThumbnailUrls
+      ? { clip_thumbnail_urls: clipThumbnailUrls }
+      : {}),
   };
 
   if (caps.hasInsertRpc) {
@@ -149,12 +157,17 @@ async function saveVideoRow(
 
     const row = data as { id?: string; publish_at?: string | null };
     const id = row?.id ?? payload.id;
-    if (caps.hasBgmUrl && bgmUrl) {
-      const { error: bgmError } = await supabase
+    const postInsertPatch: Record<string, unknown> = {};
+    if (caps.hasBgmUrl && bgmUrl) postInsertPatch.bgm_url = bgmUrl;
+    if (caps.hasClipThumbnailUrls && clipThumbnailUrls) {
+      postInsertPatch.clip_thumbnail_urls = clipThumbnailUrls;
+    }
+    if (Object.keys(postInsertPatch).length > 0) {
+      const { error: patchError } = await supabase
         .from("videos")
-        .update({ bgm_url: bgmUrl })
+        .update(postInsertPatch)
         .eq("id", id);
-      if (bgmError) throw new Error(bgmError.message);
+      if (patchError) throw new Error(patchError.message);
     }
     return {
       id,
@@ -267,15 +280,20 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   }
 
   onStageChange("preparing");
-  onProgress(24, "動画を解析中…");
+  onProgress(24, "サムネイルを作成中…");
 
-  const thumbnailFile = input.thumbnailSource ?? clipFiles[0];
+  const thumbnailSources = clips.map(
+    (clip, index) => input.thumbnailSource && index === 0
+      ? input.thumbnailSource
+      : clip.file,
+  );
+
   let country: string;
-  let thumbnailBlob: Blob;
+  let clipThumbnailBlobs: Blob[];
   try {
-    [country, thumbnailBlob] = await Promise.all([
+    [country, clipThumbnailBlobs] = await Promise.all([
       detectCountryCode(),
-      captureVideoThumbnail(thumbnailFile),
+      Promise.all(thumbnailSources.map((file) => captureVideoThumbnail(file))),
     ]);
   } catch (err) {
     rethrowPostStage("サムネイル作成", err);
@@ -283,23 +301,36 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
 
   const videoId = crypto.randomUUID();
   const basePath = `${user.id}/${videoId}`;
-  const thumbnailPath = `${basePath}/thumb.jpg`;
+  const clipThumbnailPaths = clipThumbnailBlobs.map(
+    (_, index) => `${basePath}/clip-${index}-thumb.jpg`,
+  );
 
   onStageChange("uploading_thumbnail");
-  onProgress(26, "サムネイルをアップロード中…");
+  const thumbUploadShare = 8 / clipThumbnailBlobs.length;
 
-  try {
-    await uploadFileWithProgress(
-      supabase,
-      thumbnailPath,
-      thumbnailBlob,
-      "image/jpeg",
-      (ratio) => {
-        onProgress(26 + ratio * 8, "サムネイルをアップロード中…");
-      },
-    );
-  } catch (err) {
-    rethrowPostStage("サムネイルのアップロード", err);
+  for (let i = 0; i < clipThumbnailBlobs.length; i++) {
+    onProgress(26 + thumbUploadShare * i, `サムネイル ${i + 1}/${clipThumbnailBlobs.length} をアップロード中…`);
+    try {
+      await uploadFileWithProgress(
+        supabase,
+        clipThumbnailPaths[i]!,
+        clipThumbnailBlobs[i]!,
+        "image/jpeg",
+        (ratio) => {
+          onProgress(
+            26 + thumbUploadShare * i + thumbUploadShare * ratio,
+            `サムネイル ${i + 1}/${clipThumbnailBlobs.length} をアップロード中…`,
+          );
+        },
+      );
+    } catch (err) {
+      rethrowPostStage(
+        clipThumbnailBlobs.length > 1
+          ? `サムネイル${i + 1}のアップロード`
+          : "サムネイルのアップロード",
+        err,
+      );
+    }
   }
 
   const clipUrls: string[] = [];
@@ -343,7 +374,10 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   }
 
   const videoUrl = clipUrls[0]!;
-  const thumbnailUrl = getMediaPublicUrl(thumbnailPath);
+  const clipThumbnailUrls = clipThumbnailPaths.map((path) =>
+    getMediaPublicUrl(path),
+  );
+  const thumbnailUrl = clipThumbnailUrls[0]!;
 
   onStageChange("saving");
   onProgress(92, "投稿を保存中…");
@@ -355,6 +389,8 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
       userId: user.id,
       videoUrl,
       thumbnailUrl,
+      clipThumbnailUrls:
+        clipThumbnailUrls.length > 1 ? clipThumbnailUrls : null,
       title: title.trim() || "無題のvlog",
       durationSeconds,
       visibility,

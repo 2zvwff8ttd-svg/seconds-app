@@ -4,6 +4,8 @@ export type FeedVideo = {
   /** プリセット BGM（再生時に動画と同時再生） */
   bgmUrl?: string;
   thumbnailUrl?: string;
+  /** 2クリップ以上のとき、各クリップ先頭フレームの静止画（スライドショー用） */
+  clipThumbnailUrls?: string[];
   title: string;
   creatorId: string;
   creatorName: string;

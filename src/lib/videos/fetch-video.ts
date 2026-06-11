@@ -14,7 +14,8 @@ export async function fetchVideoById(videoId: string): Promise<FeedVideo | null>
     caps.hasStatus ||
     caps.hasPublishAt ||
     caps.hasPublishedAt ||
-    caps.hasBgmUrl
+    caps.hasBgmUrl ||
+    caps.hasClipThumbnailUrls
       ? buildVideoSelect(caps)
       : BASE_VIDEO_SELECT;
 

@@ -5,6 +5,7 @@ export type VideoSchemaCapabilities = {
   hasPublishAt: boolean;
   hasPublishedAt: boolean;
   hasBgmUrl: boolean;
+  hasClipThumbnailUrls: boolean;
   hasInsertRpc: boolean;
 };
 
@@ -73,20 +74,28 @@ export async function probeVideoSchema(
 ): Promise<VideoSchemaCapabilities> {
   if (cachedCapabilities && !options?.force) return cachedCapabilities;
 
-  const [hasStatus, hasPublishAt, hasPublishedAt, hasBgmUrl, hasInsertRpc] =
-    await Promise.all([
-      probeColumn(supabase, "status"),
-      probeColumn(supabase, "publish_at"),
-      probeColumn(supabase, "published_at"),
-      probeColumn(supabase, "bgm_url"),
-      probeInsertRpc(supabase),
-    ]);
+  const [
+    hasStatus,
+    hasPublishAt,
+    hasPublishedAt,
+    hasBgmUrl,
+    hasClipThumbnailUrls,
+    hasInsertRpc,
+  ] = await Promise.all([
+    probeColumn(supabase, "status"),
+    probeColumn(supabase, "publish_at"),
+    probeColumn(supabase, "published_at"),
+    probeColumn(supabase, "bgm_url"),
+    probeColumn(supabase, "clip_thumbnail_urls"),
+    probeInsertRpc(supabase),
+  ]);
 
   cachedCapabilities = {
     hasStatus,
     hasPublishAt,
     hasPublishedAt,
     hasBgmUrl,
+    hasClipThumbnailUrls,
     hasInsertRpc,
   };
 
@@ -138,6 +147,7 @@ export function buildVideoSelect(caps: VideoSchemaCapabilities): string {
   if (caps.hasPublishAt) extras.push("publish_at");
   if (caps.hasPublishedAt) extras.push("published_at");
   if (caps.hasBgmUrl) extras.push("bgm_url");
+  if (caps.hasClipThumbnailUrls) extras.push("clip_thumbnail_urls");
   if (extras.length === 0) return BASE_VIDEO_SELECT;
   return BASE_VIDEO_SELECT.replace(
     "created_at,",

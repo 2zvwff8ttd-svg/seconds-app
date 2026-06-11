@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import type { BubbleGlassStyle } from "@/lib/bubble-glass-vars";
 import type { BubblePlacement } from "@/lib/bubble-layout";
 import { resolveBubbleThumbnailUrl } from "@/lib/videos/bubble-thumbnail";
+import { BubbleThumbnailSlideshow } from "./BubbleThumbnailSlideshow";
 import { CrownIcon } from "./CrownIcon";
 import { BurstEffect } from "./BurstEffect";
 
@@ -13,6 +14,7 @@ export type BubbleVideoPreview = {
   title: string;
   creatorName: string;
   thumbnailUrl?: string;
+  clipThumbnailUrls?: string[];
   isViralTop?: boolean;
 };
 
@@ -60,7 +62,13 @@ export function VideoBubble({
   const [isPressed, setIsPressed] = useState(false);
   const diameter = placement.radius * 2;
   const isViral = video.isViralTop ?? false;
-  const thumbnailSrc = resolveBubbleThumbnailUrl(video.thumbnailUrl);
+  const slideshowUrls =
+    video.clipThumbnailUrls && video.clipThumbnailUrls.length > 1
+      ? video.clipThumbnailUrls
+      : null;
+  const thumbnailSrc = slideshowUrls
+    ? null
+    : resolveBubbleThumbnailUrl(video.thumbnailUrl);
 
   const handleClick = useCallback(() => {
     if (isBursting) return;
@@ -102,7 +110,9 @@ export function VideoBubble({
           style={glassStyle}
         >
           <span className="bubble-3d__body">
-            {thumbnailSrc ? (
+            {slideshowUrls ? (
+              <BubbleThumbnailSlideshow urls={slideshowUrls} />
+            ) : thumbnailSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={thumbnailSrc}

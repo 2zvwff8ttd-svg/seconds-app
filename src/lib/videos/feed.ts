@@ -101,7 +101,8 @@ export async function fetchHomeFeed(): Promise<{
     caps.hasStatus ||
     caps.hasPublishAt ||
     caps.hasPublishedAt ||
-    caps.hasBgmUrl
+    caps.hasBgmUrl ||
+    caps.hasClipThumbnailUrls
     ? buildVideoSelect(caps)
     : BASE_VIDEO_SELECT;
 
@@ -132,7 +133,8 @@ export async function fetchHomeFeed(): Promise<{
         retryCaps.hasStatus ||
         retryCaps.hasPublishAt ||
         retryCaps.hasPublishedAt ||
-        retryCaps.hasBgmUrl
+        retryCaps.hasBgmUrl ||
+        retryCaps.hasClipThumbnailUrls
           ? buildVideoSelect(retryCaps)
           : BASE_VIDEO_SELECT;
       let retryQuery = supabase.from("videos").select(retrySelect);
