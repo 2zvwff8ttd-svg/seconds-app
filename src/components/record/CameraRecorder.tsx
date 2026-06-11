@@ -2,16 +2,23 @@
 
 import type { RecordedClip } from "@/types/recording";
 import {
+  canUseInAppMediaRecorder,
   createMediaRecorder,
   facingModeLabel,
+  getMinRecordingMs,
+  getNativeCaptureAccept,
   getPreferredMimeType,
   getRecorderTimesliceMs,
+  getStopFallbackMs,
+  isIOSSafari,
+  logRecorderMimeDiagnostics,
   mimeToExtension,
   openCameraStream,
+  shouldRequestDataBeforeStop,
   verifyRecordedBlobPlayback,
   waitForRecorderChunks,
 } from "@/lib/recording/recorder-utils";
-import { normalizeStorageContentType } from "@/lib/video/media";
+import { getVideoDuration, normalizeStorageContentType } from "@/lib/video/media";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
@@ -22,8 +29,6 @@ type CameraRecorderProps = {
   onClipAdded: (clip: RecordedClip) => void;
   disabled?: boolean;
 };
-
-const STOP_FALLBACK_MS = 600;
 
 function isStreamLive(stream: MediaStream | null): boolean {
   return Boolean(
@@ -36,12 +41,17 @@ function measureRecordingSeconds(startedAt: number | null): number {
   return Math.max(0, (Date.now() - startedAt) / 1000);
 }
 
+function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export function CameraRecorder({
   clips,
   onClipAdded,
   disabled = false,
 }: CameraRecorderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const nativeInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -61,6 +71,8 @@ export function CameraRecorder({
   const [cameraStarting, setCameraStarting] = useState(false);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [inAppRecorderReady, setInAppRecorderReady] = useState(true);
+  const [showNativeCapture, setShowNativeCapture] = useState(false);
 
   const usedClipSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
 
@@ -73,6 +85,13 @@ export function CameraRecorder({
         : 0;
     return Math.max(0, assignedSeconds - usedClipSeconds - elapsed);
   }, [assignedSeconds, usedClipSeconds, isRecording, tick]);
+
+  useEffect(() => {
+    const ready = canUseInAppMediaRecorder();
+    setInAppRecorderReady(ready);
+    setShowNativeCapture(isIOSSafari() || !ready);
+    logRecorderMimeDiagnostics();
+  }, []);
 
   const clearStopFallback = useCallback(() => {
     if (stopFallbackRef.current) {
@@ -148,16 +167,32 @@ export function CameraRecorder({
       clearStopFallback();
       clearTimer();
       if (recorderRef.current?.state === "recording") {
-        try {
-          recorderRef.current.requestData();
-        } catch {
-          // ignore
+        if (shouldRequestDataBeforeStop()) {
+          try {
+            recorderRef.current.requestData();
+          } catch {
+            // ignore
+          }
         }
         recorderRef.current.stop();
       }
       stopStream();
     };
   }, [clearStopFallback, clearTimer, stopStream]);
+
+  const addRecordedClip = useCallback(
+    (file: File, durationSeconds: number) => {
+      const previewUrl = URL.createObjectURL(file);
+      onClipAdded({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl,
+        durationSeconds,
+      });
+      setTick((t) => t + 1);
+    },
+    [onClipAdded],
+  );
 
   const finishRecording = useCallback(async () => {
     if (finishingRef.current) return;
@@ -166,6 +201,7 @@ export function CameraRecorder({
 
     const elapsed = measureRecordingSeconds(recordingStartRef.current);
     const budget = recordBudgetRef.current;
+    const recordedMime = recorderRef.current?.mimeType || mimeRef.current;
     clearTimer();
     setIsRecording(false);
 
@@ -174,7 +210,9 @@ export function CameraRecorder({
     let chunks = [...chunksRef.current];
     let totalBytes = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
     if (totalBytes === 0) {
-      await waitForRecorderChunks(() => chunksRef.current, { maxMs: 500 });
+      await waitForRecorderChunks(() => chunksRef.current, {
+        maxMs: getStopFallbackMs(),
+      });
       chunks = [...chunksRef.current];
       totalBytes = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
     }
@@ -184,6 +222,9 @@ export function CameraRecorder({
 
     if (chunks.length === 0 || totalBytes === 0) {
       setError("録画データを取得できませんでした。もう一度お試しください");
+      if (isIOSSafari()) {
+        setShowNativeCapture(true);
+      }
       finishingRef.current = false;
       await ensurePreview();
       return;
@@ -194,7 +235,7 @@ export function CameraRecorder({
       Math.max(0.1, Math.round(elapsed * 10) / 10),
     );
 
-    const mime = mimeRef.current;
+    const mime = recordedMime;
     const storageType = normalizeStorageContentType(mime);
     const blob = new Blob(chunks, { type: storageType });
 
@@ -204,6 +245,9 @@ export function CameraRecorder({
       setError(
         err instanceof Error ? err.message : "録画した動画を再生できません",
       );
+      if (isIOSSafari()) {
+        setShowNativeCapture(true);
+      }
       finishingRef.current = false;
       await ensurePreview();
       return;
@@ -213,19 +257,11 @@ export function CameraRecorder({
     const file = new File([blob], `clip-${Date.now()}.${ext}`, {
       type: storageType,
     });
-    const previewUrl = URL.createObjectURL(blob);
 
-    onClipAdded({
-      id: crypto.randomUUID(),
-      file,
-      previewUrl,
-      durationSeconds,
-    });
-
+    addRecordedClip(file, durationSeconds);
     finishingRef.current = false;
-    setTick((t) => t + 1);
     await ensurePreview();
-  }, [clearStopFallback, clearTimer, ensurePreview, onClipAdded]);
+  }, [addRecordedClip, clearStopFallback, clearTimer, ensurePreview]);
 
   const finishRecordingRef = useRef(finishRecording);
   finishRecordingRef.current = finishRecording;
@@ -236,10 +272,10 @@ export function CameraRecorder({
       if (!finishingRef.current) {
         void finishRecordingRef.current();
       }
-    }, STOP_FALLBACK_MS);
+    }, getStopFallbackMs());
   }, [clearStopFallback]);
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback(async () => {
     const recorder = recorderRef.current;
     if (!recorder) return;
 
@@ -252,13 +288,23 @@ export function CameraRecorder({
 
     if (recorder.state !== "recording") return;
 
+    if (recordingStartRef.current) {
+      const minMs = getMinRecordingMs();
+      const elapsedMs = Date.now() - recordingStartRef.current;
+      if (elapsedMs < minMs) {
+        await waitMs(minMs - elapsedMs);
+      }
+    }
+
     clearTimer();
     setIsRecording(false);
 
-    try {
-      recorder.requestData();
-    } catch {
-      // ignore
+    if (shouldRequestDataBeforeStop()) {
+      try {
+        recorder.requestData();
+      } catch {
+        // ignore
+      }
     }
 
     try {
@@ -281,6 +327,12 @@ export function CameraRecorder({
     const budget = assignedSeconds - usedClipSeconds;
     if (!stream || isRecording || disabled || budget <= 0) return;
 
+    if (!canUseInAppMediaRecorder()) {
+      setShowNativeCapture(true);
+      setError("アプリ内録画に未対応のため、カメラ撮影をご利用ください");
+      return;
+    }
+
     setError(null);
     chunksRef.current = [];
     finishingRef.current = false;
@@ -288,8 +340,21 @@ export function CameraRecorder({
     mimeRef.current = getPreferredMimeType();
     recordBudgetRef.current = budget;
 
-    const recorder = createMediaRecorder(stream, mimeRef.current);
-    mimeRef.current = recorder.mimeType || mimeRef.current;
+    let recorder: MediaRecorder;
+    try {
+      const created = createMediaRecorder(stream, mimeRef.current);
+      recorder = created.recorder;
+      mimeRef.current = created.mimeType;
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "録画の初期化に失敗しました",
+      );
+      setShowNativeCapture(true);
+      return;
+    }
+
     recorderRef.current = recorder;
 
     recorder.ondataavailable = (e) => {
@@ -306,6 +371,9 @@ export function CameraRecorder({
       setIsRecording(false);
       recorderRef.current = null;
       finishingRef.current = false;
+      if (isIOSSafari()) {
+        setShowNativeCapture(true);
+      }
     };
 
     const timeslice = getRecorderTimesliceMs();
@@ -329,7 +397,7 @@ export function CameraRecorder({
         usedClipSeconds -
         measureRecordingSeconds(recordingStartRef.current);
       if (left <= 0) {
-        stopRecording();
+        void stopRecording();
       }
     }, 200);
   }, [
@@ -342,16 +410,59 @@ export function CameraRecorder({
     usedClipSeconds,
   ]);
 
+  const handleNativeCapture = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file || assignedSeconds === null) return;
+
+      setError(null);
+      const budget = assignedSeconds - usedClipSeconds;
+      if (budget <= 0) {
+        setError("今日の撮影時間を使い切りました");
+        return;
+      }
+
+      try {
+        const rawDuration = await getVideoDuration(file);
+        const durationSeconds = Math.min(
+          budget,
+          Math.max(0.1, rawDuration || 0.1),
+        );
+        addRecordedClip(file, durationSeconds);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "動画の読み込みに失敗しました",
+        );
+      }
+    },
+    [addRecordedClip, assignedSeconds, usedClipSeconds],
+  );
+
+  const openNativeCapture = useCallback(() => {
+    if (disabled || assignedSeconds === null) return;
+    if (assignedSeconds - usedClipSeconds <= 0) {
+      setError("今日の撮影時間を使い切りました");
+      return;
+    }
+    nativeInputRef.current?.click();
+  }, [assignedSeconds, disabled, usedClipSeconds]);
+
   const handleRecordPress = useCallback(async () => {
     if (disabled || cameraStarting || finishingRef.current) return;
 
     if (isRecording) {
-      stopRecording();
+      await stopRecording();
       return;
     }
 
     if (remainingSeconds <= 0) {
       setError("今日の撮影時間を使い切りました");
+      return;
+    }
+
+    if (!inAppRecorderReady) {
+      openNativeCapture();
       return;
     }
 
@@ -367,7 +478,9 @@ export function CameraRecorder({
     cameraStarting,
     disabled,
     facingMode,
+    inAppRecorderReady,
     isRecording,
+    openNativeCapture,
     remainingSeconds,
     startCamera,
     stopRecording,
@@ -403,6 +516,15 @@ export function CameraRecorder({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-black">
+      <input
+        ref={nativeInputRef}
+        type="file"
+        accept={getNativeCaptureAccept()}
+        capture={facingMode}
+        className="hidden"
+        onChange={(e) => void handleNativeCapture(e)}
+      />
+
       <div className="relative aspect-[9/16] max-h-[52vh] w-full bg-black">
         <TimeBudgetGauge
           assignedSeconds={assignedSeconds}
@@ -421,7 +543,7 @@ export function CameraRecorder({
           }}
         />
 
-        {!cameraReady && !isRecording && !error && (
+        {!cameraReady && !isRecording && !error && inAppRecorderReady && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-surface-elevated/90 px-6 pt-2 text-center">
             <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-violet-500/15 text-violet-300">
               <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="2">
@@ -430,7 +552,11 @@ export function CameraRecorder({
               </svg>
             </span>
             <p className="text-sm font-medium text-foreground">録画ボタンでカメラを起動</p>
-            <p className="mt-1 text-xs text-muted">撮影時間は全クリップで共有されます</p>
+            <p className="mt-1 text-xs text-muted">
+              {isIOSSafari()
+                ? "1秒以上録画してから停止してください"
+                : "撮影時間は全クリップで共有されます"}
+            </p>
           </div>
         )}
 
@@ -497,10 +623,23 @@ export function CameraRecorder({
             />
           </button>
 
+          {showNativeCapture && (
+            <button
+              type="button"
+              onClick={openNativeCapture}
+              disabled={!canRecord && !isRecording}
+              className="pointer-events-auto mt-3 rounded-full bg-white/15 px-4 py-2 text-xs font-medium text-white backdrop-blur-md transition hover:bg-white/25 disabled:opacity-40"
+            >
+              カメラアプリで撮影
+            </button>
+          )}
+
           <p className="mt-3 text-[10px] text-muted">
             {clips.length > 0
               ? `${clips.length}クリップ · 残り時間はゲージで表示`
-              : "録画ボタンで開始 · 時間切れで自動停止"}
+              : isIOSSafari()
+                ? "1秒以上録画してから停止 · カメラアプリ撮影も利用可"
+                : "録画ボタンで開始 · 時間切れで自動停止"}
           </p>
         </div>
       </div>

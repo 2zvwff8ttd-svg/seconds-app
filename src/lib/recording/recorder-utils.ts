@@ -2,20 +2,78 @@
 export const RECORDING_TARGET_WIDTH = 1280;
 export const RECORDING_TARGET_HEIGHT = 720;
 
-/** 同一セッションのクリップは同じ MIME で録画され、投稿時 concat -c copy と相性が良い */
-
 /** 2〜2.5 Mbps の中央値 */
 export const RECORDING_VIDEO_BITS_PER_SECOND = 2_250_000;
 export const RECORDING_AUDIO_BITS_PER_SECOND = 128_000;
 
-/** iOS Safari（MediaRecorder / タッチ周りの分岐用） */
-export function isIOSSafari(): boolean {
+const IOS_MIME_CANDIDATES = [
+  "video/mp4",
+  "video/mp4;codecs=avc1,mp4a.40.2",
+  "video/mp4;codecs=h264,aac",
+] as const;
+
+const DEFAULT_MIME_CANDIDATES = [
+  "video/webm",
+  "video/webm;codecs=vp9,opus",
+  "video/webm;codecs=vp8,opus",
+  "video/mp4",
+  "video/mp4;codecs=avc1,mp4a.40.2",
+] as const;
+
+/** iOS 端末（Safari / Chrome 等を含む） */
+export function isIOSDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent;
-  const isIOS =
+  return (
     /iPad|iPhone|iPod/.test(ua) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  return isIOS && !/CriOS|FxiOS|EdgiOS/.test(ua);
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+/** iOS Safari（WebKit ネイティブ。CriOS 等は除外） */
+export function isIOSSafari(): boolean {
+  if (!isIOSDevice()) return false;
+  return !/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
+}
+
+export function isMediaRecorderAvailable(): boolean {
+  return typeof window !== "undefined" && typeof MediaRecorder !== "undefined";
+}
+
+export function listSupportedRecorderMimeTypes(
+  candidates: readonly string[] = isIOSSafari()
+    ? IOS_MIME_CANDIDATES
+    : DEFAULT_MIME_CANDIDATES,
+): string[] {
+  if (!isMediaRecorderAvailable()) return [];
+  return candidates.filter((mime) => MediaRecorder.isTypeSupported(mime));
+}
+
+/** 開発時の MIME 対応状況ログ（iOS Safari 向け） */
+export function logRecorderMimeDiagnostics(): void {
+  if (typeof console === "undefined" || !isIOSSafari()) return;
+
+  const all = [
+    ...IOS_MIME_CANDIDATES,
+    "video/webm",
+    "video/webm;codecs=vp8,opus",
+  ];
+  const supported = listSupportedRecorderMimeTypes(all);
+  console.info("[recorder] iOS Safari MIME support:", {
+    supported,
+    preferred: getPreferredMimeType(),
+    mediaRecorder: isMediaRecorderAvailable(),
+  });
+  for (const mime of all) {
+    console.info(
+      `[recorder] isTypeSupported(${mime}):`,
+      isMediaRecorderAvailable() && MediaRecorder.isTypeSupported(mime),
+    );
+  }
+}
+
+export function canUseInAppMediaRecorder(): boolean {
+  return isMediaRecorderAvailable() && listSupportedRecorderMimeTypes().length > 0;
 }
 
 export function buildCameraVideoConstraints(
@@ -38,40 +96,36 @@ export function buildMediaRecorderOptions(mimeType: string): MediaRecorderOption
 }
 
 function mimeTypeCandidates(preferredMimeType: string): string[] {
-  const iosFirst = [
-    "video/mp4",
-    "video/mp4;codecs=avc1,mp4a.40.2",
-    "video/mp4;codecs=h264,aac",
-    preferredMimeType,
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/webm",
-  ];
+  if (isIOSSafari()) {
+    return [...new Set([...IOS_MIME_CANDIDATES, preferredMimeType])];
+  }
 
-  const defaultOrder = [
-    preferredMimeType,
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/webm",
-    "video/mp4",
-    "video/mp4;codecs=avc1,mp4a.40.2",
+  return [
+    ...new Set([preferredMimeType, ...DEFAULT_MIME_CANDIDATES]),
   ];
-
-  return [...new Set(isIOSSafari() ? iosFirst : defaultOrder)];
 }
 
-/** ビットレート・MIME の組み合わせを順に試し、必ず録画可能な MediaRecorder を返す */
+export type CreateMediaRecorderResult = {
+  recorder: MediaRecorder;
+  mimeType: string;
+};
+
+/**
+ * ビットレート・MIME の組み合わせを順に試す。
+ * iOS Safari は video/mp4 のみ・ビットレート指定なしで作成する。
+ */
 export function createMediaRecorder(
   stream: MediaStream,
   preferredMimeType: string,
-): MediaRecorder {
+): CreateMediaRecorderResult {
   const uniqueMimes = mimeTypeCandidates(preferredMimeType);
+  const ios = isIOSSafari();
 
   for (const mimeType of uniqueMimes) {
     if (!MediaRecorder.isTypeSupported(mimeType)) continue;
 
-    const optionSets: MediaRecorderOptions[] = isIOSSafari()
-      ? [{ mimeType }, buildMediaRecorderOptions(mimeType)]
+    const optionSets: MediaRecorderOptions[] = ios
+      ? [{ mimeType }]
       : [
           buildMediaRecorderOptions(mimeType),
           { mimeType, videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND },
@@ -80,26 +134,70 @@ export function createMediaRecorder(
 
     for (const options of optionSets) {
       try {
-        return new MediaRecorder(stream, options);
+        const recorder = new MediaRecorder(stream, options);
+        const resolvedMime = recorder.mimeType || mimeType;
+        if (process.env.NODE_ENV !== "production" && ios) {
+          console.info("[recorder] created MediaRecorder", {
+            requested: mimeType,
+            actual: resolvedMime,
+            state: recorder.state,
+          });
+        }
+        return { recorder, mimeType: resolvedMime };
       } catch {
         // 次の組み合わせを試す
       }
     }
   }
 
-  return new MediaRecorder(stream);
+  if (ios) {
+    throw new Error(
+      "このブラウザではアプリ内録画形式（MP4）を初期化できませんでした",
+    );
+  }
+
+  return {
+    recorder: new MediaRecorder(stream),
+    mimeType: preferredMimeType,
+  };
+}
+
+/**
+ * iOS Safari（MP4/ISOBMFF）は約1秒未満だとセグメントが空になる。
+ * timeslice で定期的にチャンクを吐き出させる。
+ */
+export function getRecorderTimesliceMs(): number | undefined {
+  if (isIOSSafari()) return 1000;
+  return 200;
+}
+
+/** iOS Safari では stop 前の requestData が空チャンクを誘発することがある */
+export function shouldRequestDataBeforeStop(): boolean {
+  return !isIOSSafari();
+}
+
+/** iOS Safari で録画データが生成されるまでの最短時間（ms） */
+export function getMinRecordingMs(): number {
+  return isIOSSafari() ? 1200 : 300;
+}
+
+export function getStopFallbackMs(): number {
+  return isIOSSafari() ? 1800 : 600;
+}
+
+export function getChunkWaitMs(): number {
+  return isIOSSafari() ? 1500 : 400;
 }
 
 /**
  * stop() 後の最終 ondataavailable を待つ。
- * iOS 以外でも onstop が先に来ると chunks が空のまま finish されることがある。
  */
 export function waitForRecorderChunks(
   getChunks: () => Blob[],
   options?: { maxMs?: number; intervalMs?: number },
 ): Promise<void> {
-  const maxMs = options?.maxMs ?? (isIOSSafari() ? 450 : 400);
-  const intervalMs = options?.intervalMs ?? 40;
+  const maxMs = options?.maxMs ?? getChunkWaitMs();
+  const intervalMs = options?.intervalMs ?? 50;
 
   return new Promise((resolve) => {
     const startedAt = Date.now();
@@ -193,33 +291,14 @@ export async function openCameraStream(
 }
 
 export function getPreferredMimeType(): string {
-  const iosCandidates = [
-    "video/mp4",
-    "video/mp4;codecs=avc1,mp4a.40.2",
-    "video/mp4;codecs=h264,aac",
-  ];
-  const defaultCandidates = [
-    "video/webm",
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/mp4",
-  ];
-
-  const candidates = isIOSSafari()
-    ? [...iosCandidates, ...defaultCandidates]
-    : defaultCandidates;
-
-  for (const type of candidates) {
-    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) {
-      return type;
-    }
-  }
-
+  const supported = listSupportedRecorderMimeTypes();
+  if (supported.length > 0) return supported[0]!;
   return isIOSSafari() ? "video/mp4" : "video/webm";
 }
 
 export function mimeToExtension(mime: string): string {
   if (mime.includes("mp4")) return "mp4";
+  if (mime.includes("quicktime")) return "mov";
   return "webm";
 }
 
@@ -227,7 +306,7 @@ export function facingModeLabel(mode: "user" | "environment"): string {
   return mode === "user" ? "インカメラ" : "アウトカメラ";
 }
 
-/** iOS Safari では timeslice 付き start が不安定なため無効化 */
-export function getRecorderTimesliceMs(): number | undefined {
-  return isIOSSafari() ? undefined : 200;
+/** ネイティブカメラ撮影（input capture）向けの accept */
+export function getNativeCaptureAccept(): string {
+  return isIOSDevice() ? "video/*" : "video/*";
 }
