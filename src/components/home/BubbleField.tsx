@@ -214,6 +214,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
       creatorName: video.creatorName,
       thumbnailUrl: video.thumbnailUrl,
       clipThumbnailUrls: video.clipThumbnailUrls,
+      videoUrl: video.videoUrl,
       isViralTop: video.isViralTop,
     }),
     [],

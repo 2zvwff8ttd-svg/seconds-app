@@ -425,6 +425,32 @@ body {
    シャボン玉 3D — 多層レイヤーで球体・透明感・玉虫色を表現
    ═══════════════════════════════════════════════════════════════ */
 
+/* 影は子要素の overflow クリップと干渉しないよう外側ラッパーに分離 */
+.bubble-3d-shadow {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  filter:
+    drop-shadow(0 10px 22px rgba(6, 4, 22, 0.42))
+    drop-shadow(0 18px 36px rgba(18, 10, 42, 0.22));
+}
+
+.bubble-3d-shadow--viral {
+  filter:
+    drop-shadow(0 12px 26px rgba(8, 5, 28, 0.45))
+    drop-shadow(0 20px 40px rgba(30, 18, 55, 0.28))
+    drop-shadow(0 0 28px rgba(251, 191, 36, 0.35));
+}
+
+.bubble-3d-shadow--viral-hero {
+  filter:
+    drop-shadow(0 14px 30px rgba(8, 5, 28, 0.48))
+    drop-shadow(0 24px 48px rgba(35, 20, 60, 0.3))
+    drop-shadow(0 0 36px rgba(251, 191, 36, 0.5))
+    drop-shadow(0 0 56px rgba(251, 191, 36, 0.22));
+}
+
 .bubble-3d,
 .bubble-3d-mini {
   position: relative;
@@ -444,9 +470,6 @@ body {
     rgba(25, 18, 48, 0.16) 68%,
     rgba(70, 50, 115, 0.12) 100%
   );
-  filter:
-    drop-shadow(0 10px 22px rgba(6, 4, 22, 0.42))
-    drop-shadow(0 18px 36px rgba(18, 10, 42, 0.22));
 }
 
 .bubble-3d--viral {
@@ -457,19 +480,10 @@ body {
     rgba(55, 35, 95, 0.16) 65%,
     rgba(90, 60, 130, 0.14) 100%
   );
-  filter:
-    drop-shadow(0 12px 26px rgba(8, 5, 28, 0.45))
-    drop-shadow(0 20px 40px rgba(30, 18, 55, 0.28))
-    drop-shadow(0 0 28px rgba(251, 191, 36, 0.35));
 }
 
 .bubble-3d--viral-hero {
   padding: 3px;
-  filter:
-    drop-shadow(0 14px 30px rgba(8, 5, 28, 0.48))
-    drop-shadow(0 24px 48px rgba(35, 20, 60, 0.3))
-    drop-shadow(0 0 36px rgba(251, 191, 36, 0.5))
-    drop-shadow(0 0 56px rgba(251, 191, 36, 0.22));
 }
 
 .bubble-3d--viral-hero::after {
@@ -521,9 +535,20 @@ body {
   display: block;
   width: 100%;
   height: 100%;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 50%;
+  clip-path: circle(50% at 50% 50%);
   background: #050508;
+}
+
+.bubble-3d__media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: 50%;
+  clip-path: circle(50% at 50% 50%);
 }
 
 .bubble-3d__body::after {
@@ -555,6 +580,8 @@ body {
 
 .bubble-3d__thumb {
   opacity: 0.94;
+  border-radius: 50%;
+  clip-path: circle(50% at 50% 50%);
 }
 
 .bubble-3d-mini__body {
@@ -922,8 +949,10 @@ body {
     rgba(110, 90, 160, 0.18) 100%
   );
   box-shadow:
-    inset 0 0 0 1px rgba(90, 72, 140, 0.16),
-    inset 0 -10px 18px rgba(15, 10, 35, 0.28);
+    inset 0 0 0 1.5px rgba(255, 255, 255, 0.42),
+    inset 0 0 0 2.5px rgba(140, 120, 200, 0.18),
+    inset 0 -10px 18px rgba(15, 10, 35, 0.32),
+    0 0 12px rgba(120, 90, 180, 0.12);
 }
 
 .bubble-3d--viral-hero .bubble-glass--thumb .bubble-glass__highlight {

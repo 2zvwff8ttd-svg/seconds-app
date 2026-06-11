@@ -1,24 +1,17 @@
 "use client";
 
-import { resolveBubbleThumbnailUrl } from "@/lib/videos/bubble-thumbnail";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 const SLIDE_INTERVAL_MS = 1000;
 const FADE_MS = 280;
 
 type BubbleThumbnailSlideshowProps = {
+  /** resolveBubbleDisplayUrls で解決済みの画像 URL */
   urls: string[];
 };
 
 export function BubbleThumbnailSlideshow({ urls }: BubbleThumbnailSlideshowProps) {
-  const frames = useMemo(
-    () =>
-      urls
-        .map((url) => resolveBubbleThumbnailUrl(url))
-        .filter((url): url is string => Boolean(url)),
-    [urls],
-  );
-
+  const frames = urls;
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -29,7 +22,7 @@ export function BubbleThumbnailSlideshow({ urls }: BubbleThumbnailSlideshowProps
     }, SLIDE_INTERVAL_MS);
 
     return () => window.clearInterval(timer);
-  }, [frames.length]);
+  }, [frames]);
 
   useEffect(() => {
     for (const src of frames) {
@@ -40,7 +33,7 @@ export function BubbleThumbnailSlideshow({ urls }: BubbleThumbnailSlideshowProps
 
   if (frames.length === 0) {
     return (
-      <span className="flex h-full w-full items-center justify-center bg-surface text-[10px] text-muted">
+      <span className="bubble-3d__placeholder flex h-full w-full items-center justify-center bg-surface text-[10px] text-muted">
         No thumb
       </span>
     );
@@ -61,7 +54,7 @@ export function BubbleThumbnailSlideshow({ urls }: BubbleThumbnailSlideshowProps
   }
 
   return (
-    <span className="relative block h-full w-full overflow-hidden">
+    <>
       {frames.map((src, frameIndex) => (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -78,6 +71,6 @@ export function BubbleThumbnailSlideshow({ urls }: BubbleThumbnailSlideshowProps
           draggable={false}
         />
       ))}
-    </span>
+    </>
   );
 }

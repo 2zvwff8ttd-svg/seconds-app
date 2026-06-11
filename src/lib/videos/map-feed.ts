@@ -30,13 +30,11 @@ export function videoRowToFeedVideo(
     videoUrl: row.video_url,
     bgmUrl: row.bgm_url?.trim() || undefined,
     thumbnailUrl: row.thumbnail_url ?? undefined,
-    clipThumbnailUrls:
-      Array.isArray(row.clip_thumbnail_urls) &&
-      row.clip_thumbnail_urls.length > 1
-        ? row.clip_thumbnail_urls.filter(
-            (url): url is string => typeof url === "string" && url.length > 0,
-          )
-        : undefined,
+    clipThumbnailUrls: Array.isArray(row.clip_thumbnail_urls)
+      ? row.clip_thumbnail_urls.filter(
+          (url): url is string => typeof url === "string" && url.length > 0,
+        )
+      : undefined,
     title: row.title || "Untitled",
     creatorId: row.user_id,
     creatorName: row.profiles?.username ?? "unknown",
