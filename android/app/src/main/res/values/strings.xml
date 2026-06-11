@@ -1,7 +1,9 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">&#63;Seconds</string>
-    <string name="title_activity_main">&#63;Seconds</string>
+    <string name="app_name">Seconds</string>
+    <!-- launcher_name uses \u003f prefix for question mark (safe for aapt) -->
+    <string name="launcher_name">\u003fSeconds</string>
+    <string name="title_activity_main">@string/launcher_name</string>
     <string name="package_name">com.seconds.app</string>
     <string name="custom_url_scheme">com.seconds.app</string>
 </resources>

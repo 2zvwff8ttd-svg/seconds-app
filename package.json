@@ -15,11 +15,13 @@
     "functions:deploy-daily-morning": "npx --yes supabase functions deploy daily-morning --no-verify-jwt",
     "functions:invoke-daily-morning": "node scripts/invoke-daily-morning.mjs",
     "icons:generate": "node scripts/generate-pwa-icons.mjs",
-    "cap:sync": "npx cap sync android",
+    "cap:sync": "npx cap sync android && node scripts/fix-android-strings.mjs",
+    "cap:clean": "node scripts/clean-android-build.mjs",
     "cap:open": "npx cap open android",
     "cap:run": "npx cap run android"
   },
   "dependencies": {
+    "@capacitor-community/camera-preview": "^8.0.1",
     "@capacitor/android": "^8.4.0",
     "@capacitor/core": "^8.4.0",
     "@ffmpeg/core": "^0.12.9",

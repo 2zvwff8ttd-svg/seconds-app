@@ -1156,3 +1156,18 @@ body {
   border: 0;
   border-top: 1px solid var(--border);
 }
+
+/* ネイティブ camera-preview: WebView 背面にカメラを表示 */
+html.record-native-preview-active,
+html.record-native-preview-active body {
+  background: transparent !important;
+}
+
+.record-native-preview-active .native-camera-shell {
+  background: transparent;
+}
+
+.native-camera-preview-mask {
+  clip-path: circle(42% at 50% 46%);
+  border-radius: 50%;
+}

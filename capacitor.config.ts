@@ -2,8 +2,8 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
   appId: "com.seconds.app",
-  // Web / Capacitor 用。Android の strings.xml は ? を &#63; でエスケープすること
-  appName: "?Seconds",
+  // Android ビルド用の内部名（? は XML で ?attr/... と誤解釈される）。表示名は strings.xml の launcher_name
+  appName: "Seconds",
   webDir: "capacitor-shell/www",
   server: {
     url: "https://seconds-app-wheat.vercel.app",
