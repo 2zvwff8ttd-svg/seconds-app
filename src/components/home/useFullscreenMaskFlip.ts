@@ -1,10 +1,11 @@
 "use client";
 
 import type { BubbleOriginRect } from "@/lib/home/bubble-origin-rect";
+import {
+  FULLSCREEN_ENTER_EASE,
+  FULLSCREEN_ENTER_MS,
+} from "@/lib/home/fullscreen-transition";
 import { useLayoutEffect, useRef, useState } from "react";
-
-const ENTER_MS = 420;
-const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined") return false;
@@ -95,7 +96,7 @@ export function useFullscreenMaskFlip({
 
       requestAnimationFrame(() => {
         if (cancelled) return;
-        el.style.transition = `transform ${ENTER_MS}ms ${EASE}`;
+        el.style.transition = `transform ${FULLSCREEN_ENTER_MS}ms ${FULLSCREEN_ENTER_EASE}`;
         el.style.transform = "translate3d(0, 0, 0) scale(1)";
 
         const onEnd = (event: TransitionEvent) => {
@@ -109,7 +110,7 @@ export function useFullscreenMaskFlip({
         finishTimer = window.setTimeout(() => {
           el.removeEventListener("transitionend", onEnd);
           finish();
-        }, ENTER_MS + 120);
+        }, FULLSCREEN_ENTER_MS + 120);
       });
     };
 

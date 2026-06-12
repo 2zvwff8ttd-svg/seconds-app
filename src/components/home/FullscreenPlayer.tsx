@@ -11,6 +11,7 @@ import {
   getDefaultFullscreenOrigin,
   type BubbleOriginRect,
 } from "@/lib/home/bubble-origin-rect";
+import { FULLSCREEN_EXIT_MS } from "@/lib/home/fullscreen-transition";
 import { createClient } from "@/lib/supabase/client";
 import { fetchVideoClipUrls } from "@/lib/videos/clips";
 import type { FeedVideo } from "@/types/feed";
@@ -19,7 +20,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const COMPLETE_PROGRESS_THRESHOLD = 0.92;
-const EXIT_MS = 580;
 
 type VideoSlot = 0 | 1;
 
@@ -70,6 +70,7 @@ export function FullscreenPlayer({
   const [isPaused, setIsPaused] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [maskDiameter, setMaskDiameter] = useState(0);
+  const [showVideoSurface, setShowVideoSurface] = useState(false);
   const clipIndexRef = useRef(0);
   const activeSlotRef = useRef<VideoSlot>(0);
   const maxProgressRef = useRef(0);
@@ -106,6 +107,7 @@ export function FullscreenPlayer({
     maxProgressRef.current = 0;
     allClipsCompletedRef.current = false;
     setIsPaused(false);
+    setShowVideoSurface(false);
     fetchVideoClipUrls(video.id)
       .then((urls) => {
         if (urls.length > 0) setClipUrls(urls);
@@ -122,15 +124,10 @@ export function FullscreenPlayer({
     [video.videoUrl],
   );
 
-  const startPlayback = useCallback(() => {
+  const prepareSources = useCallback(() => {
     const slot0 = slotARef.current;
     const slot1 = slotBRef.current;
     if (!slot0 || !slot1 || clipUrls.length === 0) return;
-
-    activeSlotRef.current = 0;
-    clipIndexRef.current = 0;
-    setActiveSlot(0);
-    setClipIndex(0);
 
     const firstUrl = clipUrls[0] ?? video.videoUrl;
     const preloadIdx = nextClipIndex(0, clipUrls.length);
@@ -142,13 +139,48 @@ export function FullscreenPlayer({
     slot1.currentTime = 0;
     slot0.muted = Boolean(video.bgmUrl);
     slot1.muted = true;
-
-    void slot0.play().catch(() => {});
   }, [clipUrls, video.bgmUrl, video.videoUrl]);
 
+  const startPlayback = useCallback(() => {
+    const slot0 = slotARef.current;
+    if (!slot0 || clipUrls.length === 0) return;
+
+    activeSlotRef.current = 0;
+    clipIndexRef.current = 0;
+    setActiveSlot(0);
+    setClipIndex(0);
+
+    prepareSources();
+    void slot0.play().catch(() => {});
+  }, [clipUrls.length, prepareSources]);
+
   useEffect(() => {
+    prepareSources();
+  }, [prepareSources, video.id]);
+
+  useEffect(() => {
+    if (!flipVisible) return;
     startPlayback();
-  }, [startPlayback, video.id]);
+  }, [flipVisible, startPlayback]);
+
+  useEffect(() => {
+    const el = slotARef.current;
+    if (!el) return;
+
+    const markReady = () => setShowVideoSurface(true);
+
+    if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      markReady();
+      return;
+    }
+
+    el.addEventListener("loadeddata", markReady, { once: true });
+    el.addEventListener("playing", markReady, { once: true });
+    return () => {
+      el.removeEventListener("loadeddata", markReady);
+      el.removeEventListener("playing", markReady);
+    };
+  }, [video.id, clipUrls, flipVisible]);
 
   useEffect(() => {
     const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
@@ -220,7 +252,7 @@ export function FullscreenPlayer({
     if (!isExiting) return;
     const timer = window.setTimeout(() => {
       onClose(buildReport());
-    }, EXIT_MS);
+    }, FULLSCREEN_EXIT_MS);
     return () => window.clearTimeout(timer);
   }, [isExiting, onClose, buildReport]);
 
@@ -302,11 +334,13 @@ export function FullscreenPlayer({
 
   const slotClassName = (slot: VideoSlot) =>
     [
-      "fullscreen-player__video absolute inset-0 h-full w-full object-cover",
-      activeSlot === slot
+      "fullscreen-player__video absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
+      activeSlot === slot && showVideoSurface
         ? "z-10 opacity-100"
         : "pointer-events-none z-0 opacity-0",
     ].join(" ");
+
+  const expandThumbnailUrl = video.thumbnailUrl;
 
   const playerStateClass = [
     enterDone ? "fullscreen-player--entered" : "fullscreen-player--entering",
@@ -334,11 +368,18 @@ export function FullscreenPlayer({
           className={`fullscreen-player__mask-wrap will-change-transform${flipVisible ? " fullscreen-player__mask-wrap--visible" : ""}`}
         >
           <FullscreenVideoMask className="fullscreen-player__mask">
+          {expandThumbnailUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={expandThumbnailUrl}
+              alt=""
+              className={`fullscreen-player__expand-thumb absolute inset-0 z-[8] h-full w-full object-cover transition-opacity duration-300${showVideoSurface ? " opacity-0" : " opacity-100"}`}
+              draggable={false}
+            />
+          )}
           <video
             ref={slotARef}
-            poster={
-              clipIndex === 0 && activeSlot === 0 ? video.thumbnailUrl : undefined
-            }
+            poster={video.thumbnailUrl}
             className={slotClassName(0)}
             playsInline
             preload="auto"
@@ -351,6 +392,7 @@ export function FullscreenPlayer({
           />
           <video
             ref={slotBRef}
+            poster={video.thumbnailUrl}
             className={slotClassName(1)}
             playsInline
             preload="auto"
@@ -388,7 +430,9 @@ export function FullscreenPlayer({
           </FullscreenVideoMask>
 
           {isExiting && maskDiameter > 0 && (
-            <BurstEffect size={maskDiameter} variant="fullscreen" />
+            <div className="absolute inset-0 z-40">
+              <BurstEffect size={maskDiameter} variant="fullscreen" />
+            </div>
           )}
         </div>
       </div>
