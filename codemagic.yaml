@@ -64,7 +64,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - $CM_EMAIL
+          - k.kai0702@icloud.com
         notify:
           success: true
           failure: true
