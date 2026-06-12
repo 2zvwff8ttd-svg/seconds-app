@@ -45,7 +45,8 @@ workflows:
 
       - name: Build iOS without code signing (compile check only)
         script: |
-          set -e
+          set -eo pipefail
+          mkdir -p /tmp/xcodebuild_logs
           xcodebuild build \
             -project "$CM_BUILD_DIR/$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
@@ -55,7 +56,7 @@ workflows:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            | tee /tmp/xcodebuild_logs/build.log
+            2>&1 | tee /tmp/xcodebuild_logs/build.log
 
     artifacts:
       - /tmp/xcodebuild_logs/*.log
