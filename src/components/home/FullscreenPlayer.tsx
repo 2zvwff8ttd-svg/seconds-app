@@ -1,5 +1,7 @@
 "use client";
 
+import { FullscreenVideoMask } from "@/components/home/FullscreenVideoMask";
+import { HomeStarfieldBackground } from "@/components/home/HomeStarfieldBackground";
 import { ReportButton } from "@/components/reports/ReportButton";
 import { useBgmPlayback } from "@/components/video/useBgmPlayback";
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
@@ -245,7 +247,7 @@ export function FullscreenPlayer({
 
   const slotClassName = (slot: VideoSlot) =>
     [
-      "absolute inset-0 h-full w-full object-cover",
+      "fullscreen-player__video absolute inset-0 h-full w-full object-cover",
       activeSlot === slot
         ? "z-10 opacity-100"
         : "pointer-events-none z-0 opacity-0",
@@ -253,68 +255,71 @@ export function FullscreenPlayer({
 
   return (
     <div
-      className="fullscreen-player fullscreen-enter z-fullscreen fixed inset-0 h-[100dvh] w-full overflow-hidden bg-black"
+      className="fullscreen-player fullscreen-enter z-fullscreen fixed inset-0 flex h-[100dvh] w-full flex-col overflow-hidden bg-[#010102]"
       role="dialog"
       aria-modal
       aria-label={video.title}
     >
-      <div className="absolute inset-0 bg-black">
-        <video
-          ref={slotARef}
-          poster={
-            clipIndex === 0 && activeSlot === 0 ? video.thumbnailUrl : undefined
-          }
-          className={slotClassName(0)}
-          playsInline
-          preload="auto"
-          controls={false}
-          controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
-          disablePictureInPicture
-          disableRemotePlayback
-          onTimeUpdate={activeSlot === 0 ? updateProgress : undefined}
-          onEnded={() => handleEnded(0)}
-        />
-        <video
-          ref={slotBRef}
-          className={slotClassName(1)}
-          playsInline
-          preload="auto"
-          controls={false}
-          controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
-          disablePictureInPicture
-          disableRemotePlayback
-          onTimeUpdate={activeSlot === 1 ? updateProgress : undefined}
-          onEnded={() => handleEnded(1)}
-        />
+      <div className="fullscreen-player__backdrop pointer-events-none absolute inset-0">
+        <HomeStarfieldBackground />
+        <div className="fullscreen-player__backdrop-glow" aria-hidden />
+        <div className="fullscreen-player__backdrop-vignette" aria-hidden />
       </div>
 
-      <button
-        type="button"
-        className="absolute inset-0 z-[15] cursor-default touch-manipulation"
-        onClick={handleVideoTap}
-        aria-label={isPaused ? "再生" : "一時停止"}
-      />
+      <div className="fullscreen-player__stage relative z-10 flex min-h-0 flex-1 items-center justify-center px-4 pb-2 pt-[max(3.5rem,calc(env(safe-area-inset-top)+2.75rem))]">
+        <FullscreenVideoMask className="fullscreen-player__mask">
+          <video
+            ref={slotARef}
+            poster={
+              clipIndex === 0 && activeSlot === 0 ? video.thumbnailUrl : undefined
+            }
+            className={slotClassName(0)}
+            playsInline
+            preload="auto"
+            controls={false}
+            controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
+            disablePictureInPicture
+            disableRemotePlayback
+            onTimeUpdate={activeSlot === 0 ? updateProgress : undefined}
+            onEnded={() => handleEnded(0)}
+          />
+          <video
+            ref={slotBRef}
+            className={slotClassName(1)}
+            playsInline
+            preload="auto"
+            controls={false}
+            controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
+            disablePictureInPicture
+            disableRemotePlayback
+            onTimeUpdate={activeSlot === 1 ? updateProgress : undefined}
+            onEnded={() => handleEnded(1)}
+          />
 
-      {isPaused && (
-        <div
-          className="pointer-events-none absolute inset-0 z-[25] flex items-center justify-center"
-          aria-hidden
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className="h-14 w-14 text-white/30 sm:h-16 sm:w-16"
-            fill="currentColor"
-          >
-            <rect x="5" y="4" width="5" height="16" rx="1.2" />
-            <rect x="14" y="4" width="5" height="16" rx="1.2" />
-          </svg>
-        </div>
-      )}
+          <button
+            type="button"
+            className="absolute inset-0 z-20 cursor-default touch-manipulation"
+            onClick={handleVideoTap}
+            aria-label={isPaused ? "再生" : "一時停止"}
+          />
 
-      <div
-        className="pointer-events-none absolute inset-0 z-20 bg-gradient-to-b from-black/55 via-transparent via-35% to-black/85"
-        aria-hidden
-      />
+          {isPaused && (
+            <div
+              className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+              aria-hidden
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-14 w-14 text-white/30 sm:h-16 sm:w-16"
+                fill="currentColor"
+              >
+                <rect x="5" y="4" width="5" height="16" rx="1.2" />
+                <rect x="14" y="4" width="5" height="16" rx="1.2" />
+              </svg>
+            </div>
+          )}
+        </FullscreenVideoMask>
+      </div>
 
       <button
         type="button"
@@ -344,7 +349,11 @@ export function FullscreenPlayer({
         </div>
       )}
 
-      <div className="absolute inset-x-0 bottom-0 z-30 flex max-h-[min(52dvh,420px)] flex-col px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-16 sm:px-5">
+      <div className="fullscreen-player__footer relative z-30 flex max-h-[min(52dvh,420px)] shrink-0 flex-col px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
+        <div
+          className="pointer-events-none absolute inset-x-0 -top-16 h-16 bg-gradient-to-t from-[#010102] via-[#010102]/85 to-transparent"
+          aria-hidden
+        />
         <div className="shrink-0">
           <p className="text-base font-semibold text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.65)] sm:text-lg">
             {video.title}
