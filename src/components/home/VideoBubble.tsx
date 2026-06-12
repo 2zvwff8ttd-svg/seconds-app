@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, type CSSProperties } from "react";
 import type { BubbleGlassStyle } from "@/lib/bubble-glass-vars";
 import type { BubbleOriginRect } from "@/lib/home/bubble-origin-rect";
 import { getBubbleOriginRect } from "@/lib/home/bubble-origin-rect";
@@ -27,6 +27,8 @@ type VideoBubbleProps = {
   glassStyle: BubbleGlassStyle;
   isHidden?: boolean;
   spawnAnimate?: boolean;
+  /** Stagger index for bubble-float--spawn delay (--spawn-index) */
+  spawnIndex?: number;
   onSelect: (origin: BubbleOriginRect) => void;
   zIndex: number;
 };
@@ -84,15 +86,17 @@ export function VideoBubble({
   return (
     <div
       className={`bubble-float pointer-events-auto absolute${spawnAnimate ? " bubble-float--spawn" : ""}${isHidden ? " bubble-float--hidden" : ""}`}
-      style={{
-        left: placement.x - placement.radius,
-        top: placement.y - placement.radius,
-        width: diameter,
-        height: diameter,
-        zIndex,
-        "--spawn-index": spawnIndex,
-        ...floatStyle,
-      }}
+      style={
+        {
+          left: placement.x - placement.radius,
+          top: placement.y - placement.radius,
+          width: diameter,
+          height: diameter,
+          zIndex,
+          "--spawn-index": spawnIndex,
+          ...floatStyle,
+        } as CSSProperties
+      }
     >
       <button
         ref={bubbleRef}
