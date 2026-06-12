@@ -421,6 +421,50 @@ body {
   animation-delay: var(--delay-x, 0s), var(--delay-y, 0s);
 }
 
+.bubble-float--spawn {
+  animation:
+    bubble-float-x var(--duration-x, 5s) ease-in-out infinite,
+    bubble-float-y var(--duration-y, 6.5s) ease-in-out infinite,
+    bubble-spawn 0.72s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  animation-delay:
+    var(--delay-x, 0s),
+    var(--delay-y, 0s),
+    calc(var(--spawn-index, 0) * 0.08s);
+}
+
+.bubble-float--hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s ease-out;
+}
+
+@keyframes bubble-spawn {
+  0% {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.burst-shard--fullscreen {
+  background: radial-gradient(
+    circle,
+    rgba(196, 181, 253, 0.95) 0%,
+    rgba(139, 92, 246, 0.75) 55%,
+    rgba(88, 55, 140, 0.4) 100%
+  );
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.55);
+}
+
+.burst-ring--fullscreen {
+  box-shadow:
+    0 0 24px rgba(139, 92, 246, 0.45),
+    inset 0 0 16px rgba(196, 181, 253, 0.25);
+}
+
 /* ═══════════════════════════════════════════════════════════════
    シャボン玉 3D — 多層レイヤーで球体・透明感・玉虫色を表現
    ═══════════════════════════════════════════════════════════════ */
@@ -1017,6 +1061,60 @@ body {
 }
 
 /* 全画面再生 — 星空背景 + 円形マスク */
+.fullscreen-player__backdrop {
+  opacity: 0;
+  transition: opacity 0.38s ease 0.06s;
+}
+
+.fullscreen-player--entered .fullscreen-player__backdrop {
+  opacity: 1;
+}
+
+.fullscreen-player--exiting .fullscreen-player__backdrop {
+  opacity: 0;
+  transition: opacity 0.32s ease;
+}
+
+.fullscreen-player__chrome-layer {
+  opacity: 0;
+  transition: opacity 0.34s ease 0.22s;
+}
+
+.fullscreen-player--entered .fullscreen-player__chrome-layer {
+  opacity: 1;
+}
+
+.fullscreen-player--exiting .fullscreen-player__chrome-layer {
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.fullscreen-player__mask-wrap {
+  position: relative;
+  width: min(calc(100vw - 2rem), calc(100dvh - 15.5rem), 100%);
+  max-width: 100%;
+}
+
+.fullscreen-player--exiting .fullscreen-player__mask-wrap {
+  animation: fullscreen-mask-exit 0.52s cubic-bezier(0.45, 0, 0.75, 0.2) forwards;
+}
+
+@keyframes fullscreen-mask-exit {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  35% {
+    opacity: 0.92;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.88);
+    filter: blur(3px);
+  }
+}
+
 .fullscreen-player__backdrop-glow {
   position: absolute;
   inset: 0;
@@ -1050,7 +1148,7 @@ body {
 }
 
 .fullscreen-player__mask {
-  width: min(calc(100vw - 2rem), calc(100dvh - 15.5rem), 100%);
+  width: 100%;
   max-width: 100%;
 }
 
@@ -1062,14 +1160,36 @@ body {
 
 .fullscreen-video-mask__shadow {
   position: absolute;
-  inset: 0;
+  inset: -4%;
   border-radius: var(--fs-mask-radius, 50%);
   clip-path: var(--fs-mask-clip, circle(50% at 50% 50%));
   filter:
-    drop-shadow(0 12px 28px rgba(6, 4, 22, 0.55))
-    drop-shadow(0 22px 44px rgba(18, 10, 42, 0.32))
-    drop-shadow(0 0 36px rgba(88, 55, 140, 0.18));
+    drop-shadow(0 14px 36px rgba(18, 12, 42, 0.42))
+    drop-shadow(0 8px 22px rgba(55, 35, 95, 0.38))
+    drop-shadow(0 0 52px rgba(72, 48, 120, 0.32))
+    drop-shadow(0 0 28px rgba(40, 24, 72, 0.22));
   pointer-events: none;
+  opacity: 0.88;
+}
+
+.fullscreen-video-mask__ground-blend {
+  position: absolute;
+  left: 50%;
+  bottom: -10%;
+  z-index: 2;
+  width: 130%;
+  height: 38%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse 70% 55% at 50% 30%,
+    rgba(8, 6, 22, 0.62) 0%,
+    rgba(12, 8, 32, 0.38) 42%,
+    transparent 72%
+  );
+  filter: blur(14px);
+  pointer-events: none;
+  opacity: 0.75;
 }
 
 .fullscreen-video-mask__frame {
@@ -1100,20 +1220,20 @@ body {
   clip-path: var(--fs-mask-clip, circle(50% at 50% 50%));
   pointer-events: none;
   box-shadow:
-    inset 0 0 18px 4px rgba(20, 14, 42, 0.28),
-    inset 0 0 0 1px rgba(90, 70, 140, 0.16);
+    inset 0 0 22px 5px rgba(22, 14, 48, 0.22),
+    inset 0 0 0 1px rgba(72, 55, 120, 0.14);
   -webkit-mask-image: radial-gradient(
     circle at 50% 50%,
     transparent 0%,
-    transparent 70%,
-    black 90%,
+    transparent 66%,
+    black 88%,
     black 100%
   );
   mask-image: radial-gradient(
     circle at 50% 50%,
     transparent 0%,
-    transparent 70%,
-    black 90%,
+    transparent 66%,
+    black 88%,
     black 100%
   );
 }
@@ -1154,10 +1274,29 @@ body {
   );
 }
 
+.fullscreen-video-mask__feather {
+  position: absolute;
+  inset: -3%;
+  z-index: 17;
+  border-radius: var(--fs-mask-radius, 50%);
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 50%,
+    transparent 0%,
+    transparent 76%,
+    rgba(12, 8, 32, 0.28) 90%,
+    rgba(18, 12, 42, 0.45) 100%
+  );
+  filter: blur(2.5px);
+  opacity: 0.65;
+  mix-blend-mode: multiply;
+}
+
 .fullscreen-video-mask--circle .fullscreen-video-mask__frame {
   box-shadow:
-    0 0 0 2px rgba(90, 70, 140, 0.22),
-    inset 0 0 0 1px rgba(120, 100, 170, 0.1);
+    0 0 0 1px rgba(72, 55, 120, 0.18),
+    0 0 32px rgba(55, 35, 95, 0.28),
+    inset 0 0 0 1px rgba(120, 100, 170, 0.08);
 }
 
 .fullscreen-player__footer {
@@ -1245,6 +1384,23 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .bubble-float--spawn {
+    animation:
+      bubble-float-x var(--duration-x, 5s) ease-in-out infinite,
+      bubble-float-y var(--duration-y, 6.5s) ease-in-out infinite;
+    animation-delay: var(--delay-x, 0s), var(--delay-y, 0s);
+  }
+
+  .fullscreen-player__backdrop,
+  .fullscreen-player__chrome-layer,
+  .fullscreen-player__mask-wrap {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+
   .home-star {
     animation: none;
   }

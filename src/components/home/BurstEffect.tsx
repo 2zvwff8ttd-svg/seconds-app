@@ -12,14 +12,25 @@ const SHARDS = Array.from({ length: 12 }, (_, i) => {
   };
 });
 
-export function BurstEffect({ size }: { size: number }) {
+type BurstEffectProps = {
+  size: number;
+  variant?: "bubble" | "fullscreen";
+};
+
+export function BurstEffect({ size, variant = "bubble" }: BurstEffectProps) {
+  const isFullscreen = variant === "fullscreen";
+
   return (
     <div
       className="pointer-events-none absolute inset-0 flex items-center justify-center"
       aria-hidden
     >
       <span
-        className="absolute rounded-full border-2 border-white/60"
+        className={`absolute rounded-full border-2 ${
+          isFullscreen
+            ? "border-violet-300/50 burst-ring--fullscreen"
+            : "border-white/60"
+        }`}
         style={{
           width: size,
           height: size,
@@ -29,7 +40,11 @@ export function BurstEffect({ size }: { size: number }) {
       {SHARDS.map((shard, i) => (
         <span
           key={i}
-          className="absolute h-2 w-2 rounded-full bg-white/70"
+          className={`absolute rounded-full ${
+            isFullscreen
+              ? "burst-shard--fullscreen h-2.5 w-2.5"
+              : "h-2 w-2 bg-white/70"
+          }`}
           style={
             {
               "--shard-x": shard.x,

@@ -23,6 +23,7 @@ import {
   applySessionWatchSignal,
   createEmptySessionPreference,
 } from "@/lib/recommendation/score";
+import type { BubbleOriginRect } from "@/lib/home/bubble-origin-rect";
 import { VideoBubble, type BubbleVideoPreview } from "./VideoBubble";
 import { FullscreenPlayer } from "./FullscreenPlayer";
 import Link from "next/link";
@@ -37,8 +38,11 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
   const pathname = usePathname();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [selected, setSelected] = useState<FeedVideo | null>(null);
-  const [burstingId, setBurstingId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{
+    video: FeedVideo;
+    origin: BubbleOriginRect;
+  } | null>(null);
+  const [bubbleSpawnGeneration, setBubbleSpawnGeneration] = useState(0);
   const [feedPool, setFeedPool] = useState<FeedVideo[]>([]);
   const [activeBubbles, setActiveBubbles] = useState<FeedVideo[]>([]);
   const [, setRecContext] = useState<UserRecommendationContext>(
@@ -149,12 +153,8 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
     [size.width, size.height],
   );
 
-  const handleSelect = useCallback((video: FeedVideo) => {
-    setBurstingId(video.id);
-    setTimeout(() => {
-      setSelected(video);
-      setBurstingId(null);
-    }, 420);
+  const handleSelect = useCallback((video: FeedVideo, origin: BubbleOriginRect) => {
+    setSelection({ video, origin });
   }, []);
 
   const replaceAllBubbles = useCallback(
@@ -172,8 +172,8 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
 
   const handleClose = useCallback(
     async (report: WatchReport) => {
-      const watched = selected;
-      setSelected(null);
+      const watched = selection?.video;
+      setSelection(null);
       if (!watched) return;
 
       sessionWatchedIdsRef.current.add(watched.id);
@@ -191,19 +191,20 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
       }
 
       replaceAllBubbles(excludeIds);
+      setBubbleSpawnGeneration((g) => g + 1);
     },
-    [selected, activeBubbles, replaceAllBubbles],
+    [selection, activeBubbles, replaceAllBubbles],
   );
 
   const handleLikeEngagement = useCallback(() => {
-    if (!selected) return;
-    applySessionLikeSignal(sessionPrefRef.current, selected);
-  }, [selected]);
+    if (!selection) return;
+    applySessionLikeSignal(sessionPrefRef.current, selection.video);
+  }, [selection]);
 
   const handleCommentEngagement = useCallback(() => {
-    if (!selected) return;
-    applySessionCommentSignal(sessionPrefRef.current, selected);
-  }, [selected]);
+    if (!selection) return;
+    applySessionCommentSignal(sessionPrefRef.current, selection.video);
+  }, [selection]);
 
   const slotCount = Math.min(BUBBLE_SLOT_COUNT, placements.length);
 
@@ -287,13 +288,15 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
 
               return (
                 <VideoBubble
-                  key={`${index}-${video.id}`}
+                  key={`${bubbleSpawnGeneration}-${index}-${video.id}`}
                   video={toBubblePreview(video)}
                   placement={placement}
                   floatStyle={floatStyle}
                   glassStyle={glassStyle}
-                  isBursting={burstingId === video.id}
-                  onSelect={() => handleSelect(video)}
+                  isHidden={selection?.video.id === video.id}
+                  spawnAnimate={bubbleSpawnGeneration > 0}
+                  spawnIndex={index}
+                  onSelect={(origin) => handleSelect(video, origin)}
                   zIndex={
                     video.isViralTop ? slotCount + 2 : index + 1
                   }
@@ -303,9 +306,10 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
         </div>
       </div>
 
-      {selected && (
+      {selection && (
         <FullscreenPlayer
-          video={selected}
+          video={selection.video}
+          originRect={selection.origin}
           onClose={handleClose}
           onLikeEngagement={handleLikeEngagement}
           onCommentEngagement={handleCommentEngagement}

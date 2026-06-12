@@ -37,11 +37,13 @@ export function FullscreenVideoMask({
       }
     >
       <div className="fullscreen-video-mask__shadow" aria-hidden />
+      <div className="fullscreen-video-mask__ground-blend" aria-hidden />
       <div className="fullscreen-video-mask__frame">
         <div className="fullscreen-video-mask__media">
           {children}
           <div className="fullscreen-video-mask__edge" aria-hidden />
           <div className="fullscreen-video-mask__rim" aria-hidden />
+          <div className="fullscreen-video-mask__feather" aria-hidden />
         </div>
       </div>
     </div>
