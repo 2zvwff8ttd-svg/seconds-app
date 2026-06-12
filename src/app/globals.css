@@ -73,17 +73,6 @@ body {
   z-index: var(--z-opening);
 }
 
-@keyframes opening-question-intro {
-  0% {
-    opacity: 0;
-    transform: scale(0.94) translateY(8px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
 @keyframes opening-seconds-reveal {
   0% {
     opacity: 0;
@@ -95,28 +84,6 @@ body {
   }
 }
 
-.opening-question-intro {
-  animation: opening-question-intro 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-.opening-question-intro__glow {
-  background: radial-gradient(
-    circle,
-    rgba(139, 92, 246, 0.28) 0%,
-    rgba(88, 55, 140, 0.12) 45%,
-    transparent 70%
-  );
-  filter: blur(18px);
-  opacity: 0.85;
-}
-
-.opening-question-intro__mark {
-  color: rgba(167, 139, 250, 0.92);
-  text-shadow:
-    0 0 32px rgba(139, 92, 246, 0.45),
-    0 0 64px rgba(88, 55, 140, 0.25);
-}
-
 .opening-seconds-reveal {
   animation: opening-seconds-reveal 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
@@ -125,6 +92,91 @@ body {
   text-shadow:
     0 0 20px rgba(196, 181, 253, 0.85),
     0 0 40px rgba(167, 139, 250, 0.5);
+}
+
+/* --- Opening: mist “?” (blob silhouette, fixed blur) --- */
+
+.opening-fog-question {
+  width: var(--fq-width, 220px);
+  height: var(--fq-height, 300px);
+  pointer-events: none;
+  contain: layout style paint;
+}
+
+.opening-fog-question__core {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.opening-fog-blob {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(196, 181, 253, 0.88) 0%,
+    rgba(139, 92, 246, 0.58) 26%,
+    rgba(88, 55, 140, 0.24) 50%,
+    transparent 72%
+  );
+  filter: blur(22px);
+  transform: translate3d(-50%, -50%, 0);
+}
+
+.opening-fog-question--intro {
+  animation: opening-fog-question-intro 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes opening-fog-question-intro {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.opening-fog-question--pass {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  z-index: 8;
+  animation: opening-fog-question-pass 4s cubic-bezier(0.18, 0.78, 0.22, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes opening-fog-question-pass {
+  0% {
+    opacity: 0.68;
+    transform: translate3d(-50%, -46%, 0) scale(0.3);
+  }
+  16% {
+    opacity: 0.94;
+    transform: translate3d(-50%, -50%, 0) scale(0.62);
+  }
+  34% {
+    opacity: 0.86;
+    transform: translate3d(-54%, -54%, 0) scale(1.05);
+  }
+  52% {
+    opacity: 0.7;
+    transform: translate3d(-60%, -62%, 0) scale(1.68);
+  }
+  68% {
+    opacity: 0.46;
+    transform: translate3d(-72%, -76%, 0) scale(2.85);
+  }
+  84% {
+    opacity: 0.16;
+    transform: translate3d(-88%, -94%, 0) scale(4.7);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-108%, -118%, 0) scale(7.2);
+  }
 }
 
 /* --- Opening: first-person fog pass --- */
@@ -154,44 +206,45 @@ body {
 }
 
 .opening-fp-camera {
-  animation: opening-fp-camera-drift 3.4s ease-in-out forwards;
+  animation: opening-fp-camera-drift 4s ease-in-out forwards;
   will-change: transform;
+  backface-visibility: hidden;
 }
 
 @keyframes opening-fp-camera-drift {
   0% {
-    transform: translate3d(0, 8px, 0) rotate(0deg) scale(1);
+    transform: translate3d(0, 10px, 0) rotate(0deg) scale(1);
   }
   14% {
-    transform: translate3d(-6px, -4px, 0) rotate(-0.35deg) scale(1.012);
+    transform: translate3d(-5px, -3px, 0) rotate(-0.28deg) scale(1.01);
   }
   28% {
-    transform: translate3d(7px, 5px, 0) rotate(0.3deg) scale(1.028);
+    transform: translate3d(6px, 4px, 0) rotate(0.24deg) scale(1.024);
   }
   42% {
-    transform: translate3d(-9px, -7px, 0) rotate(-0.45deg) scale(1.045);
+    transform: translate3d(-8px, -6px, 0) rotate(-0.36deg) scale(1.04);
   }
   58% {
-    transform: translate3d(10px, 3px, 0) rotate(0.4deg) scale(1.062);
+    transform: translate3d(9px, 2px, 0) rotate(0.32deg) scale(1.056);
   }
   74% {
-    transform: translate3d(-7px, -11px, 0) rotate(-0.3deg) scale(1.078);
+    transform: translate3d(-6px, -9px, 0) rotate(-0.24deg) scale(1.07);
   }
   100% {
-    transform: translate3d(5px, -16px, 0) rotate(0.15deg) scale(1.095);
+    transform: translate3d(4px, -14px, 0) rotate(0.12deg) scale(1.085);
   }
 }
 
 @keyframes opening-fp-mist-halo {
   0% {
-    transform: translate(-50%, -50%) scale(0.18);
+    transform: translate3d(-50%, -50%, 0) scale(0.18);
     opacity: 0;
   }
   18% {
-    opacity: 0.55;
+    opacity: 0.52;
   }
   100% {
-    transform: translate(-50%, -50%) scale(2.8);
+    transform: translate3d(-50%, -50%, 0) scale(2.8);
     opacity: 0;
   }
 }
@@ -199,21 +252,22 @@ body {
 .opening-fp-mist-halo {
   background: radial-gradient(
     circle,
-    rgba(167, 139, 250, 0.22) 0%,
-    rgba(124, 58, 237, 0.12) 35%,
-    rgba(76, 29, 149, 0.06) 55%,
+    rgba(167, 139, 250, 0.2) 0%,
+    rgba(124, 58, 237, 0.1) 35%,
+    rgba(76, 29, 149, 0.05) 55%,
     transparent 72%
   );
   filter: blur(14px);
-  animation: opening-fp-mist-halo var(--fp-duration, 3.4s) cubic-bezier(0.18, 0.85, 0.28, 1)
+  animation: opening-fp-mist-halo var(--fp-duration, 4s) cubic-bezier(0.18, 0.85, 0.28, 1)
     forwards;
   animation-delay: var(--fp-delay, 0s);
   will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
 @keyframes opening-fp-fog-expand {
   0% {
-    transform: translate(calc(-50% + var(--fp-x, 0px)), calc(-50% + var(--fp-y, 0px)))
+    transform: translate3d(calc(-50% + var(--fp-x, 0px)), calc(-50% + var(--fp-y, 0px)), 0)
       rotate(var(--fp-rotate, 0deg)) scale(0.14);
     opacity: 0;
   }
@@ -221,7 +275,7 @@ body {
     opacity: var(--fp-peak, 0.4);
   }
   100% {
-    transform: translate(calc(-50% + var(--fp-x, 0px)), calc(-50% + var(--fp-y, 0px)))
+    transform: translate3d(calc(-50% + var(--fp-x, 0px)), calc(-50% + var(--fp-y, 0px)), 0)
       rotate(calc(var(--fp-rotate, 0deg) + 12deg)) scale(var(--fp-end-scale, 8));
     opacity: 0;
   }
@@ -230,72 +284,17 @@ body {
 .opening-fp-fog-layer {
   background: radial-gradient(
     ellipse at center,
-    rgba(167, 139, 250, 0.42) 0%,
-    rgba(124, 58, 237, 0.26) 30%,
+    rgba(167, 139, 250, 0.4) 0%,
+    rgba(124, 58, 237, 0.24) 30%,
     rgba(76, 29, 149, 0.1) 52%,
     transparent 72%
   );
   filter: blur(12px);
-  animation: opening-fp-fog-expand var(--fp-duration, 3.2s) cubic-bezier(0.16, 0.82, 0.28, 1)
+  animation: opening-fp-fog-expand var(--fp-duration, 4s) cubic-bezier(0.16, 0.82, 0.28, 1)
     forwards;
   animation-delay: var(--fp-delay, 0s);
   will-change: transform, opacity;
-}
-
-.opening-fp-question-wrap {
-  position: absolute;
-  left: 50%;
-  top: 48%;
-  z-index: 8;
-  width: 0;
-  height: 0;
-}
-
-.opening-fp-question {
-  position: absolute;
-  left: 0;
-  top: 0;
-  display: block;
-  font-size: clamp(4.5rem, 16vw, 8.5rem);
-  font-weight: 700;
-  line-height: 1;
-  color: rgba(186, 168, 245, 0.88);
-  text-shadow:
-    0 0 36px rgba(139, 92, 246, 0.38),
-    0 0 72px rgba(88, 55, 140, 0.22);
-  animation: opening-fp-question-pass 3.4s cubic-bezier(0.18, 0.78, 0.22, 1) forwards;
-  will-change: transform, opacity;
-}
-
-@keyframes opening-fp-question-pass {
-  0% {
-    opacity: 0.75;
-    transform: translate(-50%, -20%) scale(0.38);
-  }
-  18% {
-    opacity: 1;
-    transform: translate(-50%, -42%) scale(0.72);
-  }
-  38% {
-    opacity: 0.92;
-    transform: translate(-58%, -52%) scale(1.15);
-  }
-  55% {
-    opacity: 0.78;
-    transform: translate(-68%, -62%) scale(1.85);
-  }
-  72% {
-    opacity: 0.45;
-    transform: translate(-82%, -78%) scale(3.2);
-  }
-  88% {
-    opacity: 0.15;
-    transform: translate(-105%, -98%) scale(5.5);
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-130%, -125%) scale(8.5);
-  }
+  backface-visibility: hidden;
 }
 
 .opening-fp-vignette {
@@ -323,7 +322,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .opening-question-intro,
+  .opening-fog-question--intro,
   .opening-seconds-reveal {
     animation: none;
     opacity: 1;
@@ -333,7 +332,7 @@ body {
   .opening-fp-camera,
   .opening-fp-mist-halo,
   .opening-fp-fog-layer,
-  .opening-fp-question {
+  .opening-fog-question--pass {
     animation: none !important;
     opacity: 0 !important;
   }
@@ -1180,7 +1179,7 @@ body {
 
 .fullscreen-player--entering {
   background: transparent;
-  animation: fullscreen-player-bg-enter 650ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fullscreen-player-bg-enter 900ms cubic-bezier(0.14, 0.92, 0.18, 1) forwards;
 }
 
 .fullscreen-player--entered {
@@ -1192,7 +1191,7 @@ body {
 }
 
 .fullscreen-player--entering .fullscreen-player__backdrop {
-  animation: fullscreen-backdrop-enter 650ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fullscreen-backdrop-enter 900ms cubic-bezier(0.14, 0.92, 0.18, 1) forwards;
 }
 
 .fullscreen-player--entered .fullscreen-player__backdrop {

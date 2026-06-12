@@ -13,6 +13,7 @@ import {
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { useCallback, useEffect, useState } from "react";
 import { OpeningFirstPersonPass } from "./OpeningFirstPersonPass";
+import { FogQuestionMark } from "./FogQuestionMark";
 
 type OpeningStep = "question" | "rush" | "seconds" | "exit";
 
@@ -133,11 +134,8 @@ export function OpeningOverlay({ onComplete, onRevealStart }: OpeningOverlayProp
       {step === "rush" && <OpeningFirstPersonPass />}
 
       {step === "question" && (
-        <div className="opening-question-intro relative z-10 flex items-center justify-center">
-          <div className="opening-question-intro__glow absolute h-36 w-36 rounded-full sm:h-44 sm:w-44" />
-          <span className="opening-question-intro__mark relative text-[6.5rem] font-bold leading-none sm:text-[8rem]">
-            ?
-          </span>
+        <div className="opening-question-intro-stage relative z-10 flex h-full w-full items-center justify-center">
+          <FogQuestionMark mode="intro" />
         </div>
       )}
 
