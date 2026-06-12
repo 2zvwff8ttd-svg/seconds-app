@@ -1,0 +1,121 @@
+# Codemagic CI for ?Seconds (Capacitor 8 + Next.js)
+#
+# Phase 1 (current): unsigned compile check — verify iOS native code builds.
+# Phase 2 (after Apple Developer approval): enable the commented workflow below
+# for code signing, App Store Connect upload, and .ipa generation.
+
+workflows:
+  ios-unsigned-compile-check:
+    name: iOS unsigned compile check
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    environment:
+      # Capacitor 8 + Next.js 16 — Node 22 LTS
+      node: 22
+      # Capacitor 8 requires a recent Xcode (iOS 15+ deployment target)
+      xcode: latest
+      # Capacitor 8 uses Swift Package Manager — CocoaPods / pod install is NOT required.
+      vars:
+        XCODE_SCHEME: App
+        # Capacitor 8 (SPM) generates App.xcodeproj, not App.xcworkspace.
+        # If you later add CocoaPods, switch to -workspace ios/App/App.xcworkspace.
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        # Placeholders so `npm run build` can compile without real Supabase credentials.
+        # Replace with Codemagic encrypted env vars when you want production-like builds.
+        NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci-compile-check
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: master
+          include: true
+
+    scripts:
+      - name: Install npm dependencies
+        script: npm ci
+
+      - name: Build Next.js
+        script: npm run build
+
+      - name: Sync Capacitor iOS (web assets + SPM plugins)
+        script: npx cap sync ios
+
+      - name: Build iOS without code signing (compile check only)
+        script: |
+          set -e
+          xcodebuild build \
+            -project "$CM_BUILD_DIR/$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee /tmp/xcodebuild_logs/build.log
+
+    artifacts:
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+
+    publishing:
+      email:
+        recipients:
+          - $CM_EMAIL
+        notify:
+          success: true
+          failure: true
+
+# =============================================================================
+# 【Apple Developer承認後に有効化】署名ありリリースビルド + App Store Connect
+# =============================================================================
+#
+# 承認後の手順:
+#   1. Codemagic UI → Code signing → iOS で証明書・プロビジョニングプロファイルを設定
+#   2. App Store Connect API key を Codemagic に登録
+#   3. 下記 workflow のコメントを外し、vars / bundle id を実値に更新
+#   4. `pod install` は不要（Capacitor 8 SPM のまま）
+#
+# workflows:
+#   ios-release:
+#     name: iOS release (signed .ipa)
+#     max_build_duration: 90
+#     instance_type: mac_mini_m2
+#     integrations:
+#       app_store_connect: codemagic
+#     environment:
+#       node: 22
+#       xcode: latest
+#       ios_signing:
+#         distribution_type: app_store
+#         bundle_identifier: com.seconds.app
+#       vars:
+#         XCODE_SCHEME: App
+#         XCODE_PROJECT: ios/App/App.xcodeproj
+#         APP_STORE_APPLE_ID: 0000000000
+#     scripts:
+#       - name: Install npm dependencies
+#         script: npm ci
+#       - name: Build Next.js
+#         script: npm run build
+#       - name: Sync Capacitor iOS
+#         script: npx cap sync ios
+#       - name: Set up code signing
+#         script: xcode-project use-profiles
+#       - name: Build signed .ipa
+#         script: |
+#           xcode-project build-ipa \
+#             --project "$CM_BUILD_DIR/$XCODE_PROJECT" \
+#             --scheme "$XCODE_SCHEME"
+#     artifacts:
+#       - build/ios/ipa/*.ipa
+#       - /tmp/xcodebuild_logs/*.log
+#     publishing:
+#       app_store_connect:
+#         auth: integration
+#         submit_to_testflight: true
+#         beta_groups:
+#           - Internal testers
