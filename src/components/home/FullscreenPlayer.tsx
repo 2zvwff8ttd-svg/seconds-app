@@ -27,6 +27,8 @@ type FullscreenPlayerProps = {
   video: FeedVideo;
   originRect?: BubbleOriginRect;
   onClose: (report: WatchReport) => void;
+  onFlipStart?: () => void;
+  onFlipComplete?: () => void;
   onLikeEngagement?: () => void;
   onCommentEngagement?: () => void;
 };
@@ -54,6 +56,8 @@ export function FullscreenPlayer({
   video,
   originRect,
   onClose,
+  onFlipStart,
+  onFlipComplete,
   onLikeEngagement,
   onCommentEngagement,
 }: FullscreenPlayerProps) {
@@ -74,7 +78,11 @@ export function FullscreenPlayer({
   const exitStartedRef = useRef(false);
 
   const flipOrigin = originRect ?? getDefaultFullscreenOrigin();
-  const { maskRef, enterDone } = useFullscreenMaskFlip(flipOrigin);
+  const { maskRef, enterDone, flipVisible } = useFullscreenMaskFlip({
+    originRect: flipOrigin,
+    onFlipStart,
+    onFlipComplete,
+  });
 
   const { play: playBgm, pause: pauseBgm } = useBgmPlayback({
     bgmUrl: video.bgmUrl,
@@ -309,7 +317,7 @@ export function FullscreenPlayer({
 
   return (
     <div
-      className={`fullscreen-player z-fullscreen fixed inset-0 flex h-[100dvh] w-full flex-col overflow-hidden bg-[#010102] ${playerStateClass}`}
+      className={`fullscreen-player z-fullscreen fixed inset-0 flex h-[100dvh] w-full flex-col overflow-hidden ${playerStateClass}`}
       role="dialog"
       aria-modal
       aria-label={video.title}
@@ -323,7 +331,7 @@ export function FullscreenPlayer({
       <div className="fullscreen-player__stage relative z-10 flex min-h-0 flex-1 items-center justify-center px-4 pb-2 pt-[max(3.5rem,calc(env(safe-area-inset-top)+2.75rem))]">
         <div
           ref={maskRef}
-          className="fullscreen-player__mask-wrap will-change-transform"
+          className={`fullscreen-player__mask-wrap will-change-transform${flipVisible ? " fullscreen-player__mask-wrap--visible" : ""}`}
         >
           <FullscreenVideoMask className="fullscreen-player__mask">
           <video

@@ -1061,13 +1061,47 @@ body {
 }
 
 /* 全画面再生 — 星空背景 + 円形マスク */
+.fullscreen-player {
+  background: transparent;
+}
+
+.fullscreen-player--entering {
+  background: transparent;
+  animation: fullscreen-player-bg-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.fullscreen-player--entered {
+  background: #010102;
+}
+
 .fullscreen-player__backdrop {
   opacity: 0;
-  transition: opacity 0.38s ease 0.06s;
+}
+
+.fullscreen-player--entering .fullscreen-player__backdrop {
+  animation: fullscreen-backdrop-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .fullscreen-player--entered .fullscreen-player__backdrop {
   opacity: 1;
+}
+
+@keyframes fullscreen-player-bg-enter {
+  from {
+    background: transparent;
+  }
+  to {
+    background: #010102;
+  }
+}
+
+@keyframes fullscreen-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .fullscreen-player--exiting .fullscreen-player__backdrop {
@@ -1093,6 +1127,13 @@ body {
   position: relative;
   width: min(calc(100vw - 2rem), calc(100dvh - 15.5rem), 100%);
   max-width: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fullscreen-player__mask-wrap--visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .fullscreen-player--exiting .fullscreen-player__mask-wrap {
@@ -1389,6 +1430,18 @@ body {
       bubble-float-x var(--duration-x, 5s) ease-in-out infinite,
       bubble-float-y var(--duration-y, 6.5s) ease-in-out infinite;
     animation-delay: var(--delay-x, 0s), var(--delay-y, 0s);
+  }
+
+  .fullscreen-player--entering,
+  .fullscreen-player--entered {
+    animation: none !important;
+    background: #010102 !important;
+  }
+
+  .fullscreen-player__mask-wrap,
+  .fullscreen-player__mask-wrap--visible {
+    opacity: 1 !important;
+    pointer-events: auto !important;
   }
 
   .fullscreen-player__backdrop,

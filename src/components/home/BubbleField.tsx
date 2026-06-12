@@ -42,6 +42,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
     video: FeedVideo;
     origin: BubbleOriginRect;
   } | null>(null);
+  const [hiddenBubbleId, setHiddenBubbleId] = useState<string | null>(null);
   const [bubbleSpawnGeneration, setBubbleSpawnGeneration] = useState(0);
   const [feedPool, setFeedPool] = useState<FeedVideo[]>([]);
   const [activeBubbles, setActiveBubbles] = useState<FeedVideo[]>([]);
@@ -154,6 +155,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
   );
 
   const handleSelect = useCallback((video: FeedVideo, origin: BubbleOriginRect) => {
+    setHiddenBubbleId(null);
     setSelection({ video, origin });
   }, []);
 
@@ -174,6 +176,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
     async (report: WatchReport) => {
       const watched = selection?.video;
       setSelection(null);
+      setHiddenBubbleId(null);
       if (!watched) return;
 
       sessionWatchedIdsRef.current.add(watched.id);
@@ -293,7 +296,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
                   placement={placement}
                   floatStyle={floatStyle}
                   glassStyle={glassStyle}
-                  isHidden={selection?.video.id === video.id}
+                  isHidden={hiddenBubbleId === video.id}
                   spawnAnimate={bubbleSpawnGeneration > 0}
                   spawnIndex={index}
                   onSelect={(origin) => handleSelect(video, origin)}
@@ -310,6 +313,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
         <FullscreenPlayer
           video={selection.video}
           originRect={selection.origin}
+          onFlipStart={() => setHiddenBubbleId(selection.video.id)}
           onClose={handleClose}
           onLikeEngagement={handleLikeEngagement}
           onCommentEngagement={handleCommentEngagement}

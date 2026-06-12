@@ -65,7 +65,7 @@ export function VideoBubble({
   onSelect,
   zIndex,
 }: VideoBubbleProps) {
-  const bubbleRef = useRef<HTMLButtonElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const diameter = placement.radius * 2;
   const isViral = video.isViralTop ?? false;
   const displayUrls = useMemo(
@@ -79,12 +79,13 @@ export function VideoBubble({
   );
 
   const handleClick = useCallback(() => {
-    if (isHidden || !bubbleRef.current) return;
-    onSelect(getBubbleOriginRect(bubbleRef.current));
+    if (isHidden || !wrapperRef.current) return;
+    onSelect(getBubbleOriginRect(wrapperRef.current));
   }, [isHidden, onSelect]);
 
   return (
     <div
+      ref={wrapperRef}
       className={`bubble-float pointer-events-auto absolute${spawnAnimate ? " bubble-float--spawn" : ""}${isHidden ? " bubble-float--hidden" : ""}`}
       style={
         {
@@ -99,7 +100,6 @@ export function VideoBubble({
       }
     >
       <button
-        ref={bubbleRef}
         type="button"
         aria-label={`${video.title} by ${video.creatorName}`}
         onClick={handleClick}
