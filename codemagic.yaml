@@ -100,9 +100,11 @@ workflows:
 
       - name: Fetch signing files (create certificate & profile if missing)
         script: |
+          set -e
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
-            --create
+            --create \
+            --certificate-key @env:CERTIFICATE_PRIVATE_KEY
 
       - name: Add certificates to keychain
         script: keychain add-certificates
