@@ -20,23 +20,23 @@ export function HomeScreen() {
   }, []);
 
   return (
-    <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-[#020208]">
+    <div className="app-page relative flex flex-col overflow-hidden bg-[#020208]">
       <HomeStarfieldBackground />
-      <header className="z-header relative flex shrink-0 items-center justify-between px-4 pb-1 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-5 sm:pb-2 sm:pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div>
-          <h1 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">
+      <header className="z-header relative flex shrink-0 items-center justify-between gap-2 px-4 pb-1 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-5 sm:pb-2 sm:pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
             ?Seconds
           </h1>
           {assignedSeconds !== null ? (
-            <p className="text-[10px] text-violet-200/90 sm:text-xs">
+            <p className="truncate text-[10px] text-violet-200/90 sm:text-xs">
               今日の撮影時間は{assignedSeconds}秒です
             </p>
           ) : (
-            <p className="text-[10px] text-muted sm:text-xs">Yesterday&apos;s moments</p>
+            <p className="truncate text-[10px] text-muted sm:text-xs">Yesterday&apos;s moments</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full border border-border bg-surface-elevated px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted sm:px-3 sm:py-1 sm:text-[10px]">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <span className="hidden rounded-full border border-border bg-surface-elevated px-2.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-muted sm:inline sm:px-3 sm:py-1 sm:text-[10px]">
             {countryCode} #1
           </span>
           <NotificationBell />

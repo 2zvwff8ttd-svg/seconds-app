@@ -12,8 +12,13 @@ import {
   startNativeRecording,
   stopNativePreview,
   stopNativeRecording,
-  type NativePreviewRect,
 } from "@/lib/recording/native-camera-preview";
+import {
+  describePreviewRectFailure,
+  logPreviewRectFailure,
+  readPreviewRect,
+  resolvePreviewRect,
+} from "@/lib/recording/native-preview-rect";
 import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
 import { nativeVideoPathToFile } from "@/lib/recording/native-recording-file";
 import {
@@ -66,18 +71,11 @@ export function NativeCameraRecorder({
     return Math.max(0, assignedSeconds - usedClipSeconds - elapsed);
   }, [assignedSeconds, usedClipSeconds, isRecording, tick]);
 
-  const getPreviewRect = useCallback((): NativePreviewRect | null => {
-    const el = previewHostRef.current;
-    if (!el) return null;
-    const rect = el.getBoundingClientRect();
-    if (rect.width < 2 || rect.height < 2) return null;
-    return {
-      x: Math.round(rect.left),
-      y: Math.round(rect.top),
-      width: Math.round(rect.width),
-      height: Math.round(rect.height),
-    };
-  }, []);
+  const getPreviewHost = useCallback(() => previewHostRef.current, []);
+
+  const resolveRect = useCallback(async () => {
+    return resolvePreviewRect(getPreviewHost);
+  }, [getPreviewHost]);
 
   const clearTick = useCallback(() => {
     if (tickRef.current !== null) {
@@ -123,9 +121,15 @@ export function NativeCameraRecorder({
   );
 
   const ensurePreview = useCallback(async () => {
-    if (isRecording || previewStartedRef.current) return;
-    const rect = getPreviewRect();
-    if (!rect) return;
+    if (isRecording || previewStartedRef.current) return false;
+
+    const rect = await resolveRect();
+    if (!rect) {
+      const host = getPreviewHost();
+      logPreviewRectFailure("ensurePreview", host);
+      setError(describePreviewRectFailure(host));
+      return false;
+    }
 
     setCameraStarting(true);
     setError(null);
@@ -136,16 +140,18 @@ export function NativeCameraRecorder({
       });
       previewStartedRef.current = true;
       setCameraReady(true);
+      return true;
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "カメラプレビューの起動に失敗しました",
       );
       setCameraReady(false);
       previewStartedRef.current = false;
+      return false;
     } finally {
       setCameraStarting(false);
     }
-  }, [facingMode, getPreviewRect, isRecording]);
+  }, [facingMode, getPreviewHost, isRecording, resolveRect]);
 
   useEffect(() => {
     if (assignedSeconds === null || disabled) return;
@@ -156,6 +162,21 @@ export function NativeCameraRecorder({
 
     return () => window.clearTimeout(boot);
   }, [assignedSeconds, disabled, ensurePreview]);
+
+  useEffect(() => {
+    const host = previewHostRef.current;
+    if (!host || assignedSeconds === null || disabled) return;
+
+    const observer = new ResizeObserver(() => {
+      if (previewStartedRef.current || isRecording || cameraStarting) return;
+      const rect = readPreviewRect(host);
+      if (!rect) return;
+      void ensurePreview();
+    });
+
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [assignedSeconds, cameraStarting, disabled, ensurePreview, isRecording]);
 
   useEffect(() => {
     return () => {
@@ -217,15 +238,20 @@ export function NativeCameraRecorder({
     const budget = assignedSeconds - usedClipSeconds;
     if (budget <= 0) return;
 
-    const rect = getPreviewRect();
+    const rect = await resolveRect();
     if (!rect) {
-      setError("プレビュー領域を取得できませんでした");
+      const host = getPreviewHost();
+      logPreviewRectFailure("beginRecording", host);
+      setError(describePreviewRectFailure(host));
       return;
     }
 
     if (!cameraReady) {
-      await ensurePreview();
-      if (!previewStartedRef.current) return;
+      const started = await ensurePreview();
+      if (!started) {
+        setError((prev) => prev ?? "カメラプレビューの起動に失敗しました");
+        return;
+      }
     }
 
     setError(null);
@@ -264,11 +290,13 @@ export function NativeCameraRecorder({
     assignedSeconds,
     cameraReady,
     clearAutoStop,
+    clearTick,
     disabled,
     ensurePreview,
     facingMode,
-    getPreviewRect,
+    getPreviewHost,
     isRecording,
+    resolveRect,
     usedClipSeconds,
   ]);
 
@@ -336,7 +364,7 @@ export function NativeCameraRecorder({
       <div
         id={NATIVE_CAMERA_PREVIEW_ID}
         ref={previewHostRef}
-        className="relative aspect-[9/16] max-h-[52vh] w-full bg-transparent"
+        className="native-camera-preview-host bg-transparent"
       >
         <TimeBudgetGauge
           assignedSeconds={assignedSeconds}
@@ -427,7 +455,10 @@ export function NativeCameraRecorder({
       </div>
 
       {error && (
-        <p className="border-t border-border bg-red-500/10 px-4 py-2 text-xs text-red-400">
+        <p
+          role="alert"
+          className="border-t border-border bg-red-500/10 px-4 py-2 text-xs text-red-400"
+        >
           {error}
         </p>
       )}

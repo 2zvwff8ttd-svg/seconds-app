@@ -44,6 +44,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -54,9 +55,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full`}
+      className={`${geistSans.variable} ${geistMono.variable} app-root h-full`}
     >
-      <body className="h-full overflow-hidden bg-black text-foreground antialiased">
+      <body className="app-body h-full overflow-hidden bg-black text-foreground antialiased">
         <ClientAppGate>{children}</ClientAppGate>
       </body>
     </html>
