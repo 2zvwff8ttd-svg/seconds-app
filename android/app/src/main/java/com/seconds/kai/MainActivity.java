@@ -1,4 +1,4 @@
-package com.seconds.app;
+package com.seconds.kai;
 
 import android.graphics.Color;
 import android.os.Bundle;

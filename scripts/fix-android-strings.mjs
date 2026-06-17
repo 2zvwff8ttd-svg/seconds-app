@@ -17,8 +17,8 @@ const SAFE_STRINGS = `<?xml version="1.0" encoding="utf-8"?>
     <!-- launcher_name uses \\u003f prefix for question mark (safe for aapt) -->
     <string name="launcher_name">\\u003fSeconds</string>
     <string name="title_activity_main">@string/launcher_name</string>
-    <string name="package_name">com.seconds.app</string>
-    <string name="custom_url_scheme">com.seconds.app</string>
+    <string name="package_name">com.seconds.kai</string>
+    <string name="custom_url_scheme">com.seconds.kai</string>
 </resources>
 `;
 

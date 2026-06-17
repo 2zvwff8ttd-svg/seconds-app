@@ -92,7 +92,7 @@ workflows:
 #       xcode: latest
 #       ios_signing:
 #         distribution_type: app_store
-#         bundle_identifier: com.seconds.app
+#         bundle_identifier: com.seconds.kai
 #       vars:
 #         XCODE_SCHEME: App
 #         XCODE_PROJECT: ios/App/App.xcodeproj
