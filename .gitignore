@@ -25,6 +25,7 @@
 .DS_Store
 *.pem
 key.pem
+key_base64.txt
 *.mp4
 *.MP4
 *.mov

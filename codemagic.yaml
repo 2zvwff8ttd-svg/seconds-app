@@ -83,7 +83,7 @@ workflows:
         XCODE_PROJECT: ios/App/App.xcodeproj
         NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
         NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci-compile-check
-        # CERTIFICATE_PRIVATE_KEY は groups: appstore_credentials に登録（encrypted）
+        # CERTIFICATE_PRIVATE_KEY: key_base64.txt の1行Base64文字列を appstore_credentials に登録（encrypted）
 
     scripts:
       - name: Install npm dependencies
@@ -101,10 +101,12 @@ workflows:
       - name: Fetch signing files (create certificate & profile if missing)
         script: |
           set -e
+          CERTIFICATE_KEY_PATH="$HOME/certificate_private_key.pem"
+          echo "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > "$CERTIFICATE_KEY_PATH"
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create \
-            --certificate-key @env:CERTIFICATE_PRIVATE_KEY
+            --certificate-key "@file:$CERTIFICATE_KEY_PATH"
 
       - name: Add certificates to keychain
         script: keychain add-certificates
