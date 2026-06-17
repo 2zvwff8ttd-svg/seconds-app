@@ -75,14 +75,18 @@ workflows:
     environment:
       node: 22
       xcode: latest
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.seconds.kai
       vars:
+        BUNDLE_ID: com.seconds.kai
         XCODE_SCHEME: App
         XCODE_PROJECT: ios/App/App.xcodeproj
         NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
         NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci-compile-check
+        # fetch-signing-files --create が証明書を新規作成する場合に必要。
+        # Codemagic → Team settings → Environment variables に
+        # CERTIFICATE_PRIVATE_KEY（RSA秘密鍵 PEM）を encrypted で登録してください。
+        # 未登録で create が失敗する場合:
+        #   openssl genpkey -algorithm RSA -out key.pem -pkeyopt rsa_keygen_bits:2048
+        #   内容を CERTIFICATE_PRIVATE_KEY に登録
 
     scripts:
       - name: Install npm dependencies
@@ -93,6 +97,18 @@ workflows:
 
       - name: Sync Capacitor iOS (web assets + SPM plugins)
         script: npx cap sync ios
+
+      - name: Set up keychain
+        script: keychain initialize
+
+      - name: Fetch signing files (create certificate & profile if missing)
+        script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+      - name: Add certificates to keychain
+        script: keychain add-certificates
 
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
