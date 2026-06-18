@@ -201,10 +201,30 @@ const pluginStartRecordNew = `    @objc func startRecordVideo(_ call: CAPPluginC
                     call.reject("Recording failed")
                     return
                 }
-                call.resolve(["videoFilePath": url.path])
+                var payload: [String: Any] = [
+                    "videoFilePath": url.path,
+                    "videoFileName": url.lastPathComponent,
+                ]
+                if let data = try? Data(contentsOf: url), !data.isEmpty {
+                    payload["videoBase64"] = data.base64EncodedString()
+                    payload["videoFileSize"] = data.count
+                }
+                call.resolve(payload)
             }
         }
     }`;
+
+const stopRecordVideoPathOnlyOld = `                call.resolve(["videoFilePath": url.path])`;
+
+const stopRecordVideoPathOnlyNew = `                var payload: [String: Any] = [
+                    "videoFilePath": url.path,
+                    "videoFileName": url.lastPathComponent,
+                ]
+                if let data = try? Data(contentsOf: url), !data.isEmpty {
+                    payload["videoBase64"] = data.base64EncodedString()
+                    payload["videoFileSize"] = data.count
+                }
+                call.resolve(payload)`;
 
 /** Stock plugin (no movieFileOutput line) */
 const updateVideoOrientationStockOld = `    func updateVideoOrientation() {
@@ -578,4 +598,10 @@ await patchFile(
   pluginPath,
   [[pluginStartRecordOld, pluginStartRecordNew]],
   "CameraPreviewPlugin.swift",
+);
+
+await patchFile(
+  pluginPath,
+  [[stopRecordVideoPathOnlyOld, stopRecordVideoPathOnlyNew]],
+  "CameraPreviewPlugin.swift (stopRecordVideo base64)",
 );

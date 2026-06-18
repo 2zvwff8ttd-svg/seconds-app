@@ -118,18 +118,32 @@ export async function syncNativePreviewLayout(
 
 export type NativeRecordingResult = {
   videoFilePath: string;
+  videoFileName?: string;
+  videoBase64?: string;
+  videoFileSize?: number;
 };
 
 export async function stopNativeRecording(): Promise<NativeRecordingResult> {
   return enqueueNativePreviewOp("stopNativeRecording", async () => {
     const result = (await CameraPreview.stopRecordVideo()) as unknown as {
       videoFilePath?: string;
+      videoFileName?: string;
+      videoBase64?: string;
+      videoFileSize?: number;
       value?: string;
     };
     const path = result.videoFilePath?.trim() || result.value?.trim();
     if (!path) {
       throw new Error("録画ファイルのパスを取得できませんでした");
     }
-    return { videoFilePath: path };
+    return {
+      videoFilePath: path,
+      videoFileName: result.videoFileName?.trim() || undefined,
+      videoBase64: result.videoBase64?.trim() || undefined,
+      videoFileSize:
+        typeof result.videoFileSize === "number"
+          ? result.videoFileSize
+          : undefined,
+    };
   });
 }

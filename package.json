@@ -24,6 +24,7 @@
     "@capacitor-community/camera-preview": "^8.0.1",
     "@capacitor/android": "^8.4.0",
     "@capacitor/core": "^8.4.0",
+    "@capacitor/filesystem": "^8.1.2",
     "@capacitor/ios": "^8.4.0",
     "@ffmpeg/core": "^0.12.9",
     "@ffmpeg/ffmpeg": "^0.12.15",

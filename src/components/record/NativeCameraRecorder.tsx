@@ -22,7 +22,7 @@ import {
 } from "@/lib/recording/native-preview-rect";
 import { debounceAsync } from "@/lib/recording/native-preview-scheduler";
 import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
-import { nativeVideoPathToFile } from "@/lib/recording/native-recording-file";
+import { nativeVideoSourceToFile } from "@/lib/recording/native-recording-file";
 import {
   measureRecordingSeconds,
   scheduleRecordingAutoStop,
@@ -290,10 +290,15 @@ export function NativeCameraRecorder({
     setIsRecording(false);
 
     try {
-      const { videoFilePath } = await stopNativeRecording();
-      console.info("[NativeCameraRecorder] stopNativeRecording path:", videoFilePath);
+      const recording = await stopNativeRecording();
+      console.info("[NativeCameraRecorder] stopNativeRecording", {
+        path: recording.videoFilePath,
+        fileName: recording.videoFileName,
+        fileSize: recording.videoFileSize,
+        hasBase64: Boolean(recording.videoBase64),
+      });
 
-      const file = await nativeVideoPathToFile(videoFilePath);
+      const file = await nativeVideoSourceToFile(recording);
 
       let durationSeconds = Math.min(
         budget,

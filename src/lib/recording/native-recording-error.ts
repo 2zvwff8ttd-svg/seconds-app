@@ -11,9 +11,17 @@ export function formatNativeRecordingError(err: unknown): string {
   if (
     lower.includes("load failed") ||
     lower.includes("xhr load failed") ||
-    lower.includes("fetch")
+    lower.includes("webview fetch")
   ) {
     return "録画ファイルの読み込みに失敗しました。もう一度録画してお試しください。";
+  }
+
+  if (lower.includes("filesystem")) {
+    return "録画ファイルを端末から読み込めませんでした。アプリを再起動してお試しください。";
+  }
+
+  if (lower.includes("ネイティブから受け取った") || lower.includes("native-base64")) {
+    return "録画データの受け取りに失敗しました。もう一度録画してお試しください。";
   }
 
   if (lower.includes("動画の読み込み") || lower.includes("metadata")) {
