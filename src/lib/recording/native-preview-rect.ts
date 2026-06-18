@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import type { NativePreviewRect } from "@/lib/recording/native-camera-preview";
 
 const MIN_PREVIEW_DIM = 2;
@@ -14,18 +15,51 @@ async function waitForLayoutFrame(): Promise<void> {
   });
 }
 
+function getViewportOffsets(): { offsetX: number; offsetY: number } {
+  const vv = window.visualViewport;
+  return {
+    offsetX: vv?.offsetLeft ?? 0,
+    offsetY: vv?.offsetTop ?? 0,
+  };
+}
+
+/** DOM 上のプレビュー枠（CSS px） */
 export function readPreviewRect(el: HTMLElement | null): NativePreviewRect | null {
   if (!el) return null;
   const rect = el.getBoundingClientRect();
   if (rect.width < MIN_PREVIEW_DIM || rect.height < MIN_PREVIEW_DIM) {
     return null;
   }
+  const { offsetX, offsetY } = getViewportOffsets();
   return {
-    x: Math.round(rect.left),
-    y: Math.round(rect.top),
+    x: Math.round(rect.left - offsetX),
+    y: Math.round(rect.top - offsetY),
     width: Math.round(rect.width),
     height: Math.round(rect.height),
   };
+}
+
+/**
+ * camera-preview プラグインへ渡す座標。
+ * iOS ネイティブ側は x/y を UIScreen.main.scale で割るが width/height は割らない。
+ */
+export function toPluginPreviewRect(rect: NativePreviewRect): NativePreviewRect {
+  if (Capacitor.getPlatform() !== "ios") {
+    return rect;
+  }
+  const scale = window.devicePixelRatio || 1;
+  return {
+    x: Math.round(rect.x * scale),
+    y: Math.round(rect.y * scale),
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+export function formatPreviewRectDebug(rect: NativePreviewRect): string {
+  const plugin = toPluginPreviewRect(rect);
+  const scale = window.devicePixelRatio || 1;
+  return `dom=${rect.x},${rect.y} ${rect.width}×${rect.height} → plugin=${plugin.x},${plugin.y} ${plugin.width}×${plugin.height} (dpr=${scale})`;
 }
 
 export function describePreviewRectFailure(el: HTMLElement | null): string {
@@ -37,10 +71,11 @@ export function describePreviewRectFailure(el: HTMLElement | null): string {
   const h = Math.round(rect.height);
   const vw = Math.round(window.visualViewport?.width ?? window.innerWidth);
   const vh = Math.round(window.visualViewport?.height ?? window.innerHeight);
-  return `プレビュー領域のサイズを取得できません（${w}×${h}px、画面 ${vw}×${vh}px）`;
+  const { offsetX, offsetY } = getViewportOffsets();
+  return `プレビュー領域のサイズを取得できません（${w}×${h}px、画面 ${vw}×${vh}px、viewport offset ${Math.round(offsetX)},${Math.round(offsetY)}）`;
 }
 
-/** レイアウト確定まで待ってから getBoundingClientRect を返す */
+/** レイアウト確定まで待ってから rect を返す（プラグイン座標系） */
 export async function resolvePreviewRect(
   getEl: () => HTMLElement | null,
   options?: { maxAttempts?: number },
@@ -49,8 +84,14 @@ export async function resolvePreviewRect(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     await waitForLayoutFrame();
-    const rect = readPreviewRect(getEl());
-    if (rect) return rect;
+    const domRect = readPreviewRect(getEl());
+    if (domRect) {
+      const pluginRect = toPluginPreviewRect(domRect);
+      console.info(
+        `[NativeCameraRecorder] resolvePreviewRect: ${formatPreviewRectDebug(domRect)}`,
+      );
+      return pluginRect;
+    }
     if (attempt < maxAttempts - 1) {
       await waitMs(RETRY_INTERVAL_MS);
     }

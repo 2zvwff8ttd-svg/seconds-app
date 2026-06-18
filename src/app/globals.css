@@ -1644,9 +1644,11 @@ html.record-native-preview-active body {
   max-height: min(52dvh, calc(100vw * 16 / 9));
   aspect-ratio: 9 / 16;
   flex-shrink: 0;
+  border-radius: 1rem;
+  overflow: hidden;
 }
 
 .native-camera-preview-mask {
-  clip-path: circle(42% at 50% 46%);
-  border-radius: 50%;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.22);
 }

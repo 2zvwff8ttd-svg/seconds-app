@@ -21,5 +21,9 @@ export function formatNativeRecordingError(err: unknown): string {
     return "カメラが起動していません。画面を開き直してから再度お試しください。";
   }
 
+  if (lower.includes("recording failed") || lower.includes("invalid operation")) {
+    return "録画を開始できませんでした。もう一度お試しください。";
+  }
+
   return raw.trim() || "録画の開始に失敗しました";
 }

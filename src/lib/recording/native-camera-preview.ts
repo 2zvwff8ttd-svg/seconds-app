@@ -17,6 +17,19 @@ export type StartNativePreviewOptions = NativePreviewRect & {
   position: CameraPosition;
 };
 
+function withPluginTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
 function buildPreviewOptions(
   opts: StartNativePreviewOptions,
 ): CameraPreviewOptions {
@@ -29,6 +42,7 @@ function buildPreviewOptions(
     position: opts.position,
     toBack: true,
     disableAudio: false,
+    rotateWhenOrientationChanged: false,
   };
 }
 
@@ -56,7 +70,24 @@ export async function flipNativeCamera(): Promise<void> {
 export async function startNativeRecording(
   opts: StartNativePreviewOptions,
 ): Promise<void> {
-  await CameraPreview.startRecordVideo(buildPreviewOptions(opts));
+  await withPluginTimeout(
+    CameraPreview.startRecordVideo(buildPreviewOptions(opts)),
+    12_000,
+    "録画の開始がタイムアウトしました",
+  );
+}
+
+/** プレビュー枠の移動・リサイズ後にネイティブ表示位置を同期 */
+export async function syncNativePreviewLayout(
+  opts: StartNativePreviewOptions,
+): Promise<void> {
+  const started = await CameraPreview.isCameraStarted();
+  if (!started.value) {
+    await startNativePreview(opts);
+    return;
+  }
+  await CameraPreview.stop();
+  await CameraPreview.start(buildPreviewOptions(opts));
 }
 
 export type NativeRecordingResult = {
@@ -66,9 +97,11 @@ export type NativeRecordingResult = {
 export async function stopNativeRecording(): Promise<NativeRecordingResult> {
   const result = (await CameraPreview.stopRecordVideo()) as unknown as {
     videoFilePath?: string;
+    value?: string;
   };
-  if (!result.videoFilePath?.trim()) {
+  const path = result.videoFilePath?.trim() || result.value?.trim();
+  if (!path) {
     throw new Error("録画ファイルのパスを取得できませんでした");
   }
-  return { videoFilePath: result.videoFilePath.trim() };
+  return { videoFilePath: path };
 }

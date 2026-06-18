@@ -12,6 +12,7 @@ import {
   startNativeRecording,
   stopNativePreview,
   stopNativeRecording,
+  syncNativePreviewLayout,
 } from "@/lib/recording/native-camera-preview";
 import {
   describePreviewRectFailure,
@@ -163,11 +164,29 @@ export function NativeCameraRecorder({
     return () => window.clearTimeout(boot);
   }, [assignedSeconds, disabled, ensurePreview]);
 
+  const syncPreviewLayout = useCallback(async () => {
+    if (isRecording || !previewStartedRef.current) return;
+    const rect = await resolveRect();
+    if (!rect) return;
+    try {
+      await syncNativePreviewLayout({
+        ...rect,
+        position: facingToPosition(facingMode),
+      });
+    } catch (err) {
+      console.warn("[NativeCameraRecorder] syncPreviewLayout", err);
+    }
+  }, [facingMode, isRecording, resolveRect]);
+
   useEffect(() => {
     const host = previewHostRef.current;
     if (!host || assignedSeconds === null || disabled) return;
 
     const observer = new ResizeObserver(() => {
+      if (previewStartedRef.current && !isRecording && !cameraStarting) {
+        void syncPreviewLayout();
+        return;
+      }
       if (previewStartedRef.current || isRecording || cameraStarting) return;
       const rect = readPreviewRect(host);
       if (!rect) return;
@@ -176,7 +195,28 @@ export function NativeCameraRecorder({
 
     observer.observe(host);
     return () => observer.disconnect();
-  }, [assignedSeconds, cameraStarting, disabled, ensurePreview, isRecording]);
+  }, [
+    assignedSeconds,
+    cameraStarting,
+    disabled,
+    ensurePreview,
+    isRecording,
+    syncPreviewLayout,
+  ]);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onViewportChange = () => {
+      void syncPreviewLayout();
+    };
+    vv.addEventListener("resize", onViewportChange);
+    vv.addEventListener("scroll", onViewportChange);
+    return () => {
+      vv.removeEventListener("resize", onViewportChange);
+      vv.removeEventListener("scroll", onViewportChange);
+    };
+  }, [syncPreviewLayout]);
 
   useEffect(() => {
     return () => {
@@ -254,14 +294,25 @@ export function NativeCameraRecorder({
       }
     }
 
+    const recordRect = await resolveRect();
+    if (!recordRect) {
+      const host = getPreviewHost();
+      logPreviewRectFailure("beginRecording(final)", host);
+      setError(describePreviewRectFailure(host));
+      return;
+    }
+
     setError(null);
     finishingRef.current = false;
     recordBudgetRef.current = budget;
     setRecordingStarting(true);
 
     try {
+      console.info(
+        `[NativeCameraRecorder] startNativeRecording: ${recordRect.width}×${recordRect.height} at ${recordRect.x},${recordRect.y}`,
+      );
       await startNativeRecording({
-        ...rect,
+        ...recordRect,
         position: facingToPosition(facingMode),
       });
     } catch (err) {
@@ -373,9 +424,15 @@ export function NativeCameraRecorder({
         />
 
         <div
-          className="native-camera-preview-mask pointer-events-none absolute inset-0 z-10 rounded-full border-2 border-white/25 shadow-[inset_0_0_24px_rgba(0,0,0,0.35)]"
+          className="native-camera-preview-mask pointer-events-none absolute inset-0 z-10"
           aria-hidden
         />
+
+        {recordingStarting && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 text-sm font-medium text-foreground">
+            録画を開始しています…
+          </div>
+        )}
 
         {!cameraReady && !isRecording && !error && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/70 px-6 text-center">
