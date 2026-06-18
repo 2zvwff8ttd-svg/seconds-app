@@ -38,20 +38,8 @@ workflows:
       - name: Sync Capacitor iOS (web assets + SPM plugins)
         script: npx cap sync ios
 
-      - name: Build iOS without code signing (compile check only)
-        script: |
-          set -eo pipefail
-          mkdir -p /tmp/xcodebuild_logs
-          xcodebuild build \
-            -project "$CM_BUILD_DIR/$XCODE_PROJECT" \
-            -scheme "$XCODE_SCHEME" \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee /tmp/xcodebuild_logs/build.log
+      - name: Compile check iOS (unsigned)
+        script: bash scripts/compile-check-ios.sh
 
     artifacts:
       - /tmp/xcodebuild_logs/*.log
@@ -102,6 +90,9 @@ workflows:
 
       - name: Sync Capacitor iOS (web assets + SPM plugins)
         script: npx cap sync ios
+
+      - name: Compile check iOS (unsigned, before signing)
+        script: bash scripts/compile-check-ios.sh
 
       - name: Set up keychain
         script: keychain initialize

@@ -818,8 +818,32 @@ const displayPreviewFrameOld = `        view.layer.insertSublayer(self.previewLa
         self.previewLayer?.frame = view.frame`;
 
 const displayPreviewFrameNew = `        view.layer.insertSublayer(self.previewLayer!, at: 0)
+        self.syncPreviewLayerFrame(in: view)`;
+
+const syncPreviewLayerFrameOld = `    func displayPreview(on view: UIView) throws {
+        guard let captureSession = self.captureSession, captureSession.isRunning else { throw CameraControllerError.captureSessionIsMissing }`;
+
+const syncPreviewLayerFrameNew = `    func syncPreviewLayerFrame(in view: UIView) {
+        guard let previewLayer = self.previewLayer else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        previewLayer.frame = view.bounds
+        CATransaction.commit()
+    }
+
+    func displayPreview(on view: UIView) throws {
+        guard let captureSession = self.captureSession, captureSession.isRunning else { throw CameraControllerError.captureSessionIsMissing }`;
+
+const displayPreviewFrameBoundsOnlyOld = `        view.layer.insertSublayer(self.previewLayer!, at: 0)
+        self.previewLayer?.frame = view.bounds`;
+
+const displayPreviewFrameWithMaskOld = `        view.layer.insertSublayer(self.previewLayer!, at: 0)
         self.previewLayer?.frame = view.bounds
         self.previewLayer?.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]`;
+
+const displayPreviewFrameFlexibleMaskOld = `        view.layer.insertSublayer(self.previewLayer!, at: 0)
+        self.previewLayer?.frame = view.bounds
+        self.previewLayer?.autoresizingMask = [.flexibleWidth, .flexibleHeight]`;
 
 const switchCamerasCommitOld = `        captureSession.commitConfiguration()
 
@@ -845,18 +869,89 @@ const switchCamerasCommitNew = `        captureSession.commitConfiguration()
         }
     }`;
 
-const displayPreviewFrameWrongMaskOld = `        self.previewLayer?.autoresizingMask = [.flexibleWidth, .flexibleHeight]`;
-const displayPreviewFrameWrongMaskNew = `        self.previewLayer?.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]`;
-
 await patchFile(
   controllerPath,
   [
     [naturalPreviewHelperOld, naturalPreviewHelperNew],
     [createCaptureSessionOld, createCaptureSessionNew],
     [configureCaptureDevicesOld, configureCaptureDevicesNew],
+    [syncPreviewLayerFrameOld, syncPreviewLayerFrameNew],
     [displayPreviewFrameOld, displayPreviewFrameNew],
-    [displayPreviewFrameWrongMaskOld, displayPreviewFrameWrongMaskNew],
+    [displayPreviewFrameBoundsOnlyOld, displayPreviewFrameNew],
+    [displayPreviewFrameWithMaskOld, displayPreviewFrameNew],
+    [displayPreviewFrameFlexibleMaskOld, displayPreviewFrameNew],
     [switchCamerasCommitOld, switchCamerasCommitNew],
   ],
   "CameraController.swift (natural preview FOV)",
+);
+
+// Strip any leftover CALayer.autoresizingMask assignments (unavailable on iOS).
+let controllerAfterPatches = await readFile(controllerPath, "utf8");
+const strippedController = controllerAfterPatches.replace(
+  /[ \t]*self\.previewLayer\?\.autoresizingMask = \[[^\]]+\]\r?\n/g,
+  "",
+);
+if (strippedController !== controllerAfterPatches) {
+  await writeFile(controllerPath, strippedController, "utf8");
+  console.log(
+    "[patch-camera-preview-ios] removed previewLayer.autoresizingMask (unavailable on iOS)",
+  );
+}
+
+const pluginHostViewInsertOld = `import UIKit
+
+/**
+ * Please read the Capacitor iOS Plugin Development Guide
+ * here: https://capacitor.ionicframework.com/docs/plugins/ios
+ */
+@objc(CameraPreview)`;
+
+const pluginHostViewInsertNew = `import UIKit
+
+/// seconds-app: resizes preview layer in layoutSubviews (CALayer.autoresizingMask is unavailable on iOS).
+private final class CameraPreviewHostView: UIView {
+    weak var cameraController: CameraController?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if let cameraController = cameraController {
+            cameraController.syncPreviewLayerFrame(in: self)
+        }
+    }
+}
+
+/**
+ * Please read the Capacitor iOS Plugin Development Guide
+ * here: https://capacitor.ionicframework.com/docs/plugins/ios
+ */
+@objc(CameraPreview)`;
+
+const pluginPreviewHostViewOld = `                    self.previewView = UIView(frame: self.previewFrameInSuperview(
+                        x: self.x ?? 0,
+                        y: self.y ?? 0,
+                        width: width,
+                        height: height
+                    ))`;
+
+const pluginPreviewHostViewNew = `                    let host = CameraPreviewHostView(frame: self.previewFrameInSuperview(
+                        x: self.x ?? 0,
+                        y: self.y ?? 0,
+                        width: width,
+                        height: height
+                    ))
+                    host.cameraController = self.cameraController
+                    self.previewView = host`;
+
+const pluginRotatedLayerFrameOld = `self.cameraController.previewLayer?.frame = previewView.frame`;
+
+const pluginRotatedLayerFrameNew = `self.cameraController.syncPreviewLayerFrame(in: previewView)`;
+
+await patchFile(
+  pluginPath,
+  [
+    [pluginHostViewInsertOld, pluginHostViewInsertNew],
+    [pluginPreviewHostViewOld, pluginPreviewHostViewNew],
+    [pluginRotatedLayerFrameOld, pluginRotatedLayerFrameNew],
+  ],
+  "CameraPreviewPlugin.swift (preview host layoutSubviews)",
 );

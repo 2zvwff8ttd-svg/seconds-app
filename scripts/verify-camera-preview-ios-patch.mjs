@@ -8,8 +8,33 @@ const controllerPath = resolve(
   process.cwd(),
   "node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraController.swift",
 );
+const pluginPath = resolve(
+  process.cwd(),
+  "node_modules/@capacitor-community/camera-preview/ios/Sources/CameraPreviewPlugin/CameraPreviewPlugin.swift",
+);
 
-const controller = await readFile(controllerPath, "utf8");
+const [controller, plugin] = await Promise.all([
+  readFile(controllerPath, "utf8"),
+  readFile(pluginPath, "utf8"),
+]);
+
+const forbiddenPatterns = [
+  {
+    label: "previewLayer autoresizingMask (unavailable on iOS)",
+    pattern: /previewLayer\?\.autoresizingMask/,
+    sources: [{ name: "CameraController.swift", content: controller }],
+  },
+  {
+    label: "CALayer flexibleWidth/flexibleHeight mask",
+    pattern: /\.flexibleWidth|\.flexibleHeight/,
+    sources: [{ name: "CameraController.swift", content: controller }],
+  },
+  {
+    label: "CALayer layerWidthSizable/layerHeightSizable mask",
+    pattern: /\.layerWidthSizable|\.layerHeightSizable/,
+    sources: [{ name: "CameraController.swift", content: controller }],
+  },
+];
 
 const checks = [
   {
@@ -40,22 +65,47 @@ const checks = [
     fail: "builtInWideAngleCamera default selection missing",
   },
   {
-    label: "preview layer uses CALayer autoresizing mask",
-    ok: controller.includes(
-      "autoresizingMask = [.layerWidthSizable, .layerHeightSizable]",
-    ),
-    fail: "previewLayer autoresizingMask must use layerWidthSizable/layerHeightSizable",
+    label: "syncPreviewLayerFrame helper",
+    ok: controller.includes("func syncPreviewLayerFrame(in view: UIView)"),
+    fail: "syncPreviewLayerFrame helper missing",
   },
   {
-    label: "preview layer does not use UIView autoresizing mask",
-    ok: !controller.includes(
-      "previewLayer?.autoresizingMask = [.flexibleWidth, .flexibleHeight]",
+    label: "displayPreview uses syncPreviewLayerFrame",
+    ok: controller.includes("self.syncPreviewLayerFrame(in: view)"),
+    fail: "displayPreview must call syncPreviewLayerFrame(in:)",
+  },
+  {
+    label: "CameraPreviewHostView layoutSubviews host",
+    ok: plugin.includes("class CameraPreviewHostView: UIView"),
+    fail: "CameraPreviewHostView missing in CameraPreviewPlugin.swift",
+  },
+  {
+    label: "rotated() syncs preview layer via host helper",
+    ok: plugin.includes(
+      "self.cameraController.syncPreviewLayerFrame(in: previewView)",
     ),
-    fail: "previewLayer must not use UIView flexibleWidth/flexibleHeight",
+    fail: "rotated() must call syncPreviewLayerFrame(in:)",
+  },
+  {
+    label: "plugin does not assign previewLayer.frame directly",
+    ok: !plugin.includes("previewLayer?.frame = previewView.frame"),
+    fail: "CameraPreviewPlugin must not set previewLayer.frame directly",
   },
 ];
 
 let failed = false;
+
+for (const forbidden of forbiddenPatterns) {
+  for (const source of forbidden.sources) {
+    if (forbidden.pattern.test(source.content)) {
+      console.error(
+        `[verify-camera-preview-ios] FAIL: forbidden API in ${source.name}: ${forbidden.label}`,
+      );
+      failed = true;
+    }
+  }
+}
+
 for (const check of checks) {
   if (check.ok) {
     console.log(`[verify-camera-preview-ios] OK: ${check.label}`);
