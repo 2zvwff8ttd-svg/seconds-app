@@ -1,7 +1,9 @@
 "use client";
 
 import { ClipPreviewModal } from "@/components/record/ClipPreviewModal";
+import { DisplayMaskMedia } from "@/components/video/DisplayMaskMedia";
 import { captureVideoFrameBlob } from "@/lib/video/frame-capture";
+import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
 import type { RecordedClip } from "@/types/recording";
 import { useEffect, useState } from "react";
 
@@ -9,9 +11,16 @@ type ClipStripProps = {
   clips: RecordedClip[];
   onRemove: (id: string) => void;
   disabled?: boolean;
+  displayMaskShape: VideoDisplayMaskShape;
 };
 
-function ClipThumbnail({ clip }: { clip: RecordedClip }) {
+function ClipThumbnail({
+  clip,
+  displayMaskShape,
+}: {
+  clip: RecordedClip;
+  displayMaskShape: VideoDisplayMaskShape;
+}) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -43,33 +52,46 @@ function ClipThumbnail({ clip }: { clip: RecordedClip }) {
 
   if (thumbUrl) {
     return (
-      <img
-        src={thumbUrl}
-        alt=""
-        className="h-24 w-[54px] object-cover"
-        draggable={false}
-      />
+      <DisplayMaskMedia shape={displayMaskShape} className="clip-strip-thumb">
+        <img
+          src={thumbUrl}
+          alt=""
+          className="clip-strip-thumb__media"
+          draggable={false}
+        />
+      </DisplayMaskMedia>
     );
   }
 
   if (failed) {
     return (
-      <div className="flex h-24 w-[54px] flex-col items-center justify-center bg-surface-elevated px-1 text-center text-[8px] leading-tight text-muted">
+      <DisplayMaskMedia
+        shape={displayMaskShape}
+        className="clip-strip-thumb flex flex-col items-center justify-center bg-surface-elevated px-1 text-center text-[8px] leading-tight text-muted"
+      >
         サムネ
         <br />
         なし
-      </div>
+      </DisplayMaskMedia>
     );
   }
 
   return (
-    <div className="flex h-24 w-[54px] items-center justify-center bg-surface-elevated">
+    <DisplayMaskMedia
+      shape={displayMaskShape}
+      className="clip-strip-thumb flex items-center justify-center bg-surface-elevated"
+    >
       <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
-    </div>
+    </DisplayMaskMedia>
   );
 }
 
-export function ClipStrip({ clips, onRemove, disabled }: ClipStripProps) {
+export function ClipStrip({
+  clips,
+  onRemove,
+  disabled,
+  displayMaskShape,
+}: ClipStripProps) {
   const [previewClipId, setPreviewClipId] = useState<string | null>(null);
   const previewClip = clips.find((clip) => clip.id === previewClipId) ?? null;
   const previewIndex = previewClip
@@ -89,7 +111,7 @@ export function ClipStrip({ clips, onRemove, disabled }: ClipStripProps) {
           {clips.map((clip, index) => (
             <li
               key={clip.id}
-              className="relative shrink-0 overflow-hidden rounded-lg border border-border bg-surface"
+              className="relative shrink-0 overflow-visible border-0 bg-transparent"
             >
               <button
                 type="button"
@@ -98,7 +120,7 @@ export function ClipStrip({ clips, onRemove, disabled }: ClipStripProps) {
                 className="relative block disabled:opacity-40"
                 aria-label={`クリップ ${index + 1} を再生`}
               >
-                <ClipThumbnail clip={clip} />
+                <ClipThumbnail clip={clip} displayMaskShape={displayMaskShape} />
                 <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] text-white">
                   {index + 1} · {clip.durationSeconds}s
                 </span>
@@ -123,6 +145,7 @@ export function ClipStrip({ clips, onRemove, disabled }: ClipStripProps) {
         <ClipPreviewModal
           clip={previewClip}
           index={previewIndex}
+          displayMaskShape={displayMaskShape}
           onClose={() => setPreviewClipId(null)}
           onRemove={disabled ? undefined : onRemove}
         />

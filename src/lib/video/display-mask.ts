@@ -29,10 +29,6 @@ export function parseVideoDisplayMaskShape(
 const STAR_CLIP_PATH =
   "path(evenodd, 'M 50 5 L 61 35 L 93 35 L 68 57 L 79 88 L 50 71 L 21 88 L 32 57 L 7 35 L 39 35 Z')";
 
-const RECORD_HOLE_SCALE = 28;
-const RECORD_HOLE_CENTER_X = 50;
-const RECORD_HOLE_CENTER_Y = 36;
-
 export type VideoDisplayMaskDefinition = {
   id: VideoDisplayMaskShape;
   label: string;
@@ -44,14 +40,21 @@ export type VideoDisplayMaskDefinition = {
   pickerIconPath: string;
 };
 
-function recordScrimMaskDataUri(holeMarkup: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><rect width="100" height="100" fill="white"/>${holeMarkup}</svg>`;
+function recordScrimEvenoddMask(holeSubpath: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="#fff" fill-rule="evenodd" d="M0 0 H100 V100 H0 Z ${holeSubpath}"/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
-function recordHoleTransform(): string {
-  return `translate(${RECORD_HOLE_CENTER_X} ${RECORD_HOLE_CENTER_Y}) scale(${RECORD_HOLE_SCALE})`;
+/** iOS WebView: radial-gradient mask (transparent hole, opaque scrim outside). */
+function recordCircleScrimMask(): string {
+  return `radial-gradient(circle at ${RECORD_VIEWPORT_HOLE_CENTER_X} ${RECORD_VIEWPORT_HOLE_CENTER_Y}, transparent var(--record-mask-hole-radius), #000 var(--record-mask-hole-radius))`;
 }
+
+/** Counter-clockwise star cutout (center ≈50,36) for evenodd SVG masks. */
+const RECORD_SCRIM_HOLE_STAR =
+  "M 50 8 L 56.27 25.66 L 74.64 25.66 L 60.05 37.15 L 66.46 54.85 L 50 46.05 L 33.54 54.85 L 39.95 37.15 L 25.36 25.66 L 43.73 25.66 Z";
+
+const RECORD_SCRIM_HOLE_SQUARE = "M 22 8 V 64 H 78 V 8 H 22 Z";
 
 const MASK_DEFINITIONS: Record<
   VideoDisplayMaskShape,
@@ -63,12 +66,9 @@ const MASK_DEFINITIONS: Record<
     modifier: "circle",
     clipPath: "circle(50% at 50% 50%)",
     borderRadius: "50%",
-    recordScrimMask: recordScrimMaskDataUri(
-      `<ellipse cx="${RECORD_HOLE_CENTER_X}" cy="${RECORD_HOLE_CENTER_Y}" rx="${RECORD_HOLE_SCALE}" ry="${RECORD_HOLE_SCALE}" fill="black"/>`,
-    ),
+    recordScrimMask: recordCircleScrimMask(),
     recordRimClipPath: "circle(50% at 50% 50%)",
-    pickerIconPath:
-      "M 50 8 A 42 42 0 1 1 49.99 8 Z",
+    pickerIconPath: "M 50 8 A 42 42 0 1 1 49.99 8 Z",
   },
   star: {
     id: "star",
@@ -76,9 +76,7 @@ const MASK_DEFINITIONS: Record<
     modifier: "star",
     clipPath: STAR_CLIP_PATH,
     borderRadius: "0",
-    recordScrimMask: recordScrimMaskDataUri(
-      `<path fill="black" transform="${recordHoleTransform()}" d="M 0 -1 L 0.224 -0.309 L 0.951 -0.309 L 0.363 0.118 L 0.588 0.809 L 0 0.382 L -0.588 0.809 L -0.363 0.118 L -0.951 -0.309 L -0.224 -0.309 Z"/>`,
-    ),
+    recordScrimMask: recordScrimEvenoddMask(RECORD_SCRIM_HOLE_STAR),
     recordRimClipPath: STAR_CLIP_PATH,
     pickerIconPath:
       "M 0 -1 L 0.224 -0.309 L 0.951 -0.309 L 0.363 0.118 L 0.588 0.809 L 0 0.382 L -0.588 0.809 L -0.363 0.118 L -0.951 -0.309 L -0.224 -0.309 Z",
@@ -89,9 +87,7 @@ const MASK_DEFINITIONS: Record<
     modifier: "square",
     clipPath: "inset(4% round 14%)",
     borderRadius: "14%",
-    recordScrimMask: recordScrimMaskDataUri(
-      `<rect x="${RECORD_HOLE_CENTER_X - RECORD_HOLE_SCALE}" y="${RECORD_HOLE_CENTER_Y - RECORD_HOLE_SCALE}" width="${RECORD_HOLE_SCALE * 2}" height="${RECORD_HOLE_SCALE * 2}" rx="8" ry="8" fill="black"/>`,
-    ),
+    recordScrimMask: recordScrimEvenoddMask(RECORD_SCRIM_HOLE_SQUARE),
     recordRimClipPath: "inset(4% round 14%)",
     pickerIconPath: "M 18 18 H 82 V 82 H 18 Z",
   },
@@ -154,7 +150,6 @@ export function getRecordViewportMaskCssVars(
     "--record-mask-center-y": metrics.centerY,
     "--record-mask-hole-diameter": metrics.diameterCss,
     "--record-mask-hole-radius": metrics.radiusCss,
-    "--record-mask-scrim": mask.recordScrimMask,
     "--record-mask-rim-clip": mask.recordRimClipPath,
   };
 }

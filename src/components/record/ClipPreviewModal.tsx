@@ -1,5 +1,7 @@
 "use client";
 
+import { DisplayMaskMedia } from "@/components/video/DisplayMaskMedia";
+import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
 import type { RecordedClip } from "@/types/recording";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -7,6 +9,7 @@ import { createPortal } from "react-dom";
 type ClipPreviewModalProps = {
   clip: RecordedClip;
   index: number;
+  displayMaskShape: VideoDisplayMaskShape;
   onClose: () => void;
   onRemove?: (id: string) => void;
 };
@@ -14,6 +17,7 @@ type ClipPreviewModalProps = {
 export function ClipPreviewModal({
   clip,
   index,
+  displayMaskShape,
   onClose,
   onRemove,
 }: ClipPreviewModalProps) {
@@ -72,14 +76,15 @@ export function ClipPreviewModal({
       </div>
 
       <div className="relative z-[205] flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
-        <video
-          key={clip.id}
-          src={clip.previewUrl}
-          controls
-          playsInline
-          autoPlay
-          className="max-h-full max-w-full rounded-xl bg-black"
-        />
+        <DisplayMaskMedia shape={displayMaskShape} className="clip-preview-mask-stage">
+          <video
+            key={clip.id}
+            src={clip.previewUrl}
+            controls
+            playsInline
+            autoPlay
+          />
+        </DisplayMaskMedia>
       </div>
 
       <div className="relative z-[210] shrink-0 space-y-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">

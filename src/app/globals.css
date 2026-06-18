@@ -1719,12 +1719,44 @@ html.record-native-preview-active body {
   position: absolute;
   inset: 0;
   background: rgb(var(--bg-base-rgb, 10 10 10) / 0.97);
-  -webkit-mask-image: var(--record-mask-scrim);
-  mask-image: var(--record-mask-scrim);
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.display-mask-media {
+  overflow: hidden;
+  clip-path: var(--video-display-mask-clip);
+  border-radius: var(--video-display-mask-radius);
+}
+
+.clip-strip-thumb {
+  width: 3.375rem;
+  height: 3.375rem;
+  flex-shrink: 0;
+  background: #050508;
+}
+
+.clip-strip-thumb__media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.clip-preview-mask-stage {
+  width: min(72vw, 300px);
+  aspect-ratio: 1 / 1;
+  max-height: min(52dvh, 300px);
+}
+
+.clip-preview-mask-stage video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #050508;
 }
 
 .record-mask-overlay__rim {

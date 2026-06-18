@@ -451,6 +451,7 @@ export function PostForm() {
               clips={clips}
               onRemove={handleRemoveClip}
               disabled={isUploading}
+              displayMaskShape={displayMaskShape}
             />
             {hasContent && !isUploading && assignedSeconds !== null && (
               <p className="mt-4 text-center text-xs leading-relaxed text-muted">
@@ -472,6 +473,7 @@ export function PostForm() {
               clips={clips}
               onRemove={handleRemoveClip}
               disabled={isUploading}
+              displayMaskShape={displayMaskShape}
             />
             <AiEnhancePanel
               status={aiStatus}
