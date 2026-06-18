@@ -318,9 +318,8 @@ const updateVideoOrientationSafeNew = `    private func activeCaptureDevice() ->
                 if connection.isVideoRotationAngleSupported(angle) {
                     connection.videoRotationAngle = angle
                 }
-                if connection.isVideoMirroringSupported, isPreviewConnection {
-                    connection.isVideoMirrored = (currentCameraPosition == .front)
-                }
+                // Skip manual mirroring — setVideoMirrored crashes on iOS 26 when
+                // automaticallyAdjustsVideoMirroring is still enabled.
                 return
             }
             let angle = CameraController.rotationAngle(
@@ -492,6 +491,21 @@ const controllerPropertiesRotationNew = `    private var stopRecordingCompletion
     private var _rotationCoordinator: Any?
 }`;
 
+const applyVideoMirroringUnsafeOld = `                if connection.isVideoRotationAngleSupported(angle) {
+                    connection.videoRotationAngle = angle
+                }
+                if connection.isVideoMirroringSupported, isPreviewConnection {
+                    connection.isVideoMirrored = (currentCameraPosition == .front)
+                }
+                return`;
+
+const applyVideoMirroringRemovedNew = `                if connection.isVideoRotationAngleSupported(angle) {
+                    connection.videoRotationAngle = angle
+                }
+                // Skip manual mirroring — setVideoMirrored crashes on iOS 26 when
+                // automaticallyAdjustsVideoMirroring is still enabled.
+                return`;
+
 const refreshRotationCoordinatorBrokenOld = `    @available(iOS 17.0, *)
     private func refreshRotationCoordinator() {
         guard let device = activeCaptureDevice() else {
@@ -622,6 +636,12 @@ await patchFile(
   controllerPath,
   [[refreshRotationCoordinatorBrokenOld, refreshRotationCoordinatorFixedNew]],
   "CameraController.swift (RotationCoordinator init fix)",
+);
+
+await patchFile(
+  controllerPath,
+  [[applyVideoMirroringUnsafeOld, applyVideoMirroringRemovedNew]],
+  "CameraController.swift (remove unsafe video mirroring)",
 );
 
 await patchFile(
