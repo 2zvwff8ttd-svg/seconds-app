@@ -5,7 +5,7 @@ import { RecordMaskOverlay } from "@/components/record/RecordMaskOverlay";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
-import { getRecordNativePreviewRect } from "@/lib/recording/native-record-preview-rect";
+import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
 import { getMinRecordingMs } from "@/lib/recording/recorder-utils";
 import {
   flipNativeCamera,
@@ -33,9 +33,9 @@ function facingToPosition(mode: "user" | "environment"): "front" | "rear" {
   return mode === "user" ? "front" : "rear";
 }
 
-function recordPreviewOpts(facingMode: "user" | "environment") {
+function nativePreviewOpts(facingMode: "user" | "environment") {
   return {
-    ...getRecordNativePreviewRect(),
+    ...getFullscreenNativePreviewRect(),
     position: facingToPosition(facingMode),
   };
 }
@@ -145,7 +145,7 @@ export function NativeCameraRecorder({
     setError(null);
 
     try {
-      await startNativePreview(recordPreviewOpts(facingMode));
+      await startNativePreview(nativePreviewOpts(facingMode));
       if (!aliveRef.current) return false;
 
       previewStartedRef.current = true;
@@ -191,7 +191,7 @@ export function NativeCameraRecorder({
     }
 
     try {
-      await syncNativePreviewLayout(recordPreviewOpts(facingMode));
+      await syncNativePreviewLayout(nativePreviewOpts(facingMode));
     } catch (err) {
       if (!aliveRef.current) return;
       console.warn("[NativeCameraRecorder] syncPreviewLayout", err);
@@ -321,9 +321,9 @@ export function NativeCameraRecorder({
     setRecordingStarting(true);
 
     try {
-      const recordRect = recordPreviewOpts(facingMode);
+      const recordRect = nativePreviewOpts(facingMode);
       console.info(
-        `[NativeCameraRecorder] startNativeRecording: square ${recordRect.width}x${recordRect.height} at ${recordRect.x},${recordRect.y}`,
+        `[NativeCameraRecorder] startNativeRecording: fullscreen ${recordRect.width}x${recordRect.height}`,
       );
       await startNativeRecording(recordRect);
     } catch (err) {

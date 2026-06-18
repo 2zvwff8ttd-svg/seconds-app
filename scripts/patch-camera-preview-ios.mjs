@@ -712,3 +712,26 @@ await patchFile(
   ],
   "CameraPreviewPlugin.swift (preview frame coordinates)",
 );
+
+const videoGravityFillToken = "AVLayerVideoGravity.resizeAspectFill";
+const videoGravityAspectToken = "AVLayerVideoGravity.resizeAspect";
+
+let controllerForGravity = await readFile(controllerPath, "utf8");
+if (controllerForGravity.includes(videoGravityFillToken)) {
+  controllerForGravity = controllerForGravity.replaceAll(
+    videoGravityFillToken,
+    videoGravityAspectToken,
+  );
+  await writeFile(controllerPath, controllerForGravity, "utf8");
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (preview aspect-fit)",
+  );
+} else if (controllerForGravity.includes(videoGravityAspectToken)) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (preview aspect-fit) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip preview aspect-fit: videoGravity assignment not found",
+  );
+}
