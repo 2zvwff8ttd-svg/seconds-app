@@ -5,7 +5,7 @@ import { RecordMaskOverlay } from "@/components/record/RecordMaskOverlay";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
-import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
+import { getRecordNativePreviewRect } from "@/lib/recording/native-record-preview-rect";
 import { getMinRecordingMs } from "@/lib/recording/recorder-utils";
 import {
   flipNativeCamera,
@@ -33,9 +33,9 @@ function facingToPosition(mode: "user" | "environment"): "front" | "rear" {
   return mode === "user" ? "front" : "rear";
 }
 
-function fullscreenPreviewOpts(facingMode: "user" | "environment") {
+function recordPreviewOpts(facingMode: "user" | "environment") {
   return {
-    ...getFullscreenNativePreviewRect(),
+    ...getRecordNativePreviewRect(),
     position: facingToPosition(facingMode),
   };
 }
@@ -145,7 +145,7 @@ export function NativeCameraRecorder({
     setError(null);
 
     try {
-      await startNativePreview(fullscreenPreviewOpts(facingMode));
+      await startNativePreview(recordPreviewOpts(facingMode));
       if (!aliveRef.current) return false;
 
       previewStartedRef.current = true;
@@ -191,7 +191,7 @@ export function NativeCameraRecorder({
     }
 
     try {
-      await syncNativePreviewLayout(fullscreenPreviewOpts(facingMode));
+      await syncNativePreviewLayout(recordPreviewOpts(facingMode));
     } catch (err) {
       if (!aliveRef.current) return;
       console.warn("[NativeCameraRecorder] syncPreviewLayout", err);
@@ -321,9 +321,9 @@ export function NativeCameraRecorder({
     setRecordingStarting(true);
 
     try {
-      const recordRect = fullscreenPreviewOpts(facingMode);
+      const recordRect = recordPreviewOpts(facingMode);
       console.info(
-        `[NativeCameraRecorder] startNativeRecording: fullscreen ${recordRect.width}x${recordRect.height}`,
+        `[NativeCameraRecorder] startNativeRecording: square ${recordRect.width}x${recordRect.height} at ${recordRect.x},${recordRect.y}`,
       );
       await startNativeRecording(recordRect);
     } catch (err) {
@@ -435,11 +435,13 @@ export function NativeCameraRecorder({
       <RecordMaskOverlay cameraReady={cameraReady} />
 
       <div className="record-mask-controls">
-        <TimeBudgetGauge
-          assignedSeconds={assignedSeconds}
-          usedSeconds={usedClipSeconds}
-          recordingElapsed={gaugeRecordingElapsed}
-        />
+        <div className="record-mask-controls__gauge">
+          <TimeBudgetGauge
+            assignedSeconds={assignedSeconds}
+            usedSeconds={usedClipSeconds}
+            recordingElapsed={gaugeRecordingElapsed}
+          />
+        </div>
 
         {!cameraReady && !isRecording && !error && (
           <div className="record-mask-controls__loading">

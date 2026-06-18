@@ -31,11 +31,14 @@ export function getVideoDisplayMask(
 }
 
 /** Shared circle diameter for record hole, bubble body, and fullscreen mask. */
-export const RECORD_VIEWPORT_HOLE_DIAMETER = "min(72vw, 340px)";
+export const RECORD_MASK_VW_RATIO = 0.64;
+export const RECORD_MASK_MAX_DIAMETER_PX = 300;
+export const RECORD_VIEWPORT_HOLE_DIAMETER = `min(${RECORD_MASK_VW_RATIO * 100}vw, ${RECORD_MASK_MAX_DIAMETER_PX}px)`;
 
 /** Hole center on the viewport (fixed overlay). */
+export const RECORD_MASK_CENTER_Y_RATIO = 0.36;
 export const RECORD_VIEWPORT_HOLE_CENTER_X = "50%";
-export const RECORD_VIEWPORT_HOLE_CENTER_Y = "38%";
+export const RECORD_VIEWPORT_HOLE_CENTER_Y = `${RECORD_MASK_CENTER_Y_RATIO * 100}%`;
 
 export type RecordViewportMaskMetrics = {
   shape: VideoDisplayMaskShape;
