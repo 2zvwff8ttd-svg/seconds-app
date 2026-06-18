@@ -2,6 +2,7 @@
 
 import type { CameraRecorderProps } from "@/components/record/camera-recorder-types";
 import { RecordMaskOverlay } from "@/components/record/RecordMaskOverlay";
+import { RecordShapePicker } from "@/components/record/RecordShapePicker";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
@@ -44,6 +45,8 @@ export function NativeCameraRecorder({
   clips,
   onClipAdded,
   disabled = false,
+  displayMaskShape,
+  onDisplayMaskShapeChange,
 }: CameraRecorderProps) {
   const recordingStartRef = useRef<number | null>(null);
   const recordBudgetRef = useRef(0);
@@ -432,7 +435,7 @@ export function NativeCameraRecorder({
         <div className="record-camera-layout-spacer__controls" />
       </div>
 
-      <RecordMaskOverlay cameraReady={cameraReady} />
+      <RecordMaskOverlay cameraReady={cameraReady} shape={displayMaskShape} />
 
       <div className="record-mask-controls">
         <div className="record-mask-controls__gauge">
@@ -476,6 +479,18 @@ export function NativeCameraRecorder({
         </button>
 
         <div className="record-mask-controls__bottom">
+          <RecordShapePicker
+            value={displayMaskShape}
+            onChange={onDisplayMaskShapeChange}
+            disabled={
+              disabled ||
+              isRecording ||
+              cameraStarting ||
+              recordingStarting ||
+              clips.length > 0
+            }
+          />
+
           {isRecording && (
             <span className="record-mask-controls__recording-badge">
               <span className="record-mask-controls__recording-dot" />

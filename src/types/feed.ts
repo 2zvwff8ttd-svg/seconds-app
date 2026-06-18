@@ -1,3 +1,5 @@
+import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
+
 export type FeedVideo = {
   id: string;
   videoUrl: string;
@@ -14,4 +16,5 @@ export type FeedVideo = {
   countryCode?: string;
   /** 新着順・レコメンド用（published_at または created_at） */
   publishedAt?: string;
+  displayMaskShape?: VideoDisplayMaskShape;
 };

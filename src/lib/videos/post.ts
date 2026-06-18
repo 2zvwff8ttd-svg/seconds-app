@@ -16,6 +16,10 @@ import {
   normalizeStorageContentType,
 } from "@/lib/video/media";
 import { createClient } from "@/lib/supabase/client";
+import {
+  DEFAULT_VIDEO_DISPLAY_MASK,
+  type VideoDisplayMaskShape,
+} from "@/lib/video/display-mask";
 import type { PostUploadStage, VideoVisibility } from "@/types/video";
 
 export type PostClipInput = {
@@ -35,6 +39,7 @@ export type PostVideoInput = {
   bgmUrl?: string;
   title: string;
   visibility: VideoVisibility;
+  displayMaskShape?: VideoDisplayMaskShape;
   onStageChange: (stage: PostUploadStage) => void;
   onProgress: (percent: number, label: string) => void;
 };
@@ -109,6 +114,7 @@ async function saveVideoRow(
     visibility: VideoVisibility;
     country: string;
     bgmUrl?: string;
+    displayMaskShape?: VideoDisplayMaskShape;
   },
   retrying = false,
 ): Promise<{ id: string; publishAt: string }> {
@@ -118,6 +124,8 @@ async function saveVideoRow(
     payload.clipThumbnailUrls && payload.clipThumbnailUrls.length > 1
       ? payload.clipThumbnailUrls
       : null;
+
+  const displayMaskShape = payload.displayMaskShape ?? DEFAULT_VIDEO_DISPLAY_MASK;
 
   const baseInsert = {
     id: payload.id,
@@ -131,6 +139,9 @@ async function saveVideoRow(
     ...(caps.hasBgmUrl && bgmUrl ? { bgm_url: bgmUrl } : {}),
     ...(caps.hasClipThumbnailUrls && clipThumbnailUrls
       ? { clip_thumbnail_urls: clipThumbnailUrls }
+      : {}),
+    ...(caps.hasDisplayMaskShape
+      ? { display_mask_shape: displayMaskShape }
       : {}),
   };
 
@@ -163,6 +174,9 @@ async function saveVideoRow(
     if (caps.hasBgmUrl && bgmUrl) postInsertPatch.bgm_url = bgmUrl;
     if (caps.hasClipThumbnailUrls && clipThumbnailUrls) {
       postInsertPatch.clip_thumbnail_urls = clipThumbnailUrls;
+    }
+    if (caps.hasDisplayMaskShape) {
+      postInsertPatch.display_mask_shape = displayMaskShape;
     }
     if (Object.keys(postInsertPatch).length > 0) {
       const { error: patchError } = await supabase
@@ -417,6 +431,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
       visibility,
       country,
       bgmUrl: input.bgmUrl,
+      displayMaskShape: input.displayMaskShape,
     });
   } catch (err) {
     rethrowPostStage("動画情報の保存", err);

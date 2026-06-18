@@ -1704,7 +1704,7 @@ html.record-native-preview-active body {
 }
 
 .record-camera-layout-spacer__controls {
-  height: 6.5rem;
+  height: 8.5rem;
   flex-shrink: 0;
 }
 
@@ -1719,16 +1719,12 @@ html.record-native-preview-active body {
   position: absolute;
   inset: 0;
   background: rgb(var(--bg-base-rgb, 10 10 10) / 0.97);
-  -webkit-mask-image: radial-gradient(
-    circle at var(--record-mask-center-x) var(--record-mask-center-y),
-    transparent var(--record-mask-hole-radius),
-    black var(--record-mask-hole-radius)
-  );
-  mask-image: radial-gradient(
-    circle at var(--record-mask-center-x) var(--record-mask-center-y),
-    transparent var(--record-mask-hole-radius),
-    black var(--record-mask-hole-radius)
-  );
+  -webkit-mask-image: var(--record-mask-scrim);
+  mask-image: var(--record-mask-scrim);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
 }
 
 .record-mask-overlay__rim {
@@ -1738,7 +1734,8 @@ html.record-native-preview-active body {
   width: var(--record-mask-hole-diameter);
   height: var(--record-mask-hole-diameter);
   transform: translate(-50%, -50%);
-  border-radius: var(--record-mask-rim-radius);
+  clip-path: var(--record-mask-rim-clip);
+  border-radius: 0;
   box-shadow:
     inset 0 0 0 1px rgb(255 255 255 / 0.35),
     inset 0 -8px 24px rgb(255 255 255 / 0.08),
@@ -1907,6 +1904,55 @@ html.record-native-preview-active body {
   font-size: 0.625rem;
   color: var(--muted);
   text-align: center;
+}
+
+.record-shape-picker {
+  margin-bottom: 0.75rem;
+  width: 100%;
+  max-width: 18rem;
+  pointer-events: auto;
+}
+
+.record-shape-picker__track {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.record-shape-picker__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  min-width: 3.25rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.15);
+  background: rgb(0 0 0 / 0.35);
+  color: rgb(255 255 255 / 0.75);
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.record-shape-picker__item--selected {
+  border-color: rgb(167 139 250 / 0.85);
+  background: rgb(139 92 246 / 0.22);
+  color: white;
+}
+
+.record-shape-picker__item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.record-shape-picker__icon {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.record-shape-picker__label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .record-camera-error {

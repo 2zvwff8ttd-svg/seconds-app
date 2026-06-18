@@ -23,6 +23,10 @@ import {
   fetchCurrentStreak,
 } from "@/lib/posting/post-streak";
 import { postVideo } from "@/lib/videos/post";
+import {
+  DEFAULT_VIDEO_DISPLAY_MASK,
+  type VideoDisplayMaskShape,
+} from "@/lib/video/display-mask";
 import { blobToBase64, extractFirstFrameBlob } from "@/lib/video/extract-frame";
 import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
 import type { PresetBgmTrack } from "@/types/preset-bgm";
@@ -67,6 +71,8 @@ function formatPublishTime(iso: string): string {
 
 export function PostForm() {
   const [clips, setClips] = useState<RecordedClip[]>([]);
+  const [displayMaskShape, setDisplayMaskShape] =
+    useState<VideoDisplayMaskShape>(DEFAULT_VIDEO_DISPLAY_MASK);
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [visibility, setVisibility] = useState<VideoVisibility>("public");
@@ -324,6 +330,7 @@ export function PostForm() {
         bgmUrl: presetBgmUrl,
         title,
         visibility,
+        displayMaskShape,
         onStageChange: setStage,
         onProgress: (percent, label) => {
           setProgress(percent);
@@ -437,6 +444,8 @@ export function PostForm() {
               clips={clips}
               onClipAdded={handleClipAdded}
               disabled={isUploading}
+              displayMaskShape={displayMaskShape}
+              onDisplayMaskShapeChange={setDisplayMaskShape}
             />
             <ClipStrip
               clips={clips}

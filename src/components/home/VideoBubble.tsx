@@ -1,5 +1,7 @@
 "use client";
 
+import { getVideoDisplayMaskCssVars } from "@/lib/video/display-mask";
+import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
 import { useCallback, useMemo, useRef, type CSSProperties } from "react";
 import type { BubbleGlassStyle } from "@/lib/bubble-glass-vars";
 import type { BubbleOriginRect } from "@/lib/home/bubble-origin-rect";
@@ -18,6 +20,7 @@ export type BubbleVideoPreview = {
   clipThumbnailUrls?: string[];
   videoUrl?: string;
   isViralTop?: boolean;
+  displayMaskShape?: VideoDisplayMaskShape;
 };
 
 type VideoBubbleProps = {
@@ -77,6 +80,10 @@ export function VideoBubble({
       }),
     [video.thumbnailUrl, video.clipThumbnailUrls, video.videoUrl],
   );
+  const maskStyle = useMemo(
+    () => getVideoDisplayMaskCssVars(video.displayMaskShape) as CSSProperties,
+    [video.displayMaskShape],
+  );
 
   const handleClick = useCallback(() => {
     if (isHidden || !wrapperRef.current) return;
@@ -104,7 +111,7 @@ export function VideoBubble({
         aria-label={`${video.title} by ${video.creatorName}`}
         onClick={handleClick}
         disabled={isHidden}
-        className="group relative h-full w-full overflow-visible touch-manipulation rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/80"
+        className="group relative h-full w-full overflow-visible touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/80"
       >
         <span
           className={`bubble-3d-shadow${
@@ -117,8 +124,8 @@ export function VideoBubble({
             }`}
             style={glassStyle}
           >
-            <span className="bubble-3d__body">
-              <span className="bubble-3d__media">
+            <span className="bubble-3d__body" style={maskStyle}>
+              <span className="bubble-3d__media" style={maskStyle}>
                 {displayUrls.length > 1 ? (
                   <BubbleThumbnailSlideshow urls={displayUrls} />
                 ) : displayUrls.length === 1 ? (

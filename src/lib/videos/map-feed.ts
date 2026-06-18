@@ -1,3 +1,4 @@
+import { parseVideoDisplayMaskShape } from "@/lib/video/display-mask";
 import type { FeedVideo } from "@/types/feed";
 import type { VideoRow } from "@/types/video";
 
@@ -11,7 +12,8 @@ export function normalizeVideoRow(row: Record<string, unknown>): VideoRow {
         : null;
 
   return {
-    ...(row as Omit<VideoRow, "profiles">),
+    ...(row as Omit<VideoRow, "profiles" | "display_mask_shape">),
+    display_mask_shape: parseVideoDisplayMaskShape(row.display_mask_shape),
     profiles: profile
       ? { username: profile.username, avatar_url: profile.avatar_url ?? null }
       : null,
@@ -42,5 +44,6 @@ export function videoRowToFeedVideo(
     isViralTop: options?.isViralTop,
     countryCode: row.country,
     publishedAt: row.published_at ?? row.created_at,
+    displayMaskShape: parseVideoDisplayMaskShape(row.display_mask_shape),
   };
 }

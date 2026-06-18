@@ -220,6 +220,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
       clipThumbnailUrls: video.clipThumbnailUrls,
       videoUrl: video.videoUrl,
       isViralTop: video.isViralTop,
+      displayMaskShape: video.displayMaskShape,
     }),
     [],
   );

@@ -367,7 +367,10 @@ export function FullscreenPlayer({
           ref={maskRef}
           className={`fullscreen-player__mask-wrap will-change-transform${flipVisible ? " fullscreen-player__mask-wrap--visible" : ""}`}
         >
-          <FullscreenVideoMask className="fullscreen-player__mask">
+          <FullscreenVideoMask
+            className="fullscreen-player__mask"
+            shape={video.displayMaskShape}
+          >
           {expandThumbnailUrl && (
             // eslint-disable-next-line @next/next/no-img-element
             <img

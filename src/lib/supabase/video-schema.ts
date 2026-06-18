@@ -6,6 +6,7 @@ export type VideoSchemaCapabilities = {
   hasPublishedAt: boolean;
   hasBgmUrl: boolean;
   hasClipThumbnailUrls: boolean;
+  hasDisplayMaskShape: boolean;
   hasInsertRpc: boolean;
 };
 
@@ -80,6 +81,7 @@ export async function probeVideoSchema(
     hasPublishedAt,
     hasBgmUrl,
     hasClipThumbnailUrls,
+    hasDisplayMaskShape,
     hasInsertRpc,
   ] = await Promise.all([
     probeColumn(supabase, "status"),
@@ -87,6 +89,7 @@ export async function probeVideoSchema(
     probeColumn(supabase, "published_at"),
     probeColumn(supabase, "bgm_url"),
     probeColumn(supabase, "clip_thumbnail_urls"),
+    probeColumn(supabase, "display_mask_shape"),
     probeInsertRpc(supabase),
   ]);
 
@@ -96,6 +99,7 @@ export async function probeVideoSchema(
     hasPublishedAt,
     hasBgmUrl,
     hasClipThumbnailUrls,
+    hasDisplayMaskShape,
     hasInsertRpc,
   };
 
@@ -148,6 +152,7 @@ export function buildVideoSelect(caps: VideoSchemaCapabilities): string {
   if (caps.hasPublishedAt) extras.push("published_at");
   if (caps.hasBgmUrl) extras.push("bgm_url");
   if (caps.hasClipThumbnailUrls) extras.push("clip_thumbnail_urls");
+  if (caps.hasDisplayMaskShape) extras.push("display_mask_shape");
   if (extras.length === 0) return BASE_VIDEO_SELECT;
   return BASE_VIDEO_SELECT.replace(
     "created_at,",

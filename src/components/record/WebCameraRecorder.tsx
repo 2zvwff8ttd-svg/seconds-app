@@ -1,6 +1,8 @@
 "use client";
 
 import type { CameraRecorderProps } from "@/components/record/camera-recorder-types";
+import { RecordShapePicker } from "@/components/record/RecordShapePicker";
+import { getVideoDisplayMask } from "@/lib/video/display-mask";
 import {
   canUseInAppMediaRecorder,
   createMediaRecorder,
@@ -43,6 +45,8 @@ export function WebCameraRecorder({
   clips,
   onClipAdded,
   disabled = false,
+  displayMaskShape,
+  onDisplayMaskShapeChange,
 }: CameraRecorderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const nativeInputRef = useRef<HTMLInputElement>(null);
@@ -534,6 +538,7 @@ export function WebCameraRecorder({
           className="pointer-events-none h-full w-full object-cover"
           style={{
             transform: facingMode === "user" ? "scaleX(-1)" : undefined,
+            clipPath: getVideoDisplayMask(displayMaskShape).clipPath,
           }}
         />
 
@@ -590,6 +595,14 @@ export function WebCameraRecorder({
             usedClipSeconds >= assignedSeconds && (
             <p className="mb-3 text-xs text-red-400">撮影時間を使い切りました</p>
           )}
+
+          <div className="pointer-events-auto mb-3">
+            <RecordShapePicker
+              value={displayMaskShape}
+              onChange={onDisplayMaskShapeChange}
+              disabled={disabled || isRecording || cameraStarting || clips.length > 0}
+            />
+          </div>
 
           <button
             type="button"
