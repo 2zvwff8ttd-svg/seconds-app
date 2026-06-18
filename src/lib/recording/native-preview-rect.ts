@@ -62,6 +62,81 @@ export function toPluginPreviewRect(rect: NativePreviewRect): NativePreviewRect 
   };
 }
 
+export type PreviewRectDebugInfo = {
+  dom: NativePreviewRect;
+  plugin: NativePreviewRect;
+  boundingClient: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    right: number;
+    bottom: number;
+  };
+  dpr: number;
+  viewport: {
+    width: number;
+    height: number;
+    offsetX: number;
+    offsetY: number;
+  };
+  scrollY: number;
+};
+
+/** 実機デバッグ用: DOM / plugin 座標の実数を返す */
+export function getPreviewRectDebugInfo(
+  el: HTMLElement | null,
+): PreviewRectDebugInfo | null {
+  if (!el) return null;
+  const domRect = readPreviewRect(el);
+  if (!domRect) return null;
+
+  const bounds = el.getBoundingClientRect();
+  const { offsetX, offsetY } = getViewportOffsets();
+
+  return {
+    dom: domRect,
+    plugin: toPluginPreviewRect(domRect),
+    boundingClient: {
+      left: Math.round(bounds.left),
+      top: Math.round(bounds.top),
+      width: Math.round(bounds.width),
+      height: Math.round(bounds.height),
+      right: Math.round(bounds.right),
+      bottom: Math.round(bounds.bottom),
+    },
+    dpr: window.devicePixelRatio || 1,
+    viewport: {
+      width: Math.round(window.visualViewport?.width ?? window.innerWidth),
+      height: Math.round(window.visualViewport?.height ?? window.innerHeight),
+      offsetX: Math.round(offsetX),
+      offsetY: Math.round(offsetY),
+    },
+    scrollY: Math.round(window.scrollY),
+  };
+}
+
+export function logPreviewRectDebug(
+  context: string,
+  el: HTMLElement | null,
+): PreviewRectDebugInfo | null {
+  const info = getPreviewRectDebugInfo(el);
+  if (!info) {
+    console.warn(`[preview-rect] ${context}: element missing or zero-size`);
+    return null;
+  }
+
+  console.info(`[preview-rect] ${context}`, {
+    dom: `${info.dom.x},${info.dom.y} ${info.dom.width}×${info.dom.height}`,
+    plugin: `${info.plugin.x},${info.plugin.y} ${info.plugin.width}×${info.plugin.height}`,
+    boundingClient: info.boundingClient,
+    dpr: info.dpr,
+    viewport: info.viewport,
+    scrollY: info.scrollY,
+  });
+  return info;
+}
+
 export function formatPreviewRectDebug(rect: NativePreviewRect): string {
   const plugin = toPluginPreviewRect(rect);
   const scale = window.devicePixelRatio || 1;
@@ -93,9 +168,7 @@ export async function resolvePreviewRect(
     const domRect = readPreviewRect(getEl());
     if (domRect) {
       const pluginRect = toPluginPreviewRect(domRect);
-      console.info(
-        `[NativeCameraRecorder] resolvePreviewRect: ${formatPreviewRectDebug(domRect)}`,
-      );
+      logPreviewRectDebug("resolvePreviewRect", getEl());
       return pluginRect;
     }
     if (attempt < maxAttempts - 1) {

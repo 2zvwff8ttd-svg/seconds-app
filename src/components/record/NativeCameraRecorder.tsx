@@ -16,9 +16,11 @@ import {
 } from "@/lib/recording/native-camera-preview";
 import {
   describePreviewRectFailure,
+  logPreviewRectDebug,
   logPreviewRectFailure,
   PREVIEW_RECT_BOOT_MAX_ATTEMPTS,
   resolvePreviewRect,
+  type PreviewRectDebugInfo,
 } from "@/lib/recording/native-preview-rect";
 import { debounceAsync } from "@/lib/recording/native-preview-scheduler";
 import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
@@ -27,7 +29,6 @@ import {
   measureRecordingSeconds,
   scheduleRecordingAutoStop,
 } from "@/lib/recording/recording-timer";
-import { getVideoDuration } from "@/lib/video/media";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function waitMs(ms: number): Promise<void> {
@@ -64,6 +65,8 @@ export function NativeCameraRecorder({
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pendingRecordedSeconds, setPendingRecordedSeconds] = useState(0);
+  const [previewDebugInfo, setPreviewDebugInfo] =
+    useState<PreviewRectDebugInfo | null>(null);
 
   const usedClipSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
 
@@ -78,6 +81,14 @@ export function NativeCameraRecorder({
   }, [assignedSeconds, usedClipSeconds, isRecording, pendingRecordedSeconds, tick]);
 
   const getPreviewHost = useCallback(() => previewHostRef.current, []);
+
+  const refreshPreviewDebug = useCallback(
+    (context: string) => {
+      const info = logPreviewRectDebug(context, getPreviewHost());
+      if (info) setPreviewDebugInfo(info);
+    },
+    [getPreviewHost],
+  );
 
   const resolveRect = useCallback(
     async (maxAttempts?: number) => {
@@ -171,6 +182,7 @@ export function NativeCameraRecorder({
 
       previewStartedRef.current = true;
       setCameraReady(true);
+      refreshPreviewDebug("ensurePreview");
       return true;
     } catch (err) {
       if (!aliveRef.current) return false;
@@ -186,7 +198,7 @@ export function NativeCameraRecorder({
         setCameraStarting(false);
       }
     }
-  }, [facingMode, getPreviewHost, isRecording, resolveRect]);
+  }, [facingMode, getPreviewHost, isRecording, refreshPreviewDebug, resolveRect]);
 
   useEffect(() => {
     if (assignedSeconds === null || disabled || bootStartedRef.current) return;
@@ -220,11 +232,12 @@ export function NativeCameraRecorder({
         ...rect,
         position: facingToPosition(facingMode),
       });
+      refreshPreviewDebug("syncPreviewLayout");
     } catch (err) {
       if (!aliveRef.current) return;
       console.warn("[NativeCameraRecorder] syncPreviewLayout", err);
     }
-  }, [cameraStarting, facingMode, isRecording, resolveRect]);
+  }, [cameraStarting, facingMode, isRecording, refreshPreviewDebug, resolveRect]);
 
   const scheduleLayoutSyncRef = useRef(debounceAsync(() => syncPreviewLayout(), 500));
 
@@ -302,27 +315,10 @@ export function NativeCameraRecorder({
 
       const file = await nativeVideoSourceToFile(recording);
 
-      let durationSeconds = Math.min(
+      const durationSeconds = Math.min(
         budget,
-        Math.max(0.1, Math.round(elapsed * 10) / 10 || 0.1),
+        Math.max(0.1, Math.floor(elapsed * 10) / 10),
       );
-
-      try {
-        const rawDuration = await getVideoDuration(file, {
-          fallbackSeconds: durationSeconds,
-        });
-        if (rawDuration > 0) {
-          durationSeconds = Math.min(
-            budget,
-            Math.max(0.1, rawDuration),
-          );
-        }
-      } catch (durationErr) {
-        console.warn(
-          "[NativeCameraRecorder] getVideoDuration failed, using elapsed",
-          durationErr,
-        );
-      }
 
       addRecordedClip(file, durationSeconds);
       setPendingRecordedSeconds(0);
@@ -555,6 +551,14 @@ export function NativeCameraRecorder({
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center bg-gradient-to-t from-black/80 to-transparent pb-6 pt-10">
+          {previewDebugInfo && (
+            <div className="pointer-events-none mb-3 w-full max-w-sm px-3">
+              <pre className="rounded-lg bg-black/75 p-2 text-[8px] leading-snug text-emerald-300 whitespace-pre-wrap">
+                {`DOM ${previewDebugInfo.dom.x},${previewDebugInfo.dom.y} ${previewDebugInfo.dom.width}×${previewDebugInfo.dom.height}\nPLUGIN ${previewDebugInfo.plugin.x},${previewDebugInfo.plugin.y} ${previewDebugInfo.plugin.width}×${previewDebugInfo.plugin.height}\nDPR ${previewDebugInfo.dpr} · viewport ${previewDebugInfo.viewport.width}×${previewDebugInfo.viewport.height}\nBC ${previewDebugInfo.boundingClient.left},${previewDebugInfo.boundingClient.top} ${previewDebugInfo.boundingClient.width}×${previewDebugInfo.boundingClient.height}`}
+              </pre>
+            </div>
+          )}
+
           {isRecording && (
             <span className="mb-3 flex items-center gap-2 text-xs font-medium text-red-400">
               <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />

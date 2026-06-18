@@ -1,4 +1,6 @@
 /** Supabase Storage `media` bucket allowed video types (no codec suffix). */
+import { captureVideoFrameBlob } from "@/lib/video/frame-capture";
+
 const STORAGE_VIDEO_TYPES = new Set([
   "video/mp4",
   "video/webm",
@@ -60,52 +62,10 @@ export async function getVideoDuration(
 }
 
 export async function captureVideoThumbnail(file: File): Promise<Blob> {
-  // 元の File を触らないようコピー Blob から静止画を生成（投稿用動画はそのまま）
-  const source =
-    typeof file.slice === "function"
-      ? file.slice(0, file.size, file.type || undefined)
-      : file;
-  const url = URL.createObjectURL(source);
-  try {
-    const video = document.createElement("video");
-    video.preload = "auto";
-    video.muted = true;
-    video.playsInline = true;
-    video.src = url;
-
-    await new Promise<void>((resolve, reject) => {
-      video.onloadeddata = () => resolve();
-      video.onerror = () => reject(new Error("サムネイル生成に失敗しました"));
-    });
-
-    video.currentTime = Math.min(0.1, (video.duration || 1) * 0.05);
-
-    await new Promise<void>((resolve, reject) => {
-      video.onseeked = () => resolve();
-      video.onerror = () => reject(new Error("サムネイル生成に失敗しました"));
-    });
-
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 720;
-    canvas.height = video.videoHeight || 1280;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas が利用できません");
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    return await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (blob) =>
-          blob
-            ? resolve(blob)
-            : reject(new Error("サムネイルのエンコードに失敗しました")),
-        "image/jpeg",
-        0.85,
-      );
-    });
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  return captureVideoFrameBlob(file, {
+    maxEdge: 640,
+    jpegQuality: 0.85,
+  });
 }
 
 export function getVideoExtension(file: File): string {

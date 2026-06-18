@@ -29,6 +29,8 @@ export type PostVideoInput = {
   clips: PostClipInput[];
   /** サムネイル生成用の元クリップ */
   thumbnailSource?: File;
+  /** クリップ index → 事前生成済みサムネ（AI解析フレーム等） */
+  precomputedClipThumbnails?: Array<Blob | undefined>;
   /** プリセット BGM の公開 URL（動画とは別保存・再生時に同時再生） */
   bgmUrl?: string;
   title: string;
@@ -283,14 +285,37 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   onProgress(24, "サムネイルを作成中…");
 
   const thumbnailSources = clips.map((clip) => clip.file);
+  const precomputed = input.precomputedClipThumbnails ?? [];
 
   let country: string;
   let clipThumbnailBlobs: Blob[];
   try {
-    [country, clipThumbnailBlobs] = await Promise.all([
-      detectCountryCode(),
-      Promise.all(thumbnailSources.map((file) => captureVideoThumbnail(file))),
-    ]);
+    country = await detectCountryCode();
+
+    clipThumbnailBlobs = [];
+    for (let i = 0; i < thumbnailSources.length; i += 1) {
+      const cached = precomputed[i];
+      if (cached) {
+        clipThumbnailBlobs.push(cached);
+        onProgress(
+          24 + ((i + 1) / thumbnailSources.length) * 6,
+          `サムネイル ${i + 1}/${thumbnailSources.length}（キャッシュ）`,
+        );
+        continue;
+      }
+
+      onProgress(
+        24 + (i / thumbnailSources.length) * 6,
+        `サムネイル ${i + 1}/${thumbnailSources.length} を作成中…`,
+      );
+      try {
+        clipThumbnailBlobs.push(await captureVideoThumbnail(thumbnailSources[i]!));
+      } catch (err) {
+        const detail =
+          err instanceof Error ? err.message : "サムネイル生成に失敗しました";
+        throw new Error(`クリップ${i + 1}のサムネイル: ${detail}`);
+      }
+    }
   } catch (err) {
     rethrowPostStage("サムネイル作成", err);
   }

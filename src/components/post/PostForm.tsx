@@ -98,6 +98,7 @@ export function PostForm() {
   );
   const [aiError, setAiError] = useState<string | null>(null);
   const aiRunId = useRef(0);
+  const clipThumbnailCacheRef = useRef<Map<string, Blob>>(new Map());
 
   useEffect(() => {
     fetchTodayAssignedSeconds()
@@ -201,6 +202,7 @@ export function PostForm() {
 
     try {
       const frame = await extractFirstFrameBlob(clips[0].file);
+      clipThumbnailCacheRef.current.set(clips[0].id, frame);
       if (aiRunId.current !== runId) return;
 
       setAiStatus("calling_gemini");
@@ -316,6 +318,9 @@ export function PostForm() {
       const result = await postVideo({
         clips: uploadClips,
         thumbnailSource: clips[0]?.file,
+        precomputedClipThumbnails: clips.map((clip) =>
+          clipThumbnailCacheRef.current.get(clip.id),
+        ),
         bgmUrl: presetBgmUrl,
         title,
         visibility,
