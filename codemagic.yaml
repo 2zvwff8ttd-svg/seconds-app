@@ -79,8 +79,10 @@ workflows:
       xcode: latest
       vars:
         BUNDLE_ID: com.seconds.kai
+        APP_APPLE_ID: "6781392548"
         XCODE_SCHEME: App
         XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_WORKDIR: ios/App
         NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
         NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-for-ci-compile-check
         # CERTIFICATE_PRIVATE_KEY: key_base64.txt の1行Base64文字列を appstore_credentials に登録（encrypted）
@@ -113,6 +115,19 @@ workflows:
 
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
+
+      - name: Increment iOS build number (TestFlight latest + 1)
+        script: |
+          set -eo pipefail
+          cd "$CM_BUILD_DIR/$XCODE_WORKDIR"
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-testflight-build-number "$APP_APPLE_ID")
+          if [ -z "$LATEST_BUILD_NUMBER" ]; then
+            LATEST_BUILD_NUMBER=0
+          fi
+          NEXT_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
+          echo "App Store Connect latest TestFlight build: $LATEST_BUILD_NUMBER → setting CFBundleVersion to $NEXT_BUILD_NUMBER"
+          agvtool new-version -all "$NEXT_BUILD_NUMBER"
+          agvtool what-version -terse
 
       - name: Build signed .ipa (device / App Store distribution)
         script: |
