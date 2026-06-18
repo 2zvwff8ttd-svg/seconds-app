@@ -302,11 +302,10 @@ const updateVideoOrientationSafeNew = `    private func activeCaptureDevice() ->
             _rotationCoordinator = nil
             return
         }
-        if let previewLayer = previewLayer {
-            _rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: previewLayer)
-        } else {
-            _rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device)
-        }
+        _rotationCoordinator = AVCaptureDevice.RotationCoordinator(
+            device: device,
+            previewLayer: previewLayer
+        )
     }
 
     private func applyVideoOrientation(to connection: AVCaptureConnection, interfaceOrientation: UIInterfaceOrientation) {
@@ -493,6 +492,31 @@ const controllerPropertiesRotationNew = `    private var stopRecordingCompletion
     private var _rotationCoordinator: Any?
 }`;
 
+const refreshRotationCoordinatorBrokenOld = `    @available(iOS 17.0, *)
+    private func refreshRotationCoordinator() {
+        guard let device = activeCaptureDevice() else {
+            _rotationCoordinator = nil
+            return
+        }
+        if let previewLayer = previewLayer {
+            _rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: previewLayer)
+        } else {
+            _rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device)
+        }
+    }`;
+
+const refreshRotationCoordinatorFixedNew = `    @available(iOS 17.0, *)
+    private func refreshRotationCoordinator() {
+        guard let device = activeCaptureDevice() else {
+            _rotationCoordinator = nil
+            return
+        }
+        _rotationCoordinator = AVCaptureDevice.RotationCoordinator(
+            device: device,
+            previewLayer: previewLayer
+        )
+    }`;
+
 const startRecordingUnsafeOld = `        updateVideoOrientation()
         if let connection = movieOutput.connection(with: .video) {
             connection.videoOrientation = previewLayer?.connection?.videoOrientation ?? .portrait
@@ -592,6 +616,12 @@ await patchFile(
     [switchCamerasOrientationOld, switchCamerasOrientationNew],
   ],
   "CameraController.swift (front camera orientation)",
+);
+
+await patchFile(
+  controllerPath,
+  [[refreshRotationCoordinatorBrokenOld, refreshRotationCoordinatorFixedNew]],
+  "CameraController.swift (RotationCoordinator init fix)",
 );
 
 await patchFile(
