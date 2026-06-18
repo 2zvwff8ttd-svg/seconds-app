@@ -291,16 +291,43 @@ export function NativeCameraRecorder({
 
     try {
       const { videoFilePath } = await stopNativeRecording();
+      console.info("[NativeCameraRecorder] stopNativeRecording path:", videoFilePath);
+
       const file = await nativeVideoPathToFile(videoFilePath);
-      const rawDuration = await getVideoDuration(file);
-      const durationSeconds = Math.min(
+
+      let durationSeconds = Math.min(
         budget,
-        Math.max(0.1, rawDuration || elapsed || 0.1),
+        Math.max(0.1, Math.round(elapsed * 10) / 10 || 0.1),
       );
+
+      try {
+        const rawDuration = await getVideoDuration(file, {
+          fallbackSeconds: durationSeconds,
+        });
+        if (rawDuration > 0) {
+          durationSeconds = Math.min(
+            budget,
+            Math.max(0.1, rawDuration),
+          );
+        }
+      } catch (durationErr) {
+        console.warn(
+          "[NativeCameraRecorder] getVideoDuration failed, using elapsed",
+          durationErr,
+        );
+      }
+
       addRecordedClip(file, durationSeconds);
       setError(null);
+      console.info(
+        `[NativeCameraRecorder] clip added: ${durationSeconds}s (${file.size} bytes)`,
+      );
     } catch (err) {
-      setError(formatNativeRecordingError(err));
+      console.error("[NativeCameraRecorder] finishRecording failed", err);
+      const detail =
+        err instanceof Error ? err.message : typeof err === "string" ? err : "";
+      const message = formatNativeRecordingError(err);
+      setError(detail && detail !== message ? `${message} [${detail}]` : message);
     } finally {
       finishingRef.current = false;
     }

@@ -4,9 +4,21 @@ export function formatNativeRecordingError(err: unknown): string {
       ? err.message
       : typeof err === "string"
         ? err
-        : "録画の開始に失敗しました";
+        : "録画の処理に失敗しました";
 
   const lower = raw.toLowerCase();
+
+  if (
+    lower.includes("load failed") ||
+    lower.includes("xhr load failed") ||
+    lower.includes("fetch")
+  ) {
+    return "録画ファイルの読み込みに失敗しました。もう一度録画してお試しください。";
+  }
+
+  if (lower.includes("動画の読み込み") || lower.includes("metadata")) {
+    return "録画した動画の長さを取得できませんでした。クリップは追加されない場合があります。";
+  }
 
   if (
     lower.includes("setaudiosource") ||
@@ -25,5 +37,9 @@ export function formatNativeRecordingError(err: unknown): string {
     return "録画を開始できませんでした。もう一度お試しください。";
   }
 
-  return raw.trim() || "録画の開始に失敗しました";
+  if (lower.includes("録画ファイル")) {
+    return raw.trim();
+  }
+
+  return raw.trim() || "録画の処理に失敗しました";
 }

@@ -17,19 +17,43 @@ export function normalizeStorageContentType(mimeType: string): string {
   return base || "video/webm";
 }
 
-export async function getVideoDuration(file: File): Promise<number> {
+export async function getVideoDuration(
+  file: File,
+  options?: { fallbackSeconds?: number; timeoutMs?: number },
+): Promise<number> {
+  const fallback = options?.fallbackSeconds;
+  const timeoutMs = options?.timeoutMs ?? 10_000;
   const url = URL.createObjectURL(file);
   try {
     const video = document.createElement("video");
     video.preload = "metadata";
+    video.playsInline = true;
+    video.muted = true;
     video.src = url;
 
     await new Promise<void>((resolve, reject) => {
-      video.onloadedmetadata = () => resolve();
-      video.onerror = () => reject(new Error("動画の読み込みに失敗しました"));
+      const timeoutId = window.setTimeout(() => {
+        reject(new Error("動画の読み込みがタイムアウトしました"));
+      }, timeoutMs);
+
+      video.onloadedmetadata = () => {
+        window.clearTimeout(timeoutId);
+        resolve();
+      };
+      video.onerror = () => {
+        window.clearTimeout(timeoutId);
+        reject(new Error("動画の読み込みに失敗しました (Load failed)"));
+      };
     });
 
-    return Math.max(0, Math.round(video.duration || 0));
+    const duration = Math.max(0, video.duration || 0);
+    if (duration > 0) {
+      return Math.round(duration);
+    }
+    if (fallback !== undefined && fallback > 0) {
+      return fallback;
+    }
+    return 0;
   } finally {
     URL.revokeObjectURL(url);
   }
