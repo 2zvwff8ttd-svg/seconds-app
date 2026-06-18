@@ -3,6 +3,7 @@
  * 1. Implements AVCaptureMovieFileOutput video recording (stock v8 stubs hang forever)
  * 2. startRecordVideo resolves when recording starts; stopRecordVideo returns videoFilePath
  * 3. Uses videoRotationAngle on iOS 17+ (setVideoOrientation crashes on iOS 26)
+ * 4. Fixes preview frame: JS points are not divided by UIScreen.scale; offset by webView.origin
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -542,6 +543,51 @@ const startRecordingSafeNew = `        updateVideoOrientation()
 
         self.startRecordingCompletion = completion`;
 
+const pluginPreviewFrameHelperOld = `    @objc func start(_ call: CAPPluginCall) {
+        self.cameraPosition = call.getString("position") ?? "rear"`;
+
+const pluginPreviewFrameHelperNew = `    /// JS getBoundingClientRect (points, WebView-relative) → superview frame for previewView.
+    private func previewFrameInSuperview(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat) -> CGRect {
+        let adjustedHeight = self.paddingBottom != nil ? height - self.paddingBottom! : height
+        let origin = self.webView?.frame.origin ?? .zero
+        return CGRect(x: origin.x + x, y: origin.y + y, width: width, height: adjustedHeight)
+    }
+
+    @objc func start(_ call: CAPPluginCall) {
+        self.cameraPosition = call.getString("position") ?? "rear"`;
+
+const pluginCoordsParseOld = `        self.x = call.getInt("x") != nil ? CGFloat(call.getInt("x")!)/UIScreen.main.scale: 0
+        self.y = call.getInt("y") != nil ? CGFloat(call.getInt("y")!)/UIScreen.main.scale: 0`;
+
+const pluginCoordsParseNew = `        self.x = call.getInt("x") != nil ? CGFloat(call.getInt("x")!) : 0
+        self.y = call.getInt("y") != nil ? CGFloat(call.getInt("y")!) : 0`;
+
+const pluginPreviewViewCreateOld = `                    let adjustedHeight = self.paddingBottom != nil ? height - self.paddingBottom! : height
+                    self.previewView = UIView(frame: CGRect(x: self.x ?? 0, y: self.y ?? 0, width: width, height: adjustedHeight))`;
+
+const pluginPreviewViewCreateNew = `                    self.previewView = UIView(frame: self.previewFrameInSuperview(
+                        x: self.x ?? 0,
+                        y: self.y ?? 0,
+                        width: width,
+                        height: height
+                    ))`;
+
+const pluginRotatedPortraitOld = `        if orientation.isPortrait {
+            previewView.frame = CGRect(x: x, y: y, width: min(adjustedHeight, width), height: max(adjustedHeight, width))
+            self.cameraController.previewLayer?.frame = previewView.frame
+        }`;
+
+const pluginRotatedPortraitNew = `        if orientation.isPortrait {
+            let origin = self.webView?.frame.origin ?? .zero
+            previewView.frame = CGRect(
+                x: origin.x + x,
+                y: origin.y + y,
+                width: min(adjustedHeight, width),
+                height: max(adjustedHeight, width)
+            )
+            self.cameraController.previewLayer?.frame = previewView.frame
+        }`;
+
 async function patchFile(path, replacements, label) {
   let content = await readFile(path, "utf8");
   let changed = false;
@@ -654,4 +700,15 @@ await patchFile(
   pluginPath,
   [[stopRecordVideoPathOnlyOld, stopRecordVideoPathOnlyNew]],
   "CameraPreviewPlugin.swift (stopRecordVideo base64)",
+);
+
+await patchFile(
+  pluginPath,
+  [
+    [pluginPreviewFrameHelperOld, pluginPreviewFrameHelperNew],
+    [pluginCoordsParseOld, pluginCoordsParseNew],
+    [pluginPreviewViewCreateOld, pluginPreviewViewCreateNew],
+    [pluginRotatedPortraitOld, pluginRotatedPortraitNew],
+  ],
+  "CameraPreviewPlugin.swift (preview frame coordinates)",
 );
