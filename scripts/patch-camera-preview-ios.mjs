@@ -735,3 +735,124 @@ if (controllerForGravity.includes(videoGravityFillToken)) {
     "[patch-camera-preview-ios] skip preview aspect-fit: videoGravity assignment not found",
   );
 }
+
+const naturalPreviewHelperOld = `}
+
+extension CameraController {
+    func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
+
+const naturalPreviewHelperNew = `}
+
+extension CameraController {
+    /// seconds-app: reset zoom and pick widest field-of-view format.
+    private func applyNaturalPreviewDeviceSettings(to device: AVCaptureDevice) throws {
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+        device.videoZoomFactor = 1.0
+        if let widest = device.formats.max(by: { $0.videoFieldOfView < $1.videoFieldOfView }) {
+            device.activeFormat = widest
+        }
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+    }
+
+    func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
+
+const createCaptureSessionOld = `        func createCaptureSession() {
+            self.captureSession = AVCaptureSession()
+        }`;
+
+const createCaptureSessionNew = `        func createCaptureSession() {
+            self.captureSession = AVCaptureSession()
+            self.captureSession?.sessionPreset = .high
+        }`;
+
+const configureCaptureDevicesOld = `        func configureCaptureDevices() throws {
+
+            let session = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera], mediaType: AVMediaType.video, position: .unspecified)
+
+            let cameras = session.devices.compactMap { $0 }
+            guard !cameras.isEmpty else { throw CameraControllerError.noCamerasAvailable }
+
+            for camera in cameras {
+                if camera.position == .front {
+                    self.frontCamera = camera
+                }
+
+                if camera.position == .back {
+                    self.rearCamera = camera
+
+                    try camera.lockForConfiguration()
+                    camera.focusMode = .continuousAutoFocus
+                    camera.unlockForConfiguration()
+                }
+            }`;
+
+const configureCaptureDevicesNew = `        func configureCaptureDevices() throws {
+            let discovery = AVCaptureDevice.DiscoverySession(
+                deviceTypes: [.builtInWideAngleCamera],
+                mediaType: .video,
+                position: .unspecified
+            )
+            let discovered = discovery.devices
+            guard !discovered.isEmpty else { throw CameraControllerError.noCamerasAvailable }
+
+            self.frontCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
+                ?? discovered.first(where: { $0.position == .front })
+            self.rearCamera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+                ?? discovered.first(where: { $0.position == .back })
+
+            guard self.frontCamera != nil || self.rearCamera != nil else {
+                throw CameraControllerError.noCamerasAvailable
+            }
+
+            if let front = self.frontCamera {
+                try self.applyNaturalPreviewDeviceSettings(to: front)
+            }
+            if let rear = self.rearCamera {
+                try self.applyNaturalPreviewDeviceSettings(to: rear)
+            }`;
+
+const displayPreviewFrameOld = `        view.layer.insertSublayer(self.previewLayer!, at: 0)
+        self.previewLayer?.frame = view.frame`;
+
+const displayPreviewFrameNew = `        view.layer.insertSublayer(self.previewLayer!, at: 0)
+        self.previewLayer?.frame = view.bounds
+        self.previewLayer?.autoresizingMask = [.flexibleWidth, .flexibleHeight]`;
+
+const switchCamerasCommitOld = `        captureSession.commitConfiguration()
+
+        DispatchQueue.main.async {
+            if #available(iOS 17.0, *) {
+                self.refreshRotationCoordinator()
+            }
+            self.updateVideoOrientation()
+        }
+    }`;
+
+const switchCamerasCommitNew = `        captureSession.commitConfiguration()
+
+        if let device = self.activeCaptureDevice() {
+            try? self.applyNaturalPreviewDeviceSettings(to: device)
+        }
+
+        DispatchQueue.main.async {
+            if #available(iOS 17.0, *) {
+                self.refreshRotationCoordinator()
+            }
+            self.updateVideoOrientation()
+        }
+    }`;
+
+await patchFile(
+  controllerPath,
+  [
+    [naturalPreviewHelperOld, naturalPreviewHelperNew],
+    [createCaptureSessionOld, createCaptureSessionNew],
+    [configureCaptureDevicesOld, configureCaptureDevicesNew],
+    [displayPreviewFrameOld, displayPreviewFrameNew],
+    [switchCamerasCommitOld, switchCamerasCommitNew],
+  ],
+  "CameraController.swift (natural preview FOV)",
+);

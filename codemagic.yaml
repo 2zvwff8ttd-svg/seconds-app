@@ -29,6 +29,9 @@ workflows:
       - name: Install npm dependencies
         script: npm ci
 
+      - name: Verify iOS camera preview patch
+        script: node scripts/verify-camera-preview-ios-patch.mjs
+
       - name: Build Next.js
         script: npm run build
 
@@ -90,6 +93,9 @@ workflows:
     scripts:
       - name: Install npm dependencies
         script: npm ci
+
+      - name: Verify iOS camera preview patch
+        script: node scripts/verify-camera-preview-ios-patch.mjs
 
       - name: Build Next.js
         script: npm run build
