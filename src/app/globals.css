@@ -661,7 +661,7 @@ body {
   aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 50%;
-  clip-path: circle(50% at 50% 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   background: #050508;
 }
 
@@ -671,7 +671,7 @@ body {
   z-index: 0;
   overflow: hidden;
   border-radius: 50%;
-  clip-path: circle(50% at 50% 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
 }
 
 .bubble-3d__body::after {
@@ -704,7 +704,7 @@ body {
 .bubble-3d__thumb {
   opacity: 0.94;
   border-radius: 50%;
-  clip-path: circle(50% at 50% 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
 }
 
 .bubble-3d-mini__body {
@@ -1631,12 +1631,277 @@ body {
   border-top: 1px solid var(--border);
 }
 
-/* ネイティブ camera-preview: WebView 背面にカメラを表示 */
+/* ネイティブ camera-preview: WebView 背面にカメラを表示（くり抜きマスク方式） */
+:root {
+  --record-mask-center-x: 50%;
+  --record-mask-center-y: 38%;
+  --record-mask-hole-diameter: min(72vw, 340px);
+  --record-mask-hole-radius: calc(var(--record-mask-hole-diameter) / 2);
+  --record-mask-rim-radius: 50%;
+  --video-display-mask-clip: circle(50% at 50% 50%);
+  --video-display-mask-radius: 50%;
+}
+
 html.record-native-preview-active,
 html.record-native-preview-active body {
   background: transparent !important;
 }
 
+.record-native-preview-active .post-page-root {
+  background: transparent !important;
+}
+
+.record-native-preview-active .post-page-root > header {
+  background: rgb(var(--bg-base-rgb, 10 10 10));
+}
+
+.record-native-preview-active .post-form-scroll {
+  background: transparent;
+}
+
+.record-native-preview-active .post-form-scroll > *:not(.record-camera-root) {
+  position: relative;
+  z-index: 50;
+  background-color: rgb(var(--bg-base-rgb, 10 10 10));
+}
+
+.record-native-preview-active .clip-strip {
+  border-radius: 1rem 1rem 0 0;
+  padding-top: 0.25rem;
+}
+
+.record-camera-root {
+  position: relative;
+  width: 100%;
+}
+
+.native-camera-preview-anchor {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.record-camera-layout-spacer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  pointer-events: none;
+}
+
+.record-camera-layout-spacer__hole {
+  width: var(--record-mask-hole-diameter);
+  height: var(--record-mask-hole-diameter);
+  margin-top: max(0px, calc(38dvh - var(--record-mask-hole-radius)));
+  flex-shrink: 0;
+}
+
+.record-camera-layout-spacer__controls {
+  height: 7.5rem;
+  flex-shrink: 0;
+}
+
+.record-mask-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.record-mask-overlay__scrim {
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--bg-base-rgb, 10 10 10) / 0.97);
+  -webkit-mask-image: radial-gradient(
+    circle at var(--record-mask-center-x) var(--record-mask-center-y),
+    transparent var(--record-mask-hole-radius),
+    black var(--record-mask-hole-radius)
+  );
+  mask-image: radial-gradient(
+    circle at var(--record-mask-center-x) var(--record-mask-center-y),
+    transparent var(--record-mask-hole-radius),
+    black var(--record-mask-hole-radius)
+  );
+}
+
+.record-mask-overlay__rim {
+  position: absolute;
+  left: var(--record-mask-center-x);
+  top: var(--record-mask-center-y);
+  width: var(--record-mask-hole-diameter);
+  height: var(--record-mask-hole-diameter);
+  transform: translate(-50%, -50%);
+  border-radius: var(--record-mask-rim-radius);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.35),
+    inset 0 -8px 24px rgb(255 255 255 / 0.08),
+    0 0 0 1px rgb(0 0 0 / 0.25);
+  opacity: 0.35;
+  transition: opacity 0.25s ease;
+}
+
+.record-mask-overlay__rim--ready {
+  opacity: 1;
+}
+
+.record-mask-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 42;
+  pointer-events: none;
+}
+
+.record-mask-controls__loading {
+  position: fixed;
+  left: 50%;
+  top: var(--record-mask-center-y);
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  width: min(72vw, 340px);
+  padding: 1.25rem;
+  border-radius: 1rem;
+  background: rgb(0 0 0 / 0.72);
+  text-align: center;
+  pointer-events: none;
+}
+
+.record-mask-controls__loading--dim {
+  width: auto;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.record-mask-controls__flip {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 3.25rem);
+  right: max(1rem, calc(50% - var(--record-mask-hole-radius) + 0.5rem));
+  z-index: 2;
+  display: flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.5);
+  color: white;
+  backdrop-filter: blur(12px);
+  transition: background 0.15s ease;
+  pointer-events: auto;
+}
+
+.record-mask-controls__flip:disabled {
+  opacity: 0.4;
+}
+
+.record-mask-controls__flip:not(:disabled):hover {
+  background: rgb(0 0 0 / 0.7);
+}
+
+.record-mask-controls__bottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 1rem calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
+  background: linear-gradient(to top, rgb(0 0 0 / 0.82), transparent);
+  pointer-events: none;
+}
+
+.record-mask-controls__recording-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgb(248 113 113);
+}
+
+.record-mask-controls__recording-dot {
+  height: 0.5rem;
+  width: 0.5rem;
+  border-radius: 9999px;
+  background: rgb(239 68 68);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.record-mask-controls__limit-msg {
+  margin-bottom: 0.75rem;
+  font-size: 0.75rem;
+  color: rgb(248 113 113);
+}
+
+.record-mask-controls__record {
+  position: relative;
+  display: flex;
+  height: 4rem;
+  width: 4rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 4px solid rgb(255 255 255 / 0.9);
+  background: rgb(255 255 255 / 0.1);
+  transition: background 0.15s ease;
+  touch-action: manipulation;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.record-mask-controls__record:not(:disabled):hover {
+  background: rgb(255 255 255 / 0.2);
+}
+
+.record-mask-controls__record:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.record-mask-controls__record--active {
+  border-color: rgb(239 68 68 / 0.8);
+  background: rgb(239 68 68 / 0.2);
+}
+
+.record-mask-controls__record-inner {
+  display: block;
+  height: 3rem;
+  width: 3rem;
+  border-radius: 9999px;
+  background: rgb(239 68 68);
+  transition: all 0.15s ease;
+}
+
+.record-mask-controls__record--active .record-mask-controls__record-inner {
+  height: 1.5rem;
+  width: 1.5rem;
+  border-radius: 0.125rem;
+}
+
+.record-mask-controls__hint {
+  margin-top: 0.75rem;
+  font-size: 0.625rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.record-camera-error {
+  margin-top: 0.5rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: rgb(239 68 68 / 0.1);
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+  color: rgb(248 113 113);
+}
+
+/* legacy shell styles (web recorder) */
 .native-camera-shell {
   background: transparent;
 }
@@ -1649,10 +1914,6 @@ html.record-native-preview-active body {
 .record-native-preview-active .native-camera-shell {
   background: transparent;
   border-color: transparent;
-}
-
-.record-native-preview-active .post-page-root {
-  background: transparent !important;
 }
 
 .native-camera-preview-host {

@@ -80,7 +80,7 @@ export function ClipStrip({ clips, onRemove, disabled }: ClipStripProps) {
 
   return (
     <>
-      <div className="mt-4">
+      <div className="clip-strip mt-4">
         <h3 className="mb-2 text-xs font-semibold text-foreground">
           クリップ ({clips.length})
         </h3>

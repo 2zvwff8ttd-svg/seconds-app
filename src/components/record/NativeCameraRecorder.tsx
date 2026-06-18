@@ -1,9 +1,11 @@
 "use client";
 
 import type { CameraRecorderProps } from "@/components/record/camera-recorder-types";
+import { RecordMaskOverlay } from "@/components/record/RecordMaskOverlay";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
+import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
 import { getMinRecordingMs } from "@/lib/recording/recorder-utils";
 import {
   flipNativeCamera,
@@ -14,14 +16,6 @@ import {
   stopNativeRecording,
   syncNativePreviewLayout,
 } from "@/lib/recording/native-camera-preview";
-import {
-  describePreviewRectFailure,
-  logPreviewRectDebug,
-  logPreviewRectFailure,
-  PREVIEW_RECT_BOOT_MAX_ATTEMPTS,
-  resolvePreviewRect,
-  type PreviewRectDebugInfo,
-} from "@/lib/recording/native-preview-rect";
 import { debounceAsync } from "@/lib/recording/native-preview-scheduler";
 import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
 import { nativeVideoSourceToFile } from "@/lib/recording/native-recording-file";
@@ -39,12 +33,18 @@ function facingToPosition(mode: "user" | "environment"): "front" | "rear" {
   return mode === "user" ? "front" : "rear";
 }
 
+function fullscreenPreviewOpts(facingMode: "user" | "environment") {
+  return {
+    ...getFullscreenNativePreviewRect(),
+    position: facingToPosition(facingMode),
+  };
+}
+
 export function NativeCameraRecorder({
   clips,
   onClipAdded,
   disabled = false,
 }: CameraRecorderProps) {
-  const previewHostRef = useRef<HTMLDivElement>(null);
   const recordingStartRef = useRef<number | null>(null);
   const recordBudgetRef = useRef(0);
   const finishingRef = useRef(false);
@@ -65,8 +65,6 @@ export function NativeCameraRecorder({
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pendingRecordedSeconds, setPendingRecordedSeconds] = useState(0);
-  const [previewDebugInfo, setPreviewDebugInfo] =
-    useState<PreviewRectDebugInfo | null>(null);
 
   const usedClipSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
 
@@ -79,23 +77,6 @@ export function NativeCameraRecorder({
         : pendingRecordedSeconds;
     return Math.max(0, assignedSeconds - usedClipSeconds - elapsed);
   }, [assignedSeconds, usedClipSeconds, isRecording, pendingRecordedSeconds, tick]);
-
-  const getPreviewHost = useCallback(() => previewHostRef.current, []);
-
-  const refreshPreviewDebug = useCallback(
-    (context: string) => {
-      const info = logPreviewRectDebug(context, getPreviewHost());
-      if (info) setPreviewDebugInfo(info);
-    },
-    [getPreviewHost],
-  );
-
-  const resolveRect = useCallback(
-    async (maxAttempts?: number) => {
-      return resolvePreviewRect(getPreviewHost, { maxAttempts });
-    },
-    [getPreviewHost],
-  );
 
   useEffect(() => {
     aliveRef.current = true;
@@ -164,25 +145,11 @@ export function NativeCameraRecorder({
     setError(null);
 
     try {
-      const rect = await resolveRect(PREVIEW_RECT_BOOT_MAX_ATTEMPTS);
-      if (!aliveRef.current) return false;
-
-      if (!rect) {
-        const host = getPreviewHost();
-        logPreviewRectFailure("ensurePreview", host);
-        setError(describePreviewRectFailure(host));
-        return false;
-      }
-
-      await startNativePreview({
-        ...rect,
-        position: facingToPosition(facingMode),
-      });
+      await startNativePreview(fullscreenPreviewOpts(facingMode));
       if (!aliveRef.current) return false;
 
       previewStartedRef.current = true;
       setCameraReady(true);
-      refreshPreviewDebug("ensurePreview");
       return true;
     } catch (err) {
       if (!aliveRef.current) return false;
@@ -198,13 +165,12 @@ export function NativeCameraRecorder({
         setCameraStarting(false);
       }
     }
-  }, [facingMode, getPreviewHost, isRecording, refreshPreviewDebug, resolveRect]);
+  }, [facingMode, isRecording]);
 
   useEffect(() => {
     if (assignedSeconds === null || disabled || bootStartedRef.current) return;
     bootStartedRef.current = true;
 
-    // 画面遷移アニメーション完了後に1回だけ起動（ResizeObserver との競合を避ける）
     const boot = window.setTimeout(() => {
       if (!aliveRef.current) return;
       void ensurePreview();
@@ -225,40 +191,18 @@ export function NativeCameraRecorder({
     }
 
     try {
-      const rect = await resolveRect(PREVIEW_RECT_BOOT_MAX_ATTEMPTS);
-      if (!aliveRef.current || !rect) return;
-
-      await syncNativePreviewLayout({
-        ...rect,
-        position: facingToPosition(facingMode),
-      });
-      refreshPreviewDebug("syncPreviewLayout");
+      await syncNativePreviewLayout(fullscreenPreviewOpts(facingMode));
     } catch (err) {
       if (!aliveRef.current) return;
       console.warn("[NativeCameraRecorder] syncPreviewLayout", err);
     }
-  }, [cameraStarting, facingMode, isRecording, refreshPreviewDebug, resolveRect]);
+  }, [cameraStarting, facingMode, isRecording]);
 
   const scheduleLayoutSyncRef = useRef(debounceAsync(() => syncPreviewLayout(), 500));
 
   useEffect(() => {
     scheduleLayoutSyncRef.current = debounceAsync(() => syncPreviewLayout(), 500);
   }, [syncPreviewLayout]);
-
-  useEffect(() => {
-    const host = previewHostRef.current;
-    if (!host || assignedSeconds === null || disabled) return;
-
-    const observer = new ResizeObserver(() => {
-      if (!previewStartedRef.current || isRecording || previewStartingRef.current) {
-        return;
-      }
-      scheduleLayoutSyncRef.current();
-    });
-
-    observer.observe(host);
-    return () => observer.disconnect();
-  }, [assignedSeconds, disabled, isRecording]);
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -273,9 +217,12 @@ export function NativeCameraRecorder({
 
     vv.addEventListener("resize", onViewportChange);
     vv.addEventListener("scroll", onViewportChange);
+    window.addEventListener("orientationchange", onViewportChange);
+
     return () => {
       vv.removeEventListener("resize", onViewportChange);
       vv.removeEventListener("scroll", onViewportChange);
+      window.removeEventListener("orientationchange", onViewportChange);
     };
   }, [isRecording]);
 
@@ -360,14 +307,6 @@ export function NativeCameraRecorder({
     const budget = assignedSeconds - usedClipSeconds;
     if (budget <= 0) return;
 
-    const rect = await resolveRect();
-    if (!rect) {
-      const host = getPreviewHost();
-      logPreviewRectFailure("beginRecording", host);
-      setError(describePreviewRectFailure(host));
-      return;
-    }
-
     if (!cameraReady) {
       const started = await ensurePreview();
       if (!started) {
@@ -376,27 +315,17 @@ export function NativeCameraRecorder({
       }
     }
 
-    const recordRect = await resolveRect();
-    if (!recordRect) {
-      const host = getPreviewHost();
-      logPreviewRectFailure("beginRecording(final)", host);
-      setError(describePreviewRectFailure(host));
-      return;
-    }
-
     setError(null);
     finishingRef.current = false;
     recordBudgetRef.current = budget;
     setRecordingStarting(true);
 
     try {
+      const recordRect = fullscreenPreviewOpts(facingMode);
       console.info(
-        `[NativeCameraRecorder] startNativeRecording: ${recordRect.width}×${recordRect.height} at ${recordRect.x},${recordRect.y}`,
+        `[NativeCameraRecorder] startNativeRecording: fullscreen ${recordRect.width}x${recordRect.height}`,
       );
-      await startNativeRecording({
-        ...recordRect,
-        position: facingToPosition(facingMode),
-      });
+      await startNativeRecording(recordRect);
     } catch (err) {
       clearAutoStop();
       clearTick();
@@ -427,9 +356,7 @@ export function NativeCameraRecorder({
     disabled,
     ensurePreview,
     facingMode,
-    getPreviewHost,
     isRecording,
-    resolveRect,
     usedClipSeconds,
   ]);
 
@@ -493,75 +420,63 @@ export function NativeCameraRecorder({
     !finishingRef.current;
 
   return (
-    <div
-      className={`native-camera-shell overflow-hidden rounded-2xl border bg-transparent ${
-        cameraReady ? "native-camera-shell--active border-transparent" : "border-border"
-      }`}
-    >
+    <div className="record-camera-root">
       <div
         id={NATIVE_CAMERA_PREVIEW_ID}
-        ref={previewHostRef}
-        className="native-camera-preview-host bg-transparent"
-      >
+        className="native-camera-preview-anchor"
+        aria-hidden
+      />
+
+      <div className="record-camera-layout-spacer" aria-hidden>
+        <div className="record-camera-layout-spacer__hole" />
+        <div className="record-camera-layout-spacer__controls" />
+      </div>
+
+      <RecordMaskOverlay cameraReady={cameraReady} />
+
+      <div className="record-mask-controls">
         <TimeBudgetGauge
           assignedSeconds={assignedSeconds}
           usedSeconds={usedClipSeconds}
           recordingElapsed={gaugeRecordingElapsed}
         />
 
-        <div
-          className={`native-camera-preview-mask pointer-events-none absolute inset-0 z-10 ${
-            cameraReady ? "native-camera-preview-mask--hidden" : ""
-          }`}
-          aria-hidden
-        />
-
-        {recordingStarting && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50 text-sm font-medium text-foreground">
-            録画を開始しています…
-          </div>
-        )}
-
         {!cameraReady && !isRecording && !error && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/70 px-6 text-center">
+          <div className="record-mask-controls__loading">
             <p className="text-sm font-medium text-foreground">カメラを準備中…</p>
             <p className="mt-1 text-xs text-muted">アプリ内プレビューで録画します</p>
           </div>
         )}
 
         {cameraStarting && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 text-sm text-muted">
+          <div className="record-mask-controls__loading record-mask-controls__loading--dim">
             カメラを起動中…
           </div>
         )}
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex justify-end bg-gradient-to-b from-black/50 to-transparent px-3 pb-6 pt-5">
-          <button
-            type="button"
-            onClick={() => void switchCamera()}
-            disabled={isRecording || cameraStarting || disabled || !cameraReady}
-            className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-md transition hover:bg-black/70 disabled:opacity-40"
-            aria-label="カメラ切り替え"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 7h4l2-3h8l2 3h4v12H4V7z" />
-              <circle cx="12" cy="13" r="3.5" />
-            </svg>
-          </button>
-        </div>
+        {recordingStarting && (
+          <div className="record-mask-controls__loading record-mask-controls__loading--dim">
+            録画を開始しています…
+          </div>
+        )}
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center bg-gradient-to-t from-black/80 to-transparent pb-6 pt-10">
-          {previewDebugInfo && (
-            <div className="pointer-events-none mb-3 w-full max-w-sm px-3">
-              <pre className="rounded-lg bg-black/75 p-2 text-[8px] leading-snug text-emerald-300 whitespace-pre-wrap">
-                {`DOM ${previewDebugInfo.dom.x},${previewDebugInfo.dom.y} ${previewDebugInfo.dom.width}×${previewDebugInfo.dom.height}\nPLUGIN ${previewDebugInfo.plugin.x},${previewDebugInfo.plugin.y} ${previewDebugInfo.plugin.width}×${previewDebugInfo.plugin.height}\nDPR ${previewDebugInfo.dpr} · viewport ${previewDebugInfo.viewport.width}×${previewDebugInfo.viewport.height}\nBC ${previewDebugInfo.boundingClient.left},${previewDebugInfo.boundingClient.top} ${previewDebugInfo.boundingClient.width}×${previewDebugInfo.boundingClient.height}`}
-              </pre>
-            </div>
-          )}
+        <button
+          type="button"
+          onClick={() => void switchCamera()}
+          disabled={isRecording || cameraStarting || disabled || !cameraReady}
+          className="record-mask-controls__flip"
+          aria-label="カメラ切り替え"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 7h4l2-3h8l2 3h4v12H4V7z" />
+            <circle cx="12" cy="13" r="3.5" />
+          </svg>
+        </button>
 
+        <div className="record-mask-controls__bottom">
           {isRecording && (
-            <span className="mb-3 flex items-center gap-2 text-xs font-medium text-red-400">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+            <span className="record-mask-controls__recording-badge">
+              <span className="record-mask-controls__recording-dot" />
               録画中
             </span>
           )}
@@ -570,7 +485,7 @@ export function NativeCameraRecorder({
             !isRecording &&
             assignedSeconds !== null &&
             usedClipSeconds >= assignedSeconds && (
-              <p className="mb-3 text-xs text-red-400">撮影時間を使い切りました</p>
+              <p className="record-mask-controls__limit-msg">撮影時間を使い切りました</p>
             )}
 
           <button
@@ -583,23 +498,13 @@ export function NativeCameraRecorder({
               }
             }}
             disabled={(!canRecord && !isRecording) || cameraStarting || recordingStarting}
-            className={`pointer-events-auto relative flex h-16 w-16 items-center justify-center rounded-full border-4 transition touch-manipulation select-none disabled:cursor-not-allowed disabled:opacity-40 ${
-              isRecording
-                ? "border-red-500/80 bg-red-500/20"
-                : "border-white/90 bg-white/10 hover:bg-white/20"
-            }`}
+            className={`record-mask-controls__record${isRecording ? " record-mask-controls__record--active" : ""}`}
             aria-label={isRecording ? "録画を停止" : "録画を開始"}
           >
-            <span
-              className={`block transition ${
-                isRecording
-                  ? "h-6 w-6 rounded-sm bg-red-500"
-                  : "h-12 w-12 rounded-full bg-red-500"
-              }`}
-            />
+            <span className="record-mask-controls__record-inner" />
           </button>
 
-          <p className="mt-3 text-[10px] text-muted">
+          <p className="record-mask-controls__hint">
             {clips.length > 0
               ? `${clips.length}クリップ · 残り時間はゲージで表示`
               : "録画ボタンで開始 · 時間切れで自動停止"}
@@ -608,10 +513,7 @@ export function NativeCameraRecorder({
       </div>
 
       {error && (
-        <p
-          role="alert"
-          className="border-t border-border bg-red-500/10 px-4 py-2 text-xs text-red-400"
-        >
+        <p role="alert" className="record-camera-error">
           {error}
         </p>
       )}
