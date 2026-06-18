@@ -47,19 +47,10 @@ export function readPreviewRect(el: HTMLElement | null): NativePreviewRect | nul
 
 /**
  * camera-preview プラグインへ渡す座標。
- * iOS ネイティブ側は x/y を UIScreen.main.scale で割るが width/height は割らない。
+ * iOS も含め x/y/width/height は DOM のポイント値（CSS px）をそのまま渡す。
  */
 export function toPluginPreviewRect(rect: NativePreviewRect): NativePreviewRect {
-  if (Capacitor.getPlatform() !== "ios") {
-    return rect;
-  }
-  const scale = window.devicePixelRatio || 1;
-  return {
-    x: Math.round(rect.x * scale),
-    y: Math.round(rect.y * scale),
-    width: rect.width,
-    height: rect.height,
-  };
+  return rect;
 }
 
 export type PreviewRectDebugInfo = {
@@ -138,9 +129,7 @@ export function logPreviewRectDebug(
 }
 
 export function formatPreviewRectDebug(rect: NativePreviewRect): string {
-  const plugin = toPluginPreviewRect(rect);
-  const scale = window.devicePixelRatio || 1;
-  return `dom=${rect.x},${rect.y} ${rect.width}×${rect.height} → plugin=${plugin.x},${plugin.y} ${plugin.width}×${plugin.height} (dpr=${scale})`;
+  return `dom=${rect.x},${rect.y} ${rect.width}×${rect.height} → plugin=${rect.x},${rect.y} ${rect.width}×${rect.height}`;
 }
 
 export function describePreviewRectFailure(el: HTMLElement | null): string {
