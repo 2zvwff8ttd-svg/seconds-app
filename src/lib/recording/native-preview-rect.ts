@@ -2,7 +2,8 @@ import { Capacitor } from "@capacitor/core";
 import type { NativePreviewRect } from "@/lib/recording/native-camera-preview";
 
 const MIN_PREVIEW_DIM = 2;
-const DEFAULT_MAX_ATTEMPTS = 48;
+const DEFAULT_MAX_ATTEMPTS = 16;
+export const PREVIEW_RECT_BOOT_MAX_ATTEMPTS = 12;
 const RETRY_INTERVAL_MS = 50;
 
 function waitMs(ms: number): Promise<void> {

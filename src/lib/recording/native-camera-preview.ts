@@ -3,6 +3,7 @@ import {
   type CameraPosition,
   type CameraPreviewOptions,
 } from "@capacitor-community/camera-preview";
+import { enqueueNativePreviewOp } from "@/lib/recording/native-preview-lock";
 
 export const NATIVE_CAMERA_PREVIEW_ID = "native-camera-preview";
 
@@ -16,6 +17,12 @@ export type NativePreviewRect = {
 export type StartNativePreviewOptions = NativePreviewRect & {
   position: CameraPosition;
 };
+
+let lastAppliedRectKey: string | null = null;
+
+function rectKey(rect: NativePreviewRect, position: CameraPosition): string {
+  return `${rect.x},${rect.y},${rect.width},${rect.height},${position}`;
+}
 
 function withPluginTimeout<T>(
   promise: Promise<T>,
@@ -49,45 +56,64 @@ function buildPreviewOptions(
 export async function startNativePreview(
   opts: StartNativePreviewOptions,
 ): Promise<void> {
-  const started = await CameraPreview.isCameraStarted();
-  if (started.value) {
-    await CameraPreview.stop();
-  }
-  await CameraPreview.start(buildPreviewOptions(opts));
+  return enqueueNativePreviewOp("startNativePreview", async () => {
+    const started = await CameraPreview.isCameraStarted();
+    if (started.value) {
+      await CameraPreview.stop();
+    }
+    await CameraPreview.start(buildPreviewOptions(opts));
+    lastAppliedRectKey = rectKey(opts, opts.position);
+  });
 }
 
 export async function stopNativePreview(): Promise<void> {
-  const started = await CameraPreview.isCameraStarted();
-  if (started.value) {
-    await CameraPreview.stop();
-  }
+  return enqueueNativePreviewOp("stopNativePreview", async () => {
+    const started = await CameraPreview.isCameraStarted();
+    if (started.value) {
+      await CameraPreview.stop();
+    }
+    lastAppliedRectKey = null;
+  });
 }
 
 export async function flipNativeCamera(): Promise<void> {
-  await CameraPreview.flip();
+  return enqueueNativePreviewOp("flipNativeCamera", async () => {
+    await CameraPreview.flip();
+  });
 }
 
 export async function startNativeRecording(
   opts: StartNativePreviewOptions,
 ): Promise<void> {
-  await withPluginTimeout(
-    CameraPreview.startRecordVideo(buildPreviewOptions(opts)),
-    12_000,
-    "録画の開始がタイムアウトしました",
-  );
+  return enqueueNativePreviewOp("startNativeRecording", async () => {
+    await withPluginTimeout(
+      CameraPreview.startRecordVideo(buildPreviewOptions(opts)),
+      12_000,
+      "録画の開始がタイムアウトしました",
+    );
+  });
 }
 
-/** プレビュー枠の移動・リサイズ後にネイティブ表示位置を同期 */
+/** プレビュー枠が変わったときだけ stop→start（同一 rect ならスキップ） */
 export async function syncNativePreviewLayout(
   opts: StartNativePreviewOptions,
 ): Promise<void> {
-  const started = await CameraPreview.isCameraStarted();
-  if (!started.value) {
-    await startNativePreview(opts);
+  const key = rectKey(opts, opts.position);
+  if (lastAppliedRectKey === key) {
     return;
   }
-  await CameraPreview.stop();
-  await CameraPreview.start(buildPreviewOptions(opts));
+
+  return enqueueNativePreviewOp("syncNativePreviewLayout", async () => {
+    const started = await CameraPreview.isCameraStarted();
+    if (!started.value) {
+      await CameraPreview.start(buildPreviewOptions(opts));
+      lastAppliedRectKey = key;
+      return;
+    }
+    await CameraPreview.stop();
+    await CameraPreview.start(buildPreviewOptions(opts));
+    lastAppliedRectKey = key;
+  });
 }
 
 export type NativeRecordingResult = {
@@ -95,13 +121,15 @@ export type NativeRecordingResult = {
 };
 
 export async function stopNativeRecording(): Promise<NativeRecordingResult> {
-  const result = (await CameraPreview.stopRecordVideo()) as unknown as {
-    videoFilePath?: string;
-    value?: string;
-  };
-  const path = result.videoFilePath?.trim() || result.value?.trim();
-  if (!path) {
-    throw new Error("録画ファイルのパスを取得できませんでした");
-  }
-  return { videoFilePath: path };
+  return enqueueNativePreviewOp("stopNativeRecording", async () => {
+    const result = (await CameraPreview.stopRecordVideo()) as unknown as {
+      videoFilePath?: string;
+      value?: string;
+    };
+    const path = result.videoFilePath?.trim() || result.value?.trim();
+    if (!path) {
+      throw new Error("録画ファイルのパスを取得できませんでした");
+    }
+    return { videoFilePath: path };
+  });
 }

@@ -17,9 +17,10 @@ import {
 import {
   describePreviewRectFailure,
   logPreviewRectFailure,
-  readPreviewRect,
+  PREVIEW_RECT_BOOT_MAX_ATTEMPTS,
   resolvePreviewRect,
 } from "@/lib/recording/native-preview-rect";
+import { debounceAsync } from "@/lib/recording/native-preview-scheduler";
 import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
 import { nativeVideoPathToFile } from "@/lib/recording/native-recording-file";
 import {
@@ -47,6 +48,9 @@ export function NativeCameraRecorder({
   const recordBudgetRef = useRef(0);
   const finishingRef = useRef(false);
   const previewStartedRef = useRef(false);
+  const previewStartingRef = useRef(false);
+  const aliveRef = useRef(true);
+  const bootStartedRef = useRef(false);
   const cancelAutoStopRef = useRef<(() => void) | null>(null);
   const tickRef = useRef<number | null>(null);
   const lastRecordActionRef = useRef(0);
@@ -74,9 +78,21 @@ export function NativeCameraRecorder({
 
   const getPreviewHost = useCallback(() => previewHostRef.current, []);
 
-  const resolveRect = useCallback(async () => {
-    return resolvePreviewRect(getPreviewHost);
-  }, [getPreviewHost]);
+  const resolveRect = useCallback(
+    async (maxAttempts?: number) => {
+      return resolvePreviewRect(getPreviewHost, { maxAttempts });
+    },
+    [getPreviewHost],
+  );
+
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+      bootStartedRef.current = false;
+      previewStartingRef.current = false;
+    };
+  }, []);
 
   const clearTick = useCallback(() => {
     if (tickRef.current !== null) {
@@ -122,27 +138,41 @@ export function NativeCameraRecorder({
   );
 
   const ensurePreview = useCallback(async () => {
-    if (isRecording || previewStartedRef.current) return false;
-
-    const rect = await resolveRect();
-    if (!rect) {
-      const host = getPreviewHost();
-      logPreviewRectFailure("ensurePreview", host);
-      setError(describePreviewRectFailure(host));
+    if (
+      !aliveRef.current ||
+      isRecording ||
+      previewStartedRef.current ||
+      previewStartingRef.current
+    ) {
       return false;
     }
 
+    previewStartingRef.current = true;
     setCameraStarting(true);
     setError(null);
+
     try {
+      const rect = await resolveRect(PREVIEW_RECT_BOOT_MAX_ATTEMPTS);
+      if (!aliveRef.current) return false;
+
+      if (!rect) {
+        const host = getPreviewHost();
+        logPreviewRectFailure("ensurePreview", host);
+        setError(describePreviewRectFailure(host));
+        return false;
+      }
+
       await startNativePreview({
         ...rect,
         position: facingToPosition(facingMode),
       });
+      if (!aliveRef.current) return false;
+
       previewStartedRef.current = true;
       setCameraReady(true);
       return true;
     } catch (err) {
+      if (!aliveRef.current) return false;
       setError(
         err instanceof Error ? err.message : "カメラプレビューの起動に失敗しました",
       );
@@ -150,81 +180,101 @@ export function NativeCameraRecorder({
       previewStartedRef.current = false;
       return false;
     } finally {
-      setCameraStarting(false);
+      previewStartingRef.current = false;
+      if (aliveRef.current) {
+        setCameraStarting(false);
+      }
     }
   }, [facingMode, getPreviewHost, isRecording, resolveRect]);
 
   useEffect(() => {
-    if (assignedSeconds === null || disabled) return;
+    if (assignedSeconds === null || disabled || bootStartedRef.current) return;
+    bootStartedRef.current = true;
 
+    // 画面遷移アニメーション完了後に1回だけ起動（ResizeObserver との競合を避ける）
     const boot = window.setTimeout(() => {
+      if (!aliveRef.current) return;
       void ensurePreview();
-    }, 120);
+    }, 450);
 
     return () => window.clearTimeout(boot);
   }, [assignedSeconds, disabled, ensurePreview]);
 
   const syncPreviewLayout = useCallback(async () => {
-    if (isRecording || !previewStartedRef.current) return;
-    const rect = await resolveRect();
-    if (!rect) return;
+    if (
+      !aliveRef.current ||
+      isRecording ||
+      !previewStartedRef.current ||
+      previewStartingRef.current ||
+      cameraStarting
+    ) {
+      return;
+    }
+
     try {
+      const rect = await resolveRect(PREVIEW_RECT_BOOT_MAX_ATTEMPTS);
+      if (!aliveRef.current || !rect) return;
+
       await syncNativePreviewLayout({
         ...rect,
         position: facingToPosition(facingMode),
       });
     } catch (err) {
+      if (!aliveRef.current) return;
       console.warn("[NativeCameraRecorder] syncPreviewLayout", err);
     }
-  }, [facingMode, isRecording, resolveRect]);
+  }, [cameraStarting, facingMode, isRecording, resolveRect]);
+
+  const scheduleLayoutSyncRef = useRef(debounceAsync(() => syncPreviewLayout(), 500));
+
+  useEffect(() => {
+    scheduleLayoutSyncRef.current = debounceAsync(() => syncPreviewLayout(), 500);
+  }, [syncPreviewLayout]);
 
   useEffect(() => {
     const host = previewHostRef.current;
     if (!host || assignedSeconds === null || disabled) return;
 
     const observer = new ResizeObserver(() => {
-      if (previewStartedRef.current && !isRecording && !cameraStarting) {
-        void syncPreviewLayout();
+      if (!previewStartedRef.current || isRecording || previewStartingRef.current) {
         return;
       }
-      if (previewStartedRef.current || isRecording || cameraStarting) return;
-      const rect = readPreviewRect(host);
-      if (!rect) return;
-      void ensurePreview();
+      scheduleLayoutSyncRef.current();
     });
 
     observer.observe(host);
     return () => observer.disconnect();
-  }, [
-    assignedSeconds,
-    cameraStarting,
-    disabled,
-    ensurePreview,
-    isRecording,
-    syncPreviewLayout,
-  ]);
+  }, [assignedSeconds, disabled, isRecording]);
 
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
+
     const onViewportChange = () => {
-      void syncPreviewLayout();
+      if (!previewStartedRef.current || isRecording || previewStartingRef.current) {
+        return;
+      }
+      scheduleLayoutSyncRef.current();
     };
+
     vv.addEventListener("resize", onViewportChange);
     vv.addEventListener("scroll", onViewportChange);
     return () => {
       vv.removeEventListener("resize", onViewportChange);
       vv.removeEventListener("scroll", onViewportChange);
     };
-  }, [syncPreviewLayout]);
+  }, [isRecording]);
 
   useEffect(() => {
     return () => {
       clearAutoStop();
       clearTick();
       recordingStartRef.current = null;
-      void stopNativePreview().catch(() => {});
       previewStartedRef.current = false;
+      previewStartingRef.current = false;
+      void stopNativePreview().catch((err) => {
+        console.warn("[NativeCameraRecorder] stopNativePreview on unmount", err);
+      });
     };
   }, [clearAutoStop, clearTick]);
 
