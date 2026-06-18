@@ -39,6 +39,20 @@ const checks = [
     ),
     fail: "builtInWideAngleCamera default selection missing",
   },
+  {
+    label: "preview layer uses CALayer autoresizing mask",
+    ok: controller.includes(
+      "autoresizingMask = [.layerWidthSizable, .layerHeightSizable]",
+    ),
+    fail: "previewLayer autoresizingMask must use layerWidthSizable/layerHeightSizable",
+  },
+  {
+    label: "preview layer does not use UIView autoresizing mask",
+    ok: !controller.includes(
+      "previewLayer?.autoresizingMask = [.flexibleWidth, .flexibleHeight]",
+    ),
+    fail: "previewLayer must not use UIView flexibleWidth/flexibleHeight",
+  },
 ];
 
 let failed = false;

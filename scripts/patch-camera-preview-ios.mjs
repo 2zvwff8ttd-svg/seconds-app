@@ -819,7 +819,7 @@ const displayPreviewFrameOld = `        view.layer.insertSublayer(self.previewLa
 
 const displayPreviewFrameNew = `        view.layer.insertSublayer(self.previewLayer!, at: 0)
         self.previewLayer?.frame = view.bounds
-        self.previewLayer?.autoresizingMask = [.flexibleWidth, .flexibleHeight]`;
+        self.previewLayer?.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]`;
 
 const switchCamerasCommitOld = `        captureSession.commitConfiguration()
 
@@ -845,6 +845,9 @@ const switchCamerasCommitNew = `        captureSession.commitConfiguration()
         }
     }`;
 
+const displayPreviewFrameWrongMaskOld = `        self.previewLayer?.autoresizingMask = [.flexibleWidth, .flexibleHeight]`;
+const displayPreviewFrameWrongMaskNew = `        self.previewLayer?.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]`;
+
 await patchFile(
   controllerPath,
   [
@@ -852,6 +855,7 @@ await patchFile(
     [createCaptureSessionOld, createCaptureSessionNew],
     [configureCaptureDevicesOld, configureCaptureDevicesNew],
     [displayPreviewFrameOld, displayPreviewFrameNew],
+    [displayPreviewFrameWrongMaskOld, displayPreviewFrameWrongMaskNew],
     [switchCamerasCommitOld, switchCamerasCommitNew],
   ],
   "CameraController.swift (natural preview FOV)",
