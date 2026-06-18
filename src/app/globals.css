@@ -59,6 +59,7 @@ body {
 
 .app-page {
   display: flex;
+  height: var(--app-height);
   min-height: var(--app-height);
   max-height: var(--app-height);
   width: 100%;
@@ -308,6 +309,13 @@ body {
 
 .onboarding-scroll::-webkit-scrollbar {
   display: none;
+}
+
+.post-form-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 @keyframes bubble-float-x {
@@ -1629,8 +1637,18 @@ html.record-native-preview-active body {
   background: transparent !important;
 }
 
+.native-camera-shell {
+  background: transparent;
+}
+
+.native-camera-shell--active {
+  border-color: transparent;
+  background: transparent;
+}
+
 .record-native-preview-active .native-camera-shell {
   background: transparent;
+  border-color: transparent;
 }
 
 .record-native-preview-active .post-page-root {
@@ -1650,5 +1668,8 @@ html.record-native-preview-active body {
 
 .native-camera-preview-mask {
   border-radius: inherit;
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.22);
+}
+
+.native-camera-preview-mask--hidden {
+  opacity: 0;
 }

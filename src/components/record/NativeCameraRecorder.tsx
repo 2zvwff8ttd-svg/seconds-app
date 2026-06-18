@@ -63,6 +63,7 @@ export function NativeCameraRecorder({
   const [recordingStarting, setRecordingStarting] = useState(false);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [pendingRecordedSeconds, setPendingRecordedSeconds] = useState(0);
 
   const usedClipSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
 
@@ -72,9 +73,9 @@ export function NativeCameraRecorder({
     const elapsed =
       isRecording && recordingStartRef.current
         ? measureRecordingSeconds(recordingStartRef.current)
-        : 0;
+        : pendingRecordedSeconds;
     return Math.max(0, assignedSeconds - usedClipSeconds - elapsed);
-  }, [assignedSeconds, usedClipSeconds, isRecording, tick]);
+  }, [assignedSeconds, usedClipSeconds, isRecording, pendingRecordedSeconds, tick]);
 
   const getPreviewHost = useCallback(() => previewHostRef.current, []);
 
@@ -286,6 +287,7 @@ export function NativeCameraRecorder({
 
     const elapsed = measureRecordingSeconds(recordingStartRef.current);
     const budget = recordBudgetRef.current;
+    setPendingRecordedSeconds(elapsed);
     recordingStartRef.current = null;
     setIsRecording(false);
 
@@ -323,12 +325,14 @@ export function NativeCameraRecorder({
       }
 
       addRecordedClip(file, durationSeconds);
+      setPendingRecordedSeconds(0);
       setError(null);
       console.info(
         `[NativeCameraRecorder] clip added: ${durationSeconds}s (${file.size} bytes)`,
       );
     } catch (err) {
       console.error("[NativeCameraRecorder] finishRecording failed", err);
+      setPendingRecordedSeconds(0);
       const detail =
         err instanceof Error ? err.message : typeof err === "string" ? err : "";
       const message = formatNativeRecordingError(err);
@@ -482,7 +486,7 @@ export function NativeCameraRecorder({
   const gaugeRecordingElapsed =
     isRecording && recordingStartRef.current
       ? measureRecordingSeconds(recordingStartRef.current)
-      : 0;
+      : pendingRecordedSeconds;
 
   const canRecord =
     assignedSeconds !== null &&
@@ -493,7 +497,11 @@ export function NativeCameraRecorder({
     !finishingRef.current;
 
   return (
-    <div className="native-camera-shell overflow-hidden rounded-2xl border border-border bg-transparent">
+    <div
+      className={`native-camera-shell overflow-hidden rounded-2xl border bg-transparent ${
+        cameraReady ? "native-camera-shell--active border-transparent" : "border-border"
+      }`}
+    >
       <div
         id={NATIVE_CAMERA_PREVIEW_ID}
         ref={previewHostRef}
@@ -506,7 +514,9 @@ export function NativeCameraRecorder({
         />
 
         <div
-          className="native-camera-preview-mask pointer-events-none absolute inset-0 z-10"
+          className={`native-camera-preview-mask pointer-events-none absolute inset-0 z-10 ${
+            cameraReady ? "native-camera-preview-mask--hidden" : ""
+          }`}
           aria-hidden
         />
 

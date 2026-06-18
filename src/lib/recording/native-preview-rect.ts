@@ -17,6 +17,11 @@ async function waitForLayoutFrame(): Promise<void> {
 }
 
 function getViewportOffsets(): { offsetX: number; offsetY: number } {
+  // Capacitor iOS: getBoundingClientRect is already in WebView coordinates.
+  if (Capacitor.getPlatform() === "ios") {
+    return { offsetX: 0, offsetY: 0 };
+  }
+
   const vv = window.visualViewport;
   return {
     offsetX: vv?.offsetLeft ?? 0,

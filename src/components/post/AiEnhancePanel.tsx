@@ -28,7 +28,18 @@ export function AiEnhancePanel({
   selectedPresetId = null,
   onPresetSelect,
 }: AiEnhancePanelProps) {
-  const busy = status === "analyzing" || status === "generating_music";
+  const busy =
+    status === "extracting_frame" ||
+    status === "calling_gemini" ||
+    status === "analyzing" ||
+    status === "generating_music";
+
+  const busyLabel =
+    status === "extracting_frame"
+      ? "動画からフレームを抽出中…"
+      : status === "calling_gemini" || status === "analyzing"
+        ? "AI がタイトルを生成中…"
+        : "BGM を生成中…";
 
   const bgmDescription = AI_BGM_GENERATION_ENABLED
     ? "ON で BGM を動画に合成"
@@ -84,9 +95,7 @@ export function AiEnhancePanel({
       {busy && (
         <p className="mt-3 flex items-center gap-2 text-xs text-violet-200">
           <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
-          {status === "analyzing"
-            ? "動画を解析してタイトルを生成中…"
-            : "BGM を生成中…"}
+          {busyLabel}
         </p>
       )}
 

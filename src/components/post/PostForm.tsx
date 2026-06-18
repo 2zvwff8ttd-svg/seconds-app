@@ -197,10 +197,13 @@ export function PostForm() {
       setBgmBlob(null);
       setSelectedPreset(null);
     }
-    setAiStatus("analyzing");
+    setAiStatus("extracting_frame");
 
     try {
       const frame = await extractFirstFrameBlob(clips[0].file);
+      if (aiRunId.current !== runId) return;
+
+      setAiStatus("calling_gemini");
       const base64 = await blobToBase64(frame);
       const result = await analyzeVideoFrame(base64, "image/jpeg");
 
@@ -237,7 +240,7 @@ export function PostForm() {
 
   useEffect(() => {
     if (!AI_BGM_GENERATION_ENABLED) return;
-    if (!aiMusicEnabled || !analyzeResult || bgmBlob || aiStatus === "analyzing") {
+    if (!aiMusicEnabled || !analyzeResult || bgmBlob || aiStatus === "extracting_frame" || aiStatus === "calling_gemini" || aiStatus === "analyzing") {
       return;
     }
     if (aiStatus === "generating_music") return;
@@ -421,8 +424,8 @@ export function PostForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 sm:px-5">
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <div className="post-form-scroll min-h-0 flex-1 px-4 pt-2 pb-4 sm:px-5">
         {!showPostDetails ? (
           <>
             <CameraRecorder
@@ -490,90 +493,90 @@ export function PostForm() {
                 className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm outline-none placeholder:text-muted/50 focus:border-accent/50 focus:ring-1 focus:ring-accent/30 disabled:opacity-50"
               />
             </div>
+
+            <div className="mt-6 border-t border-border pt-4">
+              <section aria-labelledby="visibility-label">
+                <h2 id="visibility-label" className="mb-1 text-xs font-semibold text-foreground">
+                  公開範囲
+                </h2>
+                <p className="mb-3 text-[10px] text-muted">公開後に誰が視聴できるかを選びます</p>
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {VISIBILITY_OPTIONS.map((option) => {
+                    const selected = visibility === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        disabled={isUploading}
+                        onClick={() => setVisibility(option.value)}
+                        className={`flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition disabled:opacity-50 ${
+                          selected
+                            ? "border-violet-400/70 bg-violet-500/15 ring-1 ring-violet-400/30"
+                            : "border-border bg-surface hover:border-border/80"
+                        }`}
+                      >
+                        <span className={selected ? "text-violet-300" : "text-muted"}>
+                          {option.icon}
+                        </span>
+                        <span>
+                          <span className="block text-sm font-medium text-foreground">
+                            {option.label}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] leading-snug text-muted">
+                            {option.description}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {isUploading && (
+                <div className="mt-4">
+                  <UploadProgress percent={progress} label={progressLabel} />
+                </div>
+              )}
+
+              {error && (
+                <div className="mt-4 space-y-3">
+                  <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                    {error}
+                  </p>
+                  {submitBonusMessage && (
+                    <BonusDayCountdownNote message={submitBonusMessage} />
+                  )}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={!canPost}
+                className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isUploading ? "投稿中…" : "投稿"}
+              </button>
+
+              {aiMusicEnabled && !bgmReady && !isUploading && (
+                <p className="mt-2 text-center text-[10px] text-amber-200/90">
+                  BGM を ON にした場合は曲を選択してください
+                </p>
+              )}
+            </div>
           </>
         )}
       </div>
 
-      <div className="shrink-0 border-t border-border bg-surface-elevated/95 px-4 py-4 backdrop-blur-lg sm:px-5">
-        {showPostDetails && (
-          <section aria-labelledby="visibility-label">
-            <h2 id="visibility-label" className="mb-1 text-xs font-semibold text-foreground">
-              公開範囲
-            </h2>
-            <p className="mb-3 text-[10px] text-muted">公開後に誰が視聴できるかを選びます</p>
-
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {VISIBILITY_OPTIONS.map((option) => {
-                const selected = visibility === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    disabled={isUploading}
-                    onClick={() => setVisibility(option.value)}
-                    className={`flex items-start gap-3 rounded-xl border px-3 py-3 text-left transition disabled:opacity-50 ${
-                      selected
-                        ? "border-violet-400/70 bg-violet-500/15 ring-1 ring-violet-400/30"
-                        : "border-border bg-surface hover:border-border/80"
-                    }`}
-                  >
-                    <span className={selected ? "text-violet-300" : "text-muted"}>
-                      {option.icon}
-                    </span>
-                    <span>
-                      <span className="block text-sm font-medium text-foreground">
-                        {option.label}
-                      </span>
-                      <span className="mt-0.5 block text-[10px] leading-snug text-muted">
-                        {option.description}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
-        {isUploading && (
-          <div className="mt-4">
-            <UploadProgress percent={progress} label={progressLabel} />
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-4 space-y-3">
-            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
-              {error}
+      {!showPostDetails && (
+        <div className="shrink-0 border-t border-border bg-surface-elevated/95 px-4 py-4 backdrop-blur-lg sm:px-5">
+          {!hasContent && !isUploading && (
+            <p className="text-center text-[10px] text-muted">
+              録画ボタンでクリップを撮影してください
             </p>
-            {submitBonusMessage && (
-              <BonusDayCountdownNote message={submitBonusMessage} />
-            )}
-          </div>
-        )}
-
-        {showPostDetails && (
-          <button
-            type="submit"
-            disabled={!canPost}
-            className="mt-4 w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {isUploading ? "投稿中…" : "投稿"}
-          </button>
-        )}
-
-        {!showPostDetails && !hasContent && !isUploading && (
-          <p className="mt-2 text-center text-[10px] text-muted">
-            録画ボタンでクリップを撮影してください
-          </p>
-        )}
-
-        {showPostDetails && aiMusicEnabled && !bgmReady && !isUploading && (
-          <p className="mt-2 text-center text-[10px] text-amber-200/90">
-            BGM を ON にした場合は曲を選択してください
-          </p>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </form>
   );
 }

@@ -6,6 +6,8 @@ export type AiAnalyzeResult = {
 
 export type AiEnhanceStatus =
   | "idle"
+  | "extracting_frame"
+  | "calling_gemini"
   | "analyzing"
   | "generating_music"
   | "ready"
