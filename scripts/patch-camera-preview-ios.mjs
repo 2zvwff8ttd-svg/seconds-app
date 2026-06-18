@@ -955,3 +955,18 @@ await patchFile(
   ],
   "CameraPreviewPlugin.swift (preview host layoutSubviews)",
 );
+
+// rotated() has landscape + portrait branches — replace all direct frame assignments.
+let pluginAfterPatches = await readFile(pluginPath, "utf8");
+const directFrameAssign =
+  /self\.cameraController\.previewLayer\?\.frame = previewView\.frame/g;
+const fixedPlugin = pluginAfterPatches.replace(
+  directFrameAssign,
+  "self.cameraController.syncPreviewLayerFrame(in: previewView)",
+);
+if (fixedPlugin !== pluginAfterPatches) {
+  await writeFile(pluginPath, fixedPlugin, "utf8");
+  console.log(
+    "[patch-camera-preview-ios] replaced remaining previewLayer.frame assignments in CameraPreviewPlugin.swift",
+  );
+}

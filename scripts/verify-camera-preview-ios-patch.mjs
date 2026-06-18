@@ -88,8 +88,8 @@ const checks = [
   },
   {
     label: "plugin does not assign previewLayer.frame directly",
-    ok: !plugin.includes("previewLayer?.frame = previewView.frame"),
-    fail: "CameraPreviewPlugin must not set previewLayer.frame directly",
+    ok: !/cameraController\.previewLayer\?\.frame\s*=/.test(plugin),
+    fail: "CameraPreviewPlugin must not set previewLayer.frame directly (use syncPreviewLayerFrame)",
   },
 ];
 
