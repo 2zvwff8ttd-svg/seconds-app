@@ -1,8 +1,8 @@
 import { HomeScreen } from "@/components/home/HomeScreen";
 
-/** Vercel env: NEXT_PUBLIC_MINIMAL_HOME=1 strips BubbleField for iOS chunk isolation. */
-const MINIMAL_HOME = process.env.NEXT_PUBLIC_MINIMAL_HOME === "1";
-
+/** Vercel env: NEXT_PUBLIC_MINIMAL_HOME=1. TEMP: hardcoded for iOS isolation — revert after test. */
+const MINIMAL_HOME =
+  true || process.env.NEXT_PUBLIC_MINIMAL_HOME === "1";
 export default function Home() {
   if (MINIMAL_HOME) {
     return (
