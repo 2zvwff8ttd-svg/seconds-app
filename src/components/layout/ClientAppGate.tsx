@@ -14,6 +14,30 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type GatePhase = "loading" | "opening" | "onboarding" | "ready";
 
+const CLIENT_GET_USER_TIMEOUT_MS = 8_000;
+
+/** Vercel env: set NEXT_PUBLIC_SKIP_CLIENT_APP_GATE=1 to bypass gate (debug). */
+const SKIP_CLIENT_APP_GATE =
+  process.env.NEXT_PUBLIC_SKIP_CLIENT_APP_GATE === "1";
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(
+      () => reject(new Error("ClientAppGate: getUser timed out")),
+      ms,
+    );
+    promise
+      .then((value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        window.clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 export function ClientAppGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const publicRoute = isPublicRoute(pathname);
@@ -29,35 +53,48 @@ export function ClientAppGate({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (SKIP_CLIENT_APP_GATE) {
+      setPhase("ready");
+      return;
+    }
+
     if (hasSeenOpeningQuestionThisSession()) {
+      setPhase("ready");
       return;
     }
 
     if (openingScheduledRef.current) {
+      setPhase("ready");
       return;
     }
 
     openingScheduledRef.current = true;
 
     const run = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await withTimeout(supabase.auth.getUser(), CLIENT_GET_USER_TIMEOUT_MS);
 
-      if (!user) {
+        if (!user) {
+          openingScheduledRef.current = false;
+          setPhase("ready");
+          return;
+        }
+
+        if (hasSeenOpeningQuestionThisSession()) {
+          setPhase("ready");
+          return;
+        }
+
+        needsOnboardingRef.current = !isOnboardingComplete(user);
+        setPhase("opening");
+      } catch (err) {
+        console.warn("[ClientAppGate] auth gate skipped", err);
         openingScheduledRef.current = false;
         setPhase("ready");
-        return;
       }
-
-      if (hasSeenOpeningQuestionThisSession()) {
-        setPhase("ready");
-        return;
-      }
-
-      needsOnboardingRef.current = !isOnboardingComplete(user);
-      setPhase("opening");
     };
 
     void run();
