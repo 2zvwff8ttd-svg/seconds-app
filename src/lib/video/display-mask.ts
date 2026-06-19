@@ -109,6 +109,36 @@ export function getVideoDisplayMaskCssVars(
   };
 }
 
+/**
+ * iOS bisection STAGE 3: home feed renders circle only (no path()/inset() masks).
+ * TEMP hardcoded — revert after test or set NEXT_PUBLIC_FORCE_CIRCLE_HOME_DISPLAY_MASK=0.
+ */
+export const FORCE_CIRCLE_HOME_DISPLAY_MASK =
+  true || process.env.NEXT_PUBLIC_FORCE_CIRCLE_HOME_DISPLAY_MASK === "1";
+
+function shapeForHomeRender(
+  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+): VideoDisplayMaskShape {
+  return FORCE_CIRCLE_HOME_DISPLAY_MASK ? DEFAULT_VIDEO_DISPLAY_MASK : shape;
+}
+
+/** Home bubble + fullscreen mask (respects FORCE_CIRCLE_HOME_DISPLAY_MASK). */
+export function getHomeVideoDisplayMask(
+  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+): VideoDisplayMaskDefinition {
+  return MASK_DEFINITIONS[shapeForHomeRender(shape)];
+}
+
+export function getHomeVideoDisplayMaskCssVars(
+  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+): Record<string, string> {
+  const mask = getHomeVideoDisplayMask(shape);
+  return {
+    "--video-display-mask-clip": mask.clipPath,
+    "--video-display-mask-radius": mask.borderRadius,
+  };
+}
+
 /** Shared hole diameter for record overlay layout. */
 export const RECORD_MASK_VW_RATIO = 0.64;
 export const RECORD_MASK_MAX_DIAMETER_PX = 300;

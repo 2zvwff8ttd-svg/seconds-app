@@ -1,9 +1,8 @@
-import { HomeScreenDiagStage2 } from "@/components/home/HomeScreenDiagStage2";
+import { HomeScreenDiagStage3 } from "@/components/home/HomeScreenDiagStage3";
 
 /**
- * iOS bisection — STAGE 2: BubbleField 系（本番同等・形マスク有効）
- * Next: STAGE 3 = masks disabled (circle only) if this fails
+ * iOS bisection — STAGE 3: BubbleField + circle-only display masks
  */
 export default function Home() {
-  return <HomeScreenDiagStage2 />;
+  return <HomeScreenDiagStage3 />;
 }
