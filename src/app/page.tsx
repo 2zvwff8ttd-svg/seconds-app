@@ -1,25 +1,13 @@
-import { HomeScreen } from "@/components/home/HomeScreen";
+import { HomeScreenDiag } from "@/components/home/HomeScreenDiag";
 
-/** Vercel env: NEXT_PUBLIC_MINIMAL_HOME=1. TEMP: hardcoded for iOS isolation — revert after test. */
-const MINIMAL_HOME =
-  true || process.env.NEXT_PUBLIC_MINIMAL_HOME === "1";
+/**
+ * iOS bisection — increment HOME_DIAG_STAGE after each test.
+ * 0 = minimal | 1 = nav/notify only | 2 = BubbleField only
+ * When done: replace body with `import { HomeScreen } from ...` + `<HomeScreen />`.
+ */
+/** TEMP hardcoded — change to 2, 3… as bisection proceeds. */
+const HOME_DIAG_STAGE = 1;
+
 export default function Home() {
-  if (MINIMAL_HOME) {
-    return (
-      <main
-        style={{
-          padding: "1.5rem",
-          fontFamily: "system-ui, sans-serif",
-          color: "#eee",
-          background: "#111",
-          minHeight: "100dvh",
-        }}
-      >
-        <h1>minimal home OK</h1>
-        <p>NEXT_PUBLIC_MINIMAL_HOME=1 — HomeScreen / BubbleField なし</p>
-      </main>
-    );
-  }
-
-  return <HomeScreen />;
+  return <HomeScreenDiag stage={HOME_DIAG_STAGE} />;
 }
