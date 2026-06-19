@@ -16,8 +16,9 @@ type GatePhase = "loading" | "opening" | "onboarding" | "ready";
 
 const CLIENT_GET_USER_TIMEOUT_MS = 8_000;
 
-/** Vercel env: set NEXT_PUBLIC_SKIP_CLIENT_APP_GATE=1 to bypass gate (debug). */
+/** Vercel env: NEXT_PUBLIC_SKIP_CLIENT_APP_GATE=1. TEMP: hardcoded skip for diagnosis — revert after test. */
 const SKIP_CLIENT_APP_GATE =
+  true ||
   process.env.NEXT_PUBLIC_SKIP_CLIENT_APP_GATE === "1";
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
