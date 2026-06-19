@@ -12,6 +12,15 @@ import { getSupabaseAnonKey, getSupabaseUrl } from "./env";
  * Refreshes the session and enforces auth redirects.
  */
 export async function updateSession(request: NextRequest) {
+  try {
+    return await updateSessionInner(request);
+  } catch (err) {
+    console.error("[middleware] session update failed", err);
+    return NextResponse.next({ request });
+  }
+}
+
+async function updateSessionInner(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(getSupabaseUrl(), getSupabaseAnonKey(), {
@@ -55,11 +64,21 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("is_admin, is_banned")
-      .eq("id", user.id)
-      .maybeSingle();
+    let profile: { is_admin?: boolean; is_banned?: boolean } | null = null;
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("is_admin, is_banned")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (error) {
+        console.error("[middleware] profile lookup failed", error.message);
+      } else {
+        profile = data;
+      }
+    } catch (err) {
+      console.error("[middleware] profile lookup threw", err);
+    }
 
     if (profile?.is_banned && !isPublicRoute(pathname)) {
       await supabase.auth.signOut();
