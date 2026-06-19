@@ -5,10 +5,11 @@ import {
   sanitizeSignupUsername,
   validateSignupUsername,
 } from "@/lib/auth/username";
+import { sanitizeAuthRedirectPath } from "@/lib/auth/routes";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
 
 type AuthMode = "signin" | "signup";
 
@@ -35,10 +36,16 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
+function completeLoginNavigation(path: string) {
+  window.location.assign(sanitizeAuthRedirectPath(path));
+}
+
 export function AuthForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirect") ?? "/";
+  const redirectTo = useMemo(
+    () => sanitizeAuthRedirectPath(searchParams.get("redirect")),
+    [searchParams],
+  );
   const urlError = searchParams.get("error");
 
   const [mode, setMode] = useState<AuthMode>("signin");
@@ -125,8 +132,7 @@ export function AuthForm() {
       }
 
       if (data.session) {
-        router.push(redirectTo);
-        router.refresh();
+        completeLoginNavigation(redirectTo);
         return;
       }
 
@@ -138,8 +144,7 @@ export function AuthForm() {
       });
 
       if (!autoSignInError) {
-        router.push(redirectTo);
-        router.refresh();
+        completeLoginNavigation(redirectTo);
         return;
       }
 
@@ -161,8 +166,7 @@ export function AuthForm() {
       return;
     }
 
-    router.push(redirectTo);
-    router.refresh();
+    completeLoginNavigation(redirectTo);
   };
 
   return (

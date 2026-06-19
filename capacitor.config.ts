@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   appName: "Seconds",
   webDir: "capacitor-shell/www",
   server: {
-    url: "https://seconds-app-wheat.vercel.app",
+    url: "https://getseconds.app",
     // ローカル検証時:
     // url: "http://localhost:3000",
     // cleartext: true,

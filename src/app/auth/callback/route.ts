@@ -1,12 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
-import { DEFAULT_AUTH_REDIRECT } from "@/lib/auth/routes";
+import { sanitizeAuthRedirectPath } from "@/lib/auth/routes";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? searchParams.get("redirect") ?? DEFAULT_AUTH_REDIRECT;
-  const safeNext = next.startsWith("/") ? next : DEFAULT_AUTH_REDIRECT;
+  const safeNext = sanitizeAuthRedirectPath(
+    searchParams.get("next") ?? searchParams.get("redirect"),
+  );
 
   if (code) {
     const supabase = await createClient();

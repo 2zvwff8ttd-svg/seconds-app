@@ -1,10 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  DEFAULT_AUTH_REDIRECT,
   isAdminRoute,
   isAuthRoute,
   isPublicRoute,
+  sanitizeAuthRedirectPath,
 } from "@/lib/auth/routes";
 import { getSupabaseAnonKey, getSupabaseUrl } from "./env";
 
@@ -45,10 +45,11 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && isAuthRoute(pathname)) {
-    const redirectTo =
-      request.nextUrl.searchParams.get("redirect") ?? DEFAULT_AUTH_REDIRECT;
+    const redirectTo = sanitizeAuthRedirectPath(
+      request.nextUrl.searchParams.get("redirect"),
+    );
     const homeUrl = request.nextUrl.clone();
-    homeUrl.pathname = redirectTo.startsWith("/") ? redirectTo : DEFAULT_AUTH_REDIRECT;
+    homeUrl.pathname = redirectTo;
     homeUrl.searchParams.delete("redirect");
     return NextResponse.redirect(homeUrl);
   }
