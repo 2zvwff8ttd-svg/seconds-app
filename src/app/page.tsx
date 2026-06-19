@@ -1,13 +1,9 @@
-import { HomeScreenDiag } from "@/components/home/HomeScreenDiag";
+import { HomeScreenDiagStage2 } from "@/components/home/HomeScreenDiagStage2";
 
 /**
- * iOS bisection — increment HOME_DIAG_STAGE after each test.
- * 0 = minimal | 1 = nav/notify only | 2 = BubbleField only
- * When done: replace body with `import { HomeScreen } from ...` + `<HomeScreen />`.
+ * iOS bisection — STAGE 2: BubbleField 系（本番同等・形マスク有効）
+ * Next: STAGE 3 = masks disabled (circle only) if this fails
  */
-/** TEMP hardcoded — change to 2, 3… as bisection proceeds. */
-const HOME_DIAG_STAGE = 1;
-
 export default function Home() {
-  return <HomeScreenDiag stage={HOME_DIAG_STAGE} />;
+  return <HomeScreenDiagStage2 />;
 }

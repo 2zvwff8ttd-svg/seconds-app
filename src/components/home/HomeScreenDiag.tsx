@@ -5,14 +5,7 @@ import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "./BottomNav";
 import { HomeStarfieldBackground } from "./HomeStarfieldBackground";
-import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-
-/** Loaded only when stage >= 2 — keeps BubbleField out of stage-1 bundle. */
-const BubbleField = dynamic(
-  () => import("./BubbleField").then((m) => m.BubbleField),
-  { ssr: false },
-);
 
 type HomeScreenDiagProps = {
   stage: number;
@@ -22,11 +15,10 @@ type HomeScreenDiagProps = {
  * iOS load-failure bisection. Stages:
  * 0 = minimal text only
  * 1 = nav/notify group (NO BubbleField)
- * 2 = BubbleField only (minimal chrome)
- * 3+ = reserved for finer splits
+ * 2 = BubbleField (see HomeScreenDiagStage2.tsx)
+ * 3 = BubbleField, masks forced circle-only (no path()/SVG)
  */
 export function HomeScreenDiag({ stage }: HomeScreenDiagProps) {
-  const [countryCode, setCountryCode] = useState("JP");
   const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
   const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
 
@@ -88,19 +80,6 @@ export function HomeScreenDiag({ stage }: HomeScreenDiagProps) {
           </p>
         </main>
         <BottomNav onInsetChange={setBottomInset} />
-      </div>
-    );
-  }
-
-  if (stage === 2) {
-    return (
-      <div className="app-page relative flex flex-col overflow-hidden bg-[#020208]">
-        <header className="z-header relative shrink-0 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-          <h1 className="text-lg font-bold text-foreground">?Seconds</h1>
-          <p className="text-[10px] text-violet-300">STAGE 2: BubbleField のみ</p>
-        </header>
-        <BubbleField bottomInset={bottomInset} onCountryChange={setCountryCode} />
-        <p className="sr-only">country {countryCode}</p>
       </div>
     );
   }
