@@ -21,6 +21,7 @@
   --z-bubble-field: 1;
   --z-header: 10;
   --z-bottom-nav: 100;
+  --z-global-upload: 150;
   --z-fullscreen: 200;
   --z-onboarding: 300;
   --z-opening: 350;
@@ -83,6 +84,10 @@ body {
 
 .z-bottom-nav {
   z-index: var(--z-bottom-nav);
+}
+
+.z-global-upload {
+  z-index: var(--z-global-upload);
 }
 
 .z-fullscreen {
@@ -2059,4 +2064,84 @@ html.record-native-preview-active body {
 
 .native-camera-preview-mask--hidden {
   opacity: 0;
+}
+
+.global-upload-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-global-upload);
+  padding: max(0.5rem, env(safe-area-inset-top)) 0.75rem 0.5rem;
+  pointer-events: none;
+}
+
+.global-upload-bar__panel {
+  pointer-events: auto;
+  margin: 0 auto;
+  max-width: 36rem;
+  border-radius: 0.875rem;
+  border: 1px solid var(--border);
+  background: rgb(13 13 13 / 0.96);
+  padding: 0.75rem 0.875rem;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(12px);
+}
+
+.global-upload-bar__panel--active {
+  border-color: rgb(167 139 250 / 0.35);
+}
+
+.global-upload-bar__panel--success {
+  border-color: rgb(74 222 128 / 0.35);
+}
+
+.global-upload-bar__panel--error {
+  border-color: rgb(248 113 113 / 0.35);
+}
+
+.global-upload-bar__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.global-upload-bar__title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.global-upload-bar__hint {
+  margin-top: 0.25rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.global-upload-bar__message {
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: rgb(248 113 113);
+}
+
+.global-upload-bar__link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(196 181 253);
+  text-decoration: underline;
+}
+
+.global-upload-bar__dismiss {
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--muted);
 }

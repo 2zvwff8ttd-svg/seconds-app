@@ -4,7 +4,6 @@ import { AiEnhancePanel } from "@/components/post/AiEnhancePanel";
 import { BonusDayCountdownNote } from "@/components/post/BonusDayCountdownNote";
 import { CameraRecorder } from "@/components/record/CameraRecorder";
 import { ClipStrip } from "@/components/record/ClipStrip";
-import { UploadProgress } from "@/components/post/UploadProgress";
 import { analyzeVideoFrame, generateAiMusic } from "@/lib/ai/client";
 import { AI_BGM_GENERATION_ENABLED, PRESET_BGM_ENABLED } from "@/lib/ai/features";
 import {
@@ -23,7 +22,7 @@ import {
   fetchCurrentStreak,
 } from "@/lib/posting/post-streak";
 import { useVlogDraftSession } from "@/hooks/useVlogDraftSession";
-import { postVideo } from "@/lib/videos/post";
+import { useUpload } from "@/lib/upload/upload-context";
 import {
   DEFAULT_VIDEO_DISPLAY_MASK,
   type VideoDisplayMaskShape,
@@ -32,7 +31,7 @@ import { blobToBase64, extractFirstFrameBlob } from "@/lib/video/extract-frame";
 import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
 import type { PresetBgmTrack } from "@/types/preset-bgm";
 import type { RecordedClip } from "@/types/recording";
-import type { PostUploadStage, VideoVisibility } from "@/types/video";
+import type { VideoVisibility } from "@/types/video";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -77,18 +76,7 @@ export function PostForm() {
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [visibility, setVisibility] = useState<VideoVisibility>("public");
-  const [stage, setStage] = useState<PostUploadStage>("idle");
-  const [progress, setProgress] = useState(0);
-  const [progressLabel, setProgressLabel] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{
-    publishAt: string;
-    bonusCountdownMessage: string;
-  } | null>(null);
   const [blockedBonusMessage, setBlockedBonusMessage] = useState<string | null>(
-    null,
-  );
-  const [submitBonusMessage, setSubmitBonusMessage] = useState<string | null>(
     null,
   );
   const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
@@ -107,7 +95,15 @@ export function PostForm() {
   const aiRunId = useRef(0);
   const clipThumbnailCacheRef = useRef<Map<string, Blob>>(new Map());
 
-  const isUploading = stage !== "idle" && stage !== "error" && stage !== "done";
+  const {
+    isUploading,
+    success: uploadSuccess,
+    error: uploadError,
+    submitBonusMessage,
+    startUpload,
+    dismissSuccess,
+    dismissError,
+  } = useUpload();
 
   const {
     draftReady,
@@ -123,7 +119,7 @@ export function PostForm() {
     setDisplayMaskShape,
     title,
     setTitle,
-    enabled: postLimit === "allowed" && success === null && !isUploading,
+    enabled: postLimit === "allowed" && uploadSuccess === null && !isUploading,
   });
 
   useEffect(() => {
@@ -135,7 +131,7 @@ export function PostForm() {
   }, []);
 
   useEffect(() => {
-    if (success) return;
+    if (uploadSuccess) return;
     let cancelled = false;
     setPostLimit("loading");
     checkDailyPostLimit()
@@ -156,7 +152,7 @@ export function PostForm() {
     return () => {
       cancelled = true;
     };
-  }, [success]);
+  }, [uploadSuccess]);
 
   useEffect(() => {
     if (postLimit === "loading" || postLimit === "allowed") {
@@ -306,9 +302,9 @@ export function PostForm() {
 
   const handleClipAdded = useCallback((clip: RecordedClip) => {
     setClips((prev) => [...prev, clip]);
-    setError(null);
+    dismissError();
     setTitleTouched(false);
-  }, []);
+  }, [dismissError]);
 
   const handleRemoveClip = useCallback((id: string) => {
     setClips((prev) => {
@@ -319,69 +315,38 @@ export function PostForm() {
     setTitleTouched(false);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canPost) return;
 
-    setError(null);
-    setSubmitBonusMessage(null);
+    dismissError();
     setAiError(null);
-    setProgress(0);
-    setProgressLabel("準備中…");
 
-    try {
-      const uploadClips = clips.map((c) => ({
-        file: c.file,
-        durationSeconds: c.durationSeconds,
-      }));
+    const uploadClips = clips.map((c) => ({
+      file: c.file,
+      durationSeconds: c.durationSeconds,
+    }));
 
-      const presetBgmUrl =
-        aiMusicEnabled && PRESET_BGM_ENABLED && selectedPreset
-          ? selectedPreset.publicUrl
-          : undefined;
+    const presetBgmUrl =
+      aiMusicEnabled && PRESET_BGM_ENABLED && selectedPreset
+        ? selectedPreset.publicUrl
+        : undefined;
 
-      const result = await postVideo({
-        clips: uploadClips,
-        thumbnailSource: clips[0]?.file,
-        precomputedClipThumbnails: clips.map((clip) =>
-          clipThumbnailCacheRef.current.get(clip.id),
-        ),
-        bgmUrl: presetBgmUrl,
-        title,
-        visibility,
-        displayMaskShape,
-        onStageChange: setStage,
-        onProgress: (percent, label) => {
-          setProgress(percent);
-          setProgressLabel(label);
-        },
-      });
-
-      await notifyPostSuccess();
-
-      setSuccess({
-        publishAt: result.publishAt,
-        bonusCountdownMessage: bonusDayMessageFromStreak(result.currentStreak),
-      });
-    } catch (err) {
-      setStage("error");
-      setProgressLabel("");
-      const message =
-        err instanceof Error && err.message.trim()
-          ? err.message.trim()
-          : "投稿に失敗しました";
-      setError(message);
-      if (message === DAILY_POST_LIMIT_MESSAGE) {
-        void fetchCurrentStreak()
-          .then((streak) =>
-            setSubmitBonusMessage(bonusDayMessageFromStreak(streak)),
-          )
-          .catch(() => setSubmitBonusMessage(null));
-      }
-    }
+    startUpload({
+      clips: uploadClips,
+      thumbnailSource: clips[0]?.file,
+      precomputedClipThumbnails: clips.map((clip) =>
+        clipThumbnailCacheRef.current.get(clip.id),
+      ),
+      bgmUrl: presetBgmUrl,
+      title,
+      visibility,
+      displayMaskShape,
+      onSuccess: () => void notifyPostSuccess(),
+    });
   };
 
-  if (success) {
+  if (uploadSuccess) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center">
         <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/15 text-violet-300">
@@ -394,18 +359,19 @@ export function PostForm() {
           明日の7時に公開されます。
           <br />
           <span className="text-foreground/80">
-            （{formatPublishTime(success.publishAt)}）
+            （{formatPublishTime(uploadSuccess.publishAt)}）
           </span>
         </p>
         <p className="mt-2 text-xs text-muted">
           公開されるまで他のユーザーには表示されません。
         </p>
         <BonusDayCountdownNote
-          message={success.bonusCountdownMessage}
+          message={uploadSuccess.bonusCountdownMessage}
           className="mt-6 w-full max-w-xs"
         />
         <Link
           href="/"
+          onClick={dismissSuccess}
           className="mt-6 w-full max-w-xs rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-3.5 text-base font-semibold text-white shadow-lg shadow-violet-500/25"
         >
           ホームに戻る
@@ -611,16 +577,10 @@ export function PostForm() {
                 </div>
               </section>
 
-              {isUploading && (
-                <div className="mt-4">
-                  <UploadProgress percent={progress} label={progressLabel} />
-                </div>
-              )}
-
-              {error && (
+              {uploadError && (
                 <div className="mt-4 space-y-3">
                   <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
-                    {error}
+                    {uploadError}
                   </p>
                   {submitBonusMessage && (
                     <BonusDayCountdownNote message={submitBonusMessage} />
