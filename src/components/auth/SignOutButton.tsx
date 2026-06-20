@@ -1,5 +1,6 @@
 "use client";
 
+import { clearAllVlogDraftsForUser } from "@/lib/draft/vlog-draft-store";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -11,6 +12,16 @@ export function SignOutButton() {
   const handleSignOut = async () => {
     setLoading(true);
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      try {
+        await clearAllVlogDraftsForUser(user.id);
+      } catch (err) {
+        console.warn("[SignOutButton] clear vlog drafts failed", err);
+      }
+    }
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();

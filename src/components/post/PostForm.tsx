@@ -22,6 +22,7 @@ import {
   bonusDayMessageFromStreak,
   fetchCurrentStreak,
 } from "@/lib/posting/post-streak";
+import { useVlogDraftSession } from "@/hooks/useVlogDraftSession";
 import { postVideo } from "@/lib/videos/post";
 import {
   DEFAULT_VIDEO_DISPLAY_MASK,
@@ -106,6 +107,25 @@ export function PostForm() {
   const aiRunId = useRef(0);
   const clipThumbnailCacheRef = useRef<Map<string, Blob>>(new Map());
 
+  const isUploading = stage !== "idle" && stage !== "error" && stage !== "done";
+
+  const {
+    draftReady,
+    draftRestored,
+    draftSaveError,
+    dismissDraftSaveError,
+    notifyPostSuccess,
+    discardDraft,
+  } = useVlogDraftSession({
+    clips,
+    setClips,
+    displayMaskShape,
+    setDisplayMaskShape,
+    title,
+    setTitle,
+    enabled: postLimit === "allowed" && success === null && !isUploading,
+  });
+
   useEffect(() => {
     fetchTodayAssignedSeconds()
       .then(setAssignedSeconds)
@@ -160,7 +180,6 @@ export function PostForm() {
     };
   }, [postLimit]);
 
-  const isUploading = stage !== "idle" && stage !== "error" && stage !== "done";
   const hasContent = clips.length > 0;
   const usedSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
   const budgetExhausted = useMemo(
@@ -338,6 +357,8 @@ export function PostForm() {
         },
       });
 
+      await notifyPostSuccess();
+
       setSuccess({
         publishAt: result.publishAt,
         bonusCountdownMessage: bonusDayMessageFromStreak(result.currentStreak),
@@ -393,11 +414,15 @@ export function PostForm() {
     );
   }
 
-  if (postLimit === "loading") {
+  if (postLimit === "loading" || !draftReady) {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center">
         <span className="h-8 w-8 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
-        <p className="mt-4 text-sm text-muted">投稿可能か確認しています…</p>
+        <p className="mt-4 text-sm text-muted">
+          {postLimit === "loading"
+            ? "投稿可能か確認しています…"
+            : "撮りかけのクリップを確認しています…"}
+        </p>
       </div>
     );
   }
@@ -438,6 +463,43 @@ export function PostForm() {
   return (
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="post-form-scroll min-h-0 flex-1 px-4 pt-2 pb-4 sm:px-5">
+        {draftRestored && hasContent && !showPostDetails && (
+          <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-violet-400/30 bg-violet-500/10 px-3 py-2.5">
+            <div>
+              <p className="text-xs font-medium text-violet-200">
+                続きから撮影できます
+              </p>
+              <p className="mt-0.5 text-[10px] text-muted">
+                {clips.length}クリップを復元しました。ホームに戻っても保存されます。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void discardDraft()}
+              disabled={isUploading}
+              className="shrink-0 rounded-lg border border-border px-2 py-1 text-[10px] font-medium text-muted transition hover:text-foreground disabled:opacity-40"
+            >
+              撮り直す
+            </button>
+          </div>
+        )}
+
+        {draftSaveError && (
+          <div
+            role="alert"
+            className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5"
+          >
+            <p className="text-xs font-medium text-red-300">{draftSaveError}</p>
+            <button
+              type="button"
+              onClick={dismissDraftSaveError}
+              className="mt-1 text-[10px] text-red-200/80 underline"
+            >
+              閉じる
+            </button>
+          </div>
+        )}
+
         {!showPostDetails ? (
           <>
             <CameraRecorder
