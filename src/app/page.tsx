@@ -1,8 +1,8 @@
-import { HomeScreenDiagStage3 } from "@/components/home/HomeScreenDiagStage3";
+import { HomeScreenDiagStage4a } from "@/components/home/HomeScreenDiagStage4a";
 
 /**
- * iOS bisection — STAGE 3: BubbleField + circle-only display masks
+ * iOS bisection — STAGE 4a: feed fetch only (no BubbleField / VideoBubble)
  */
 export default function Home() {
-  return <HomeScreenDiagStage3 />;
+  return <HomeScreenDiagStage4a />;
 }
