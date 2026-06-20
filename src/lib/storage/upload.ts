@@ -4,6 +4,19 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const MEDIA_BUCKET = "media";
 
+/** このサイズ以上は進捗付き XHR を優先（SDK は途中経過を返さない） */
+const XHR_PROGRESS_MIN_BYTES = 256 * 1024;
+
+export function formatUploadSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${bytes} B`;
+}
+
 export function getMediaPublicUrl(path: string): string {
   return `${getSupabaseUrl()}/storage/v1/object/public/${MEDIA_BUCKET}/${path}`;
 }
@@ -23,8 +36,54 @@ function parseStorageErrorMessage(raw: string, status: number): string {
   }
 }
 
+async function uploadViaXhr(
+  path: string,
+  body: File,
+  normalizedType: string,
+  accessToken: string,
+  onProgress: (ratio: number) => void,
+  fallbackMessage: string,
+): Promise<void> {
+  const url = `${getSupabaseUrl()}/storage/v1/object/${MEDIA_BUCKET}/${path}`;
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onProgress(event.loaded / event.total);
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress(1);
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          parseStorageErrorMessage(xhr.responseText, xhr.status) ||
+            fallbackMessage,
+        ),
+      );
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error(`ネットワークエラー: ${fallbackMessage}`));
+    });
+
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Authorization", `Bearer ${accessToken}`);
+    xhr.setRequestHeader("apikey", getSupabaseAnonKey());
+    xhr.setRequestHeader("Content-Type", normalizedType);
+    xhr.setRequestHeader("x-upsert", "false");
+    xhr.send(body);
+  });
+}
+
 /**
- * Supabase Storage へアップロード（公式 SDK を優先）
+ * Supabase Storage へアップロード（大きいファイルは XHR で進捗を返す）
  */
 export async function uploadFileWithProgress(
   supabase: SupabaseClient,
@@ -41,13 +100,34 @@ export async function uploadFileWithProgress(
     throw new Error("ログインが必要です");
   }
 
-  onProgress(0.05);
-
   const normalizedType = normalizeStorageContentType(contentType);
   const body =
     file instanceof File
       ? file
       : new File([file], "upload.bin", { type: normalizedType });
+
+  onProgress(0);
+
+  const preferXhr = body.size >= XHR_PROGRESS_MIN_BYTES;
+  const fallbackMessage = "ストレージへのアップロードに失敗しました";
+
+  if (preferXhr) {
+    try {
+      await uploadViaXhr(
+        path,
+        body,
+        normalizedType,
+        session.access_token,
+        onProgress,
+        fallbackMessage,
+      );
+      return;
+    } catch (xhrErr) {
+      console.warn("[upload] XHR upload failed, trying SDK:", xhrErr);
+    }
+  }
+
+  onProgress(0.02);
 
   const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, body, {
     contentType: normalizedType,
@@ -59,43 +139,14 @@ export async function uploadFileWithProgress(
     return;
   }
 
-  const sdkMessage = error.message || "ストレージへのアップロードに失敗しました";
+  const sdkMessage = error.message || fallbackMessage;
 
-  // SDK が失敗した場合のみ XHR にフォールバック（進捗表示用）
-  const url = `${getSupabaseUrl()}/storage/v1/object/${MEDIA_BUCKET}/${path}`;
-
-  await new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-
-    xhr.upload.addEventListener("progress", (event) => {
-      if (event.lengthComputable && event.total > 0) {
-        onProgress(0.1 + (event.loaded / event.total) * 0.9);
-      }
-    });
-
-    xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        onProgress(1);
-        resolve();
-        return;
-      }
-      reject(
-        new Error(
-          parseStorageErrorMessage(xhr.responseText, xhr.status) ||
-            sdkMessage,
-        ),
-      );
-    });
-
-    xhr.addEventListener("error", () => {
-      reject(new Error(`ネットワークエラー: ${sdkMessage}`));
-    });
-
-    xhr.open("POST", url);
-    xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
-    xhr.setRequestHeader("apikey", getSupabaseAnonKey());
-    xhr.setRequestHeader("Content-Type", normalizedType);
-    xhr.setRequestHeader("x-upsert", "false");
-    xhr.send(body);
-  });
+  await uploadViaXhr(
+    path,
+    body,
+    normalizedType,
+    session.access_token,
+    onProgress,
+    sdkMessage,
+  );
 }

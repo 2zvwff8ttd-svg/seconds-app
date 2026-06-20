@@ -16,11 +16,13 @@ import {
   logRecorderMimeDiagnostics,
   mimeToExtension,
   openCameraStream,
+  probeCapturedClipDuration,
   shouldRequestDataBeforeStop,
   verifyRecordedBlobPlayback,
   waitForRecorderChunks,
+  waitForRecorderDataSettled,
 } from "@/lib/recording/recorder-utils";
-import { getVideoDuration, normalizeStorageContentType } from "@/lib/video/media";
+import { normalizeStorageContentType } from "@/lib/video/media";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
@@ -71,6 +73,7 @@ export function WebCameraRecorder({
   const [error, setError] = useState<string | null>(null);
   const [inAppRecorderReady, setInAppRecorderReady] = useState(true);
   const [showNativeCapture, setShowNativeCapture] = useState(false);
+  const [pendingRecordedSeconds, setPendingRecordedSeconds] = useState(0);
 
   const usedClipSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
 
@@ -80,9 +83,9 @@ export function WebCameraRecorder({
     const elapsed =
       isRecording && recordingStartRef.current
         ? measureRecordingSeconds(recordingStartRef.current)
-        : 0;
+        : pendingRecordedSeconds;
     return Math.max(0, assignedSeconds - usedClipSeconds - elapsed);
-  }, [assignedSeconds, usedClipSeconds, isRecording, tick]);
+  }, [assignedSeconds, usedClipSeconds, isRecording, pendingRecordedSeconds, tick]);
 
   useEffect(() => {
     const ready = canUseInAppMediaRecorder();
@@ -98,17 +101,21 @@ export function WebCameraRecorder({
     }
   }, []);
 
-  const clearTimer = useCallback(() => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+  const clearTickInterval = useCallback(() => {
     if (tickRef.current) {
       clearInterval(tickRef.current);
       tickRef.current = null;
     }
-    recordingStartRef.current = null;
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
   }, []);
+
+  const clearTimer = useCallback(() => {
+    clearTickInterval();
+    recordingStartRef.current = null;
+  }, [clearTickInterval]);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -199,10 +206,12 @@ export function WebCameraRecorder({
 
     const elapsed = measureRecordingSeconds(recordingStartRef.current);
     const budget = recordBudgetRef.current;
+    setPendingRecordedSeconds(elapsed);
     const recordedMime = recorderRef.current?.mimeType || mimeRef.current;
-    clearTimer();
+    clearTickInterval();
     setIsRecording(false);
 
+    await waitForRecorderDataSettled();
     await waitForRecorderChunks(() => chunksRef.current);
 
     let chunks = [...chunksRef.current];
@@ -215,18 +224,20 @@ export function WebCameraRecorder({
       totalBytes = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
     }
 
-    chunksRef.current = [];
-    recorderRef.current = null;
-
     if (chunks.length === 0 || totalBytes === 0) {
       setError("録画データを取得できませんでした。もう一度お試しください");
       if (isIOSSafari()) {
         setShowNativeCapture(true);
       }
+      setPendingRecordedSeconds(0);
       finishingRef.current = false;
+      clearTimer();
       await ensurePreview();
       return;
     }
+
+    recorderRef.current = null;
+    chunksRef.current = [];
 
     const durationSeconds = Math.min(
       budget,
@@ -247,6 +258,8 @@ export function WebCameraRecorder({
         setShowNativeCapture(true);
       }
       finishingRef.current = false;
+      setPendingRecordedSeconds(0);
+      clearTimer();
       await ensurePreview();
       return;
     }
@@ -257,9 +270,12 @@ export function WebCameraRecorder({
     });
 
     addRecordedClip(file, durationSeconds);
+    setPendingRecordedSeconds(0);
+    setError(null);
     finishingRef.current = false;
+    clearTimer();
     await ensurePreview();
-  }, [addRecordedClip, clearStopFallback, clearTimer, ensurePreview]);
+  }, [addRecordedClip, clearStopFallback, clearTickInterval, clearTimer, ensurePreview]);
 
   const finishRecordingRef = useRef(finishRecording);
   finishRecordingRef.current = finishRecording;
@@ -294,7 +310,7 @@ export function WebCameraRecorder({
       }
     }
 
-    clearTimer();
+    clearTickInterval();
     setIsRecording(false);
 
     if (shouldRequestDataBeforeStop()) {
@@ -317,12 +333,12 @@ export function WebCameraRecorder({
     }
 
     scheduleStopFallback();
-  }, [clearTimer, scheduleStopFallback]);
+  }, [clearTickInterval, scheduleStopFallback]);
 
   const beginRecording = useCallback(() => {
     const stream = streamRef.current;
     if (assignedSeconds === null) return;
-    const budget = assignedSeconds - usedClipSeconds;
+    const budget = assignedSeconds - usedClipSeconds - pendingRecordedSeconds;
     if (!stream || isRecording || disabled || budget <= 0) return;
 
     if (!canUseInAppMediaRecorder()) {
@@ -332,6 +348,7 @@ export function WebCameraRecorder({
     }
 
     setError(null);
+    setPendingRecordedSeconds(0);
     chunksRef.current = [];
     finishingRef.current = false;
     clearStopFallback();
@@ -404,6 +421,7 @@ export function WebCameraRecorder({
     clearTimer,
     disabled,
     isRecording,
+    pendingRecordedSeconds,
     stopRecording,
     usedClipSeconds,
   ]);
@@ -422,12 +440,9 @@ export function WebCameraRecorder({
       }
 
       try {
-        const rawDuration = await getVideoDuration(file);
-        const durationSeconds = Math.min(
-          budget,
-          Math.max(0.1, rawDuration || 0.1),
-        );
+        const durationSeconds = await probeCapturedClipDuration(file, budget);
         addRecordedClip(file, durationSeconds);
+        setError(null);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "動画の読み込みに失敗しました",
@@ -503,7 +518,7 @@ export function WebCameraRecorder({
   const gaugeRecordingElapsed =
     isRecording && recordingStartRef.current
       ? measureRecordingSeconds(recordingStartRef.current)
-      : 0;
+      : pendingRecordedSeconds;
 
   const canRecord =
     assignedSeconds !== null &&

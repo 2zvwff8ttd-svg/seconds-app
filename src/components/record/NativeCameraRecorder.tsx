@@ -16,6 +16,7 @@ import {
   stopNativePreview,
   stopNativeRecording,
   syncNativePreviewLayout,
+  type NativeRecordingResult,
 } from "@/lib/recording/native-camera-preview";
 import { debounceAsync } from "@/lib/recording/native-preview-scheduler";
 import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
@@ -58,6 +59,11 @@ export function NativeCameraRecorder({
   const cancelAutoStopRef = useRef<(() => void) | null>(null);
   const tickRef = useRef<number | null>(null);
   const lastRecordActionRef = useRef(0);
+  const failedClipRef = useRef<{
+    recording: NativeRecordingResult;
+    elapsed: number;
+    budget: number;
+  } | null>(null);
 
   const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
@@ -68,6 +74,7 @@ export function NativeCameraRecorder({
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pendingRecordedSeconds, setPendingRecordedSeconds] = useState(0);
+  const [failedClipPending, setFailedClipPending] = useState(false);
 
   const usedClipSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
 
@@ -242,6 +249,30 @@ export function NativeCameraRecorder({
     };
   }, [clearAutoStop, clearTick]);
 
+  const persistRecordingClip = useCallback(
+    async (
+      recording: NativeRecordingResult,
+      elapsed: number,
+      budget: number,
+    ) => {
+      const file = await nativeVideoSourceToFile(recording);
+      const durationSeconds = Math.min(
+        budget,
+        Math.max(0.1, Math.floor(elapsed * 10) / 10),
+      );
+
+      addRecordedClip(file, durationSeconds);
+      failedClipRef.current = null;
+      setFailedClipPending(false);
+      setPendingRecordedSeconds(0);
+      setError(null);
+      console.info(
+        `[NativeCameraRecorder] clip added: ${durationSeconds}s (${file.size} bytes)`,
+      );
+    },
+    [addRecordedClip],
+  );
+
   const finishRecording = useCallback(async () => {
     if (finishingRef.current) return;
     finishingRef.current = true;
@@ -263,22 +294,35 @@ export function NativeCameraRecorder({
         hasBase64: Boolean(recording.videoBase64),
       });
 
-      const file = await nativeVideoSourceToFile(recording);
-
-      const durationSeconds = Math.min(
-        budget,
-        Math.max(0.1, Math.floor(elapsed * 10) / 10),
-      );
-
-      addRecordedClip(file, durationSeconds);
-      setPendingRecordedSeconds(0);
-      setError(null);
-      console.info(
-        `[NativeCameraRecorder] clip added: ${durationSeconds}s (${file.size} bytes)`,
-      );
+      failedClipRef.current = { recording, elapsed, budget };
+      setFailedClipPending(true);
+      await persistRecordingClip(recording, elapsed, budget);
     } catch (err) {
       console.error("[NativeCameraRecorder] finishRecording failed", err);
-      setPendingRecordedSeconds(0);
+      const detail =
+        err instanceof Error ? err.message : typeof err === "string" ? err : "";
+      const message = formatNativeRecordingError(err);
+      setError(detail && detail !== message ? `${message} [${detail}]` : message);
+      // pendingRecordedSeconds は維持 — ゲージが録画前に戻るのを防ぐ
+    } finally {
+      finishingRef.current = false;
+    }
+  }, [clearAutoStop, clearTick, persistRecordingClip]);
+
+  const retryFailedClip = useCallback(async () => {
+    const failed = failedClipRef.current;
+    if (!failed || finishingRef.current) return;
+
+    finishingRef.current = true;
+    setError(null);
+    try {
+      await persistRecordingClip(
+        failed.recording,
+        failed.elapsed,
+        failed.budget,
+      );
+    } catch (err) {
+      console.error("[NativeCameraRecorder] retryFailedClip failed", err);
       const detail =
         err instanceof Error ? err.message : typeof err === "string" ? err : "";
       const message = formatNativeRecordingError(err);
@@ -286,7 +330,14 @@ export function NativeCameraRecorder({
     } finally {
       finishingRef.current = false;
     }
-  }, [addRecordedClip, clearAutoStop, clearTick]);
+  }, [persistRecordingClip]);
+
+  const discardFailedClip = useCallback(() => {
+    failedClipRef.current = null;
+    setFailedClipPending(false);
+    setPendingRecordedSeconds(0);
+    setError(null);
+  }, []);
 
   const finishRecordingRef = useRef(finishRecording);
   finishRecordingRef.current = finishRecording;
@@ -307,8 +358,12 @@ export function NativeCameraRecorder({
 
   const beginRecording = useCallback(async () => {
     if (assignedSeconds === null || isRecording || disabled) return;
-    const budget = assignedSeconds - usedClipSeconds;
+    const budget = assignedSeconds - usedClipSeconds - pendingRecordedSeconds;
     if (budget <= 0) return;
+
+    if (failedClipRef.current) {
+      discardFailedClip();
+    }
 
     if (!cameraReady) {
       const started = await ensurePreview();
@@ -360,6 +415,8 @@ export function NativeCameraRecorder({
     ensurePreview,
     facingMode,
     isRecording,
+    discardFailedClip,
+    pendingRecordedSeconds,
     usedClipSeconds,
   ]);
 
@@ -530,9 +587,29 @@ export function NativeCameraRecorder({
       </div>
 
       {error && (
-        <p role="alert" className="record-camera-error">
-          {error}
-        </p>
+        <div className="record-camera-error" role="alert">
+          <p>{error}</p>
+          {failedClipPending && (
+            <div className="record-camera-error__actions">
+              <button
+                type="button"
+                className="record-camera-error__retry"
+                onClick={() => void retryFailedClip()}
+                disabled={finishingRef.current}
+              >
+                クリップを再読み込み
+              </button>
+              <button
+                type="button"
+                className="record-camera-error__discard"
+                onClick={discardFailedClip}
+                disabled={finishingRef.current}
+              >
+                撮り直す
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

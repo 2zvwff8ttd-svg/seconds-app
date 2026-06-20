@@ -1719,6 +1719,9 @@ html.record-native-preview-active body {
   position: absolute;
   inset: 0;
   background: rgb(var(--bg-base-rgb, 10 10 10) / 0.97);
+  /* WKWebView は SVG マスクを alpha 扱いにすることがある — luminance を明示 */
+  -webkit-mask-mode: luminance;
+  mask-mode: luminance;
   -webkit-mask-size: 100% 100%;
   mask-size: 100% 100%;
   -webkit-mask-repeat: no-repeat;
@@ -1995,6 +1998,33 @@ html.record-native-preview-active body {
   padding: 0.5rem 1rem;
   font-size: 0.75rem;
   color: rgb(248 113 113);
+}
+
+.record-camera-error__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.record-camera-error__retry,
+.record-camera-error__discard {
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.record-camera-error__retry {
+  border: 1px solid rgb(248 113 113 / 0.5);
+  background: rgb(248 113 113 / 0.15);
+  color: rgb(254 202 202);
+}
+
+.record-camera-error__discard {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
 }
 
 /* legacy shell styles (web recorder) */

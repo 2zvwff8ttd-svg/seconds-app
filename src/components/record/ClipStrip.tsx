@@ -2,6 +2,7 @@
 
 import { ClipPreviewModal } from "@/components/record/ClipPreviewModal";
 import { DisplayMaskMedia } from "@/components/video/DisplayMaskMedia";
+import { formatClipDurationSeconds } from "@/lib/recording/format-clip-duration";
 import { captureVideoFrameBlob } from "@/lib/video/frame-capture";
 import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
 import type { RecordedClip } from "@/types/recording";
@@ -122,7 +123,7 @@ export function ClipStrip({
               >
                 <ClipThumbnail clip={clip} displayMaskShape={displayMaskShape} />
                 <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] text-white">
-                  {index + 1} · {clip.durationSeconds}s
+                  {index + 1} · {formatClipDurationSeconds(clip.durationSeconds)}s
                 </span>
               </button>
               <button

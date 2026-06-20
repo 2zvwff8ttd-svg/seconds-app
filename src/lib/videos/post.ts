@@ -7,7 +7,7 @@ import {
   isSchemaMismatchError,
   probeVideoSchema,
 } from "@/lib/supabase/video-schema";
-import { getMediaPublicUrl, uploadFileWithProgress } from "@/lib/storage/upload";
+import { getMediaPublicUrl, uploadFileWithProgress, formatUploadSize } from "@/lib/storage/upload";
 import { totalDurationSecondsForDb } from "@/lib/recording/clip-budget";
 import { tryMergeClips } from "@/lib/video/merge-clips";
 import {
@@ -374,13 +374,15 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   for (let i = 0; i < uploadTargets.length; i++) {
     const { file, storageName } = uploadTargets[i];
     const clipPath = `${basePath}/${storageName}`;
+    const sizeLabel = formatUploadSize(file.size);
+    const uploadBase = 34 + uploadShare * i;
 
     onStageChange("uploading_video");
     onProgress(
-      34 + uploadShare * i,
+      uploadBase,
       uploadTargets.length > 1
-        ? `クリップ ${i + 1}/${uploadTargets.length} をアップロード中…`
-        : "動画をアップロード中…",
+        ? `クリップ ${i + 1}/${uploadTargets.length} をアップロード中… (${sizeLabel})`
+        : `動画をアップロード中… (${sizeLabel})`,
     );
 
     try {
@@ -390,9 +392,12 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
         file,
         normalizeStorageContentType(file.type || "video/webm"),
         (ratio) => {
+          const pct = Math.round(ratio * 100);
           onProgress(
-            34 + uploadShare * i + uploadShare * ratio,
-            "動画をアップロード中…",
+            uploadBase + uploadShare * ratio,
+            uploadTargets.length > 1
+              ? `クリップ ${i + 1}/${uploadTargets.length} をアップロード中… ${pct}% (${sizeLabel})`
+              : `動画をアップロード中… ${pct}% (${sizeLabel})`,
           );
         },
       );

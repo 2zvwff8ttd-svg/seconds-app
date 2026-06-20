@@ -2,6 +2,7 @@
 
 import { DisplayMaskMedia } from "@/components/video/DisplayMaskMedia";
 import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
+import { formatClipDurationSeconds } from "@/lib/recording/format-clip-duration";
 import type { RecordedClip } from "@/types/recording";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -54,7 +55,9 @@ export function ClipPreviewModal({
           <p className="text-sm font-semibold text-white">
             クリップ {index + 1}
           </p>
-          <p className="text-[10px] text-white/60">{clip.durationSeconds}秒</p>
+          <p className="text-[10px] text-white/60">
+            {formatClipDurationSeconds(clip.durationSeconds)}秒
+          </p>
         </div>
         <button
           type="button"

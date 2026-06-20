@@ -182,11 +182,19 @@ export function getMinRecordingMs(): number {
 }
 
 export function getStopFallbackMs(): number {
-  return isIOSSafari() ? 1800 : 600;
+  return isIOSSafari() ? 3500 : 600;
 }
 
 export function getChunkWaitMs(): number {
-  return isIOSSafari() ? 1500 : 400;
+  return isIOSSafari() ? 2500 : 400;
+}
+
+/** iOS Safari では onstop が最終 ondataavailable より先に来ることがある */
+export function waitForRecorderDataSettled(): Promise<void> {
+  if (!isIOSSafari()) return Promise.resolve();
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 350);
+  });
 }
 
 /**
@@ -309,4 +317,91 @@ export function facingModeLabel(mode: "user" | "environment"): string {
 /** ネイティブカメラ撮影（input capture）向けの accept */
 export function getNativeCaptureAccept(): string {
   return isIOSDevice() ? "video/*" : "video/*";
+}
+
+/** カメラアプリ撮影（input capture）の File から秒数を取得 */
+export async function probeCapturedClipDuration(
+  file: File,
+  budget: number,
+): Promise<number> {
+  const { getVideoDuration } = await import("@/lib/video/media");
+
+  try {
+    const raw = await getVideoDuration(file, { timeoutMs: 15_000 });
+    if (raw > 0) {
+      return Math.min(budget, Math.max(0.1, Math.round(raw * 10) / 10));
+    }
+  } catch {
+    // iOS カメラ撮影はメタデータ取得に失敗することがある
+  }
+
+  if (isIOSDevice()) {
+    const iosDuration = await probeIOSVideoDurationFromFile(file);
+    if (iosDuration > 0) {
+      return Math.min(budget, Math.max(0.1, Math.round(iosDuration * 10) / 10));
+    }
+  }
+
+  try {
+    await verifyRecordedBlobPlayback(file);
+  } catch (err) {
+    throw err instanceof Error ? err : new Error("動画の読み込みに失敗しました");
+  }
+
+  throw new Error(
+    "動画の長さを取得できませんでした。別の動画でお試しください",
+  );
+}
+
+async function probeIOSVideoDurationFromFile(file: File): Promise<number> {
+  const url = URL.createObjectURL(file);
+  try {
+    const video = document.createElement("video");
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    video.setAttribute("webkit-playsinline", "true");
+    video.src = url;
+
+    await new Promise<void>((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        reject(new Error("timeout"));
+      }, 12_000);
+      video.onloadedmetadata = () => {
+        window.clearTimeout(timeoutId);
+        resolve();
+      };
+      video.onerror = () => {
+        window.clearTimeout(timeoutId);
+        reject(new Error("load failed"));
+      };
+    });
+
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      return video.duration;
+    }
+
+    video.currentTime = 3600;
+    await new Promise<void>((resolve, reject) => {
+      const timeoutId = window.setTimeout(() => {
+        reject(new Error("seek timeout"));
+      }, 8_000);
+      video.onseeked = () => {
+        window.clearTimeout(timeoutId);
+        resolve();
+      };
+      video.onerror = () => {
+        window.clearTimeout(timeoutId);
+        reject(new Error("seek failed"));
+      };
+    });
+
+    return Number.isFinite(video.duration) && video.duration > 0
+      ? video.duration
+      : 0;
+  } catch {
+    return 0;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
