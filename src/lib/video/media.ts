@@ -1,5 +1,6 @@
 /** Supabase Storage `media` bucket allowed video types (no codec suffix). */
 import { captureVideoFrameBlob } from "@/lib/video/frame-capture";
+import { materializeVideoBlob } from "@/lib/video/playable-blob";
 
 const STORAGE_VIDEO_TYPES = new Set([
   "video/mp4",
@@ -25,7 +26,8 @@ export async function getVideoDuration(
 ): Promise<number> {
   const fallback = options?.fallbackSeconds;
   const timeoutMs = options?.timeoutMs ?? 10_000;
-  const url = URL.createObjectURL(file);
+  const source = await materializeVideoBlob(file);
+  const url = URL.createObjectURL(source);
   try {
     const video = document.createElement("video");
     video.preload = "metadata";

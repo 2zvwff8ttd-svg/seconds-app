@@ -78,7 +78,15 @@ export function useVlogDraftSession({
         sessionRef.current = { userId: user.id, postingDay };
 
         if (draft && draft.clips.length > 0) {
-          const restored = draft.clips.map(recordedClipFromStoredDraft);
+          const restored: RecordedClip[] = [];
+          for (const stored of draft.clips) {
+            try {
+              restored.push(await recordedClipFromStoredDraft(stored));
+            } catch (err) {
+              console.warn("[useVlogDraftSession] skip corrupt draft clip", err);
+            }
+          }
+          if (restored.length === 0) return;
           setClips(restored);
           setDisplayMaskShape(draft.displayMaskShape);
           if (draft.title) {

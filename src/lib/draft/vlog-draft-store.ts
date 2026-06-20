@@ -4,6 +4,7 @@ import {
   parseVideoDisplayMaskShape,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
+import { materializeVideoFile } from "@/lib/video/playable-blob";
 import type { RecordedClip } from "@/types/recording";
 
 const DB_NAME = "seconds-vlog-drafts";
@@ -16,8 +17,11 @@ export type StoredDraftClip = {
   durationSeconds: number;
   mimeType: string;
   fileName: string;
-  blob: Blob;
+  /** Materialized bytes — reliable across IndexedDB round-trips on Safari. */
+  data?: ArrayBuffer;
   savedAt: number;
+  /** @deprecated v1 drafts only */
+  blob?: Blob;
 };
 
 export type VlogDraftSession = {
@@ -113,21 +117,43 @@ async function assertStorageHeadroom(requiredBytes: number): Promise<void> {
   }
 }
 
-export function storedDraftClipFromRecorded(clip: RecordedClip): StoredDraftClip {
+export async function storedDraftClipFromRecorded(
+  clip: RecordedClip,
+): Promise<StoredDraftClip> {
+  const materialized = await materializeVideoFile(clip.file, {
+    mimeType: clip.file.type,
+    fileName: clip.file.name,
+    id: clip.id,
+  });
+
   return {
     id: clip.id,
     durationSeconds: clip.durationSeconds,
-    mimeType: clip.file.type || "video/mp4",
-    fileName: clip.file.name || `clip-${clip.id}.mp4`,
-    blob: clip.file,
+    mimeType: materialized.type,
+    fileName: materialized.name,
+    data: await materialized.arrayBuffer(),
     savedAt: Date.now(),
   };
 }
 
-export function recordedClipFromStoredDraft(clip: StoredDraftClip): RecordedClip {
-  const file = new File([clip.blob], clip.fileName, {
-    type: clip.mimeType || "video/mp4",
+export async function recordedClipFromStoredDraft(
+  clip: StoredDraftClip,
+): Promise<RecordedClip> {
+  const source =
+    clip.data instanceof ArrayBuffer && clip.data.byteLength > 0
+      ? new Blob([clip.data], { type: clip.mimeType })
+      : clip.blob;
+
+  if (!source || source.size === 0) {
+    throw new Error("復元したクリップの動画データが空です");
+  }
+
+  const file = await materializeVideoFile(source, {
+    mimeType: clip.mimeType,
+    fileName: clip.fileName,
+    id: clip.id,
   });
+
   return {
     id: clip.id,
     file,
@@ -178,9 +204,13 @@ export async function loadVlogDraft(
   return {
     ...session,
     displayMaskShape: parseVideoDisplayMaskShape(session.displayMaskShape),
-    clips: session.clips.filter(
-      (clip) => clip?.blob instanceof Blob && clip.blob.size > 0,
-    ),
+    clips: session.clips.filter((clip) => {
+      if (!clip?.id) return false;
+      const hasData =
+        clip.data instanceof ArrayBuffer && clip.data.byteLength > 0;
+      const hasLegacyBlob = clip.blob instanceof Blob && clip.blob.size > 0;
+      return hasData || hasLegacyBlob;
+    }),
   };
 }
 
@@ -206,7 +236,7 @@ export async function saveVlogDraft(input: {
     userId: input.userId,
     postingDay,
     displayMaskShape: input.displayMaskShape,
-    clips: clips.map(storedDraftClipFromRecorded),
+    clips: await Promise.all(clips.map(storedDraftClipFromRecorded)),
     title: input.title?.trim() || undefined,
     updatedAt: Date.now(),
   };

@@ -1,3 +1,5 @@
+import { materializeVideoBlob } from "@/lib/video/playable-blob";
+
 export type CaptureVideoFrameOptions = {
   maxEdge?: number;
   jpegQuality?: number;
@@ -31,10 +33,7 @@ export async function captureVideoFrameBlob(
   const metadataTimeoutMs = options?.metadataTimeoutMs ?? 8_000;
   const seekTimeoutMs = options?.seekTimeoutMs ?? 5_000;
 
-  const source =
-    typeof file.slice === "function"
-      ? file.slice(0, file.size, file.type || undefined)
-      : file;
+  const source = await materializeVideoBlob(file);
   const url = URL.createObjectURL(source);
 
   try {
