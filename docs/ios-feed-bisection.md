@@ -48,6 +48,17 @@ No display-mask, no map-feed.
 | 4a-3  | fetchUserRecommendationContext() only |
 | 4a-4  | detectCountryCode() only |
 
-## Build note (4a-1)
+## Resolution (display-mask fix)
 
-Page chunk includes module 22926 = display-mask with `path(evenodd,...)` evaluated at bundle load.
+**Root cause:** `MASK_DEFINITIONS` was built at import time and called
+`recordCircleScrimMask()` which referenced `RECORD_VIEWPORT_HOLE_CENTER_*`
+declared *later* in the file (TDZ `ReferenceError` on strict module eval).
+Safari WebView treated this as a fatal chunk load failure ("This page couldn't load").
+
+**Also hardened for iOS Safari 26 runtime:**
+- Star clip: `polygon()` instead of `clip-path: path(evenodd, …)`
+- Square clip: `inset(4%)` + `border-radius` instead of `inset(4% round 14%)`
+- Record scrim: lazy SVG with white rect + black polygon hole (no SVG evenodd)
+- Circle scrim: unchanged `radial-gradient` mask
+
+**Fix:** Lazy `getMaskDefinitions()` — zero function calls at import.

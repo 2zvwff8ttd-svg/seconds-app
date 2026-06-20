@@ -2,7 +2,7 @@
 
 import {
   DEFAULT_VIDEO_DISPLAY_MASK,
-  getHomeVideoDisplayMask,
+  getVideoDisplayMask,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
 import type { CSSProperties, ReactNode } from "react";
@@ -23,7 +23,7 @@ export function FullscreenVideoMask({
   className,
   style,
 }: FullscreenVideoMaskProps) {
-  const mask = getHomeVideoDisplayMask(shape);
+  const mask = getVideoDisplayMask(shape);
 
   return (
     <div

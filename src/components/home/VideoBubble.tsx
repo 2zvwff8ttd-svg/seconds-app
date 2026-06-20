@@ -1,6 +1,6 @@
 "use client";
 
-import { getHomeVideoDisplayMaskCssVars } from "@/lib/video/display-mask";
+import { getVideoDisplayMaskCssVars } from "@/lib/video/display-mask";
 import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
 import { useCallback, useMemo, useRef, type CSSProperties } from "react";
 import type { BubbleGlassStyle } from "@/lib/bubble-glass-vars";
@@ -81,7 +81,7 @@ export function VideoBubble({
     [video.thumbnailUrl, video.clipThumbnailUrls, video.videoUrl],
   );
   const maskStyle = useMemo(
-    () => getHomeVideoDisplayMaskCssVars(video.displayMaskShape) as CSSProperties,
+    () => getVideoDisplayMaskCssVars(video.displayMaskShape) as CSSProperties,
     [video.displayMaskShape],
   );
 
