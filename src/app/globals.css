@@ -1639,12 +1639,12 @@ body {
 /* ネイティブ camera-preview: WebView 背面にカメラを表示（くり抜きマスク方式） */
 :root {
   --record-mask-center-x: 50%;
-  --record-mask-center-y: 38%;
-  --record-mask-center-y-offset: 38svh;
-  --record-mask-hole-diameter: min(78vw, 360px);
+  --record-mask-center-y: 36%;
+  --record-mask-center-y-offset: 36svh;
+  --record-mask-hole-diameter: min(64vw, 300px);
   --record-mask-hole-radius: calc(var(--record-mask-hole-diameter) / 2);
   --record-mask-rim-radius: 50%;
-  --record-mask-controls-height: 11.5rem;
+  --record-mask-controls-height: 10rem;
   --record-mask-gauge-top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
   --video-display-mask-clip: circle(50% at 50% 50%);
   --video-display-mask-radius: 50%;
@@ -1678,10 +1678,14 @@ html.record-native-preview-active body {
   padding-top: 0.25rem;
 }
 
+.record-native-preview-active .record-camera-root {
+  position: relative;
+  z-index: 120;
+}
+
 .record-camera-root {
   position: relative;
   width: 100%;
-  min-height: calc(100svh - env(safe-area-inset-top, 0px) - 3.5rem);
 }
 
 .native-camera-preview-anchor {
@@ -1698,10 +1702,6 @@ html.record-native-preview-active body {
   flex-direction: column;
   align-items: center;
   width: 100%;
-  min-height: calc(
-    var(--record-mask-center-y-offset) + var(--record-mask-hole-radius) +
-      var(--record-mask-controls-height)
-  );
   pointer-events: none;
 }
 
@@ -1716,9 +1716,8 @@ html.record-native-preview-active body {
 }
 
 .record-camera-layout-spacer__controls {
-  flex: 1 1 auto;
-  width: 100%;
-  min-height: var(--record-mask-controls-height);
+  height: var(--record-mask-controls-height);
+  flex-shrink: 0;
 }
 
 .record-mask-overlay {
@@ -1880,8 +1879,8 @@ html.record-native-preview-active body {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
-  z-index: 5;
+  bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+  z-index: 200;
   display: flex;
   flex-direction: column;
   align-items: center;

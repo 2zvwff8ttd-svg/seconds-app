@@ -37,10 +37,10 @@ export type VideoDisplayMaskDefinition = {
 };
 
 /** Shared hole diameter for record overlay layout (must be before lazy mask build). */
-export const RECORD_MASK_VW_RATIO = 0.78;
-export const RECORD_MASK_MAX_DIAMETER_PX = 360;
+export const RECORD_MASK_VW_RATIO = 0.64;
+export const RECORD_MASK_MAX_DIAMETER_PX = 300;
 
-export const RECORD_MASK_CENTER_Y_RATIO = 0.38;
+export const RECORD_MASK_CENTER_Y_RATIO = 0.36;
 export const RECORD_VIEWPORT_HOLE_DIAMETER = `min(${RECORD_MASK_VW_RATIO * 100}vw, ${RECORD_MASK_MAX_DIAMETER_PX}px)`;
 
 export const RECORD_VIEWPORT_HOLE_CENTER_X = "50%";

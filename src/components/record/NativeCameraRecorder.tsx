@@ -6,7 +6,7 @@ import { RecordShapePicker } from "@/components/record/RecordShapePicker";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
-import { getRecordHoleNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
+import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
 import { getMinRecordingMs } from "@/lib/recording/recorder-utils";
 import {
   flipNativeCamera,
@@ -37,7 +37,7 @@ function facingToPosition(mode: "user" | "environment"): "front" | "rear" {
 
 function nativePreviewOpts(facingMode: "user" | "environment") {
   return {
-    ...getRecordHoleNativePreviewRect(),
+    ...getFullscreenNativePreviewRect(),
     position: facingToPosition(facingMode),
   };
 }
