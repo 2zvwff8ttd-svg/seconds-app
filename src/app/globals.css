@@ -1655,9 +1655,12 @@ body {
   --z-record-gauge: 200;
   --z-record-flip: 210;
   --z-record-dock: 300;
-  --record-layout-bottom-dock: 156px;
+  --record-layout-bottom-dock: 232px;
   --record-layout-top-reserve: 76px;
-  --record-layout-dock-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  --record-layout-bottom-nav: 88px;
+  --record-layout-dock-bottom: calc(
+    var(--record-layout-bottom-nav) + 12px + env(safe-area-inset-bottom, 0px)
+  );
   --record-layout-flip-top: max(
     calc(env(safe-area-inset-top, 0px) + 76px),
     4.75rem

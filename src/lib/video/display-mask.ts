@@ -31,21 +31,23 @@ export function parseVideoDisplayMaskShape(
  */
 export const RECORD_LAYOUT = {
   /** Hole width as fraction of viewport width */
-  holeWidthRatio: 0.92,
+  holeWidthRatio: 0.96,
   /** Hole height cap as fraction of usable vertical space */
-  holeHeightRatio: 0.78,
+  holeHeightRatio: 0.86,
   /** Horizontal center (0.5 = middle) */
   centerXRatio: 0.5,
-  /** Vertical center — slightly above middle */
-  centerYRatio: 0.42,
-  /** Space reserved below hole for bottom dock (px) */
-  bottomDockReservePx: 156,
+  /** Vertical center — slightly above middle (lower = higher on screen) */
+  centerYRatio: 0.38,
+  /** Space reserved below hole for dock + bottom nav (px, used in hole sizing) */
+  bottomDockReservePx: 232,
+  /** Bottom tab nav height clearance — dock sits above this (px, excl. safe-area) */
+  bottomNavClearancePx: 88,
   /** Space reserved above hole for header + gauge (px) */
   topReservePx: 76,
   /** Flip button inset from safe top / right (px) */
   flipInsetTopPx: 8,
   flipInsetRightPx: 12,
-  /** Bottom dock inset above safe area (px) */
+  /** Extra gap between dock and bottom nav (px, above safe-area) */
   dockBottomInsetPx: 12,
 } as const;
 
@@ -230,7 +232,7 @@ function buildMaskDefinitions(): Record<
       id: "star",
       label: "星",
       modifier: "star",
-      visualScale: 1.25,
+      visualScale: 1.4,
       clipPath: STAR_CLIP_PATH,
       borderRadius: "0",
       recordRimClipPath: STAR_CLIP_PATH,
