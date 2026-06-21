@@ -27,11 +27,12 @@ export function getFullscreenNativePreviewRect(): NativePreviewRect {
 export function getRecordHoleNativePreviewRect(
   shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): NativePreviewRect {
-  const hole = computeRecordHoleRect(shape, readRecordViewportMetrics());
+  const viewport = readRecordViewportMetrics();
+  const hole = computeRecordHoleRect(shape, viewport);
 
   return {
-    x: Math.round(hole.x),
-    y: Math.round(hole.y),
+    x: Math.round(hole.x + viewport.offsetX),
+    y: Math.round(hole.y + viewport.offsetY),
     width: Math.round(Math.max(hole.width, 1)),
     height: Math.round(Math.max(hole.height, 1)),
   };

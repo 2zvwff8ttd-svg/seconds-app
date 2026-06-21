@@ -1858,7 +1858,6 @@ html.record-native-preview-active body {
 
 .record-mask-overlay {
   position: fixed;
-  inset: 0;
   z-index: var(--z-record-scrim);
   pointer-events: none;
 }
@@ -1918,10 +1917,8 @@ html.record-native-preview-active body {
   transform: translate(-50%, -50%);
   clip-path: var(--record-mask-rim-clip);
   border-radius: 0;
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.35),
-    inset 0 -8px 24px rgb(255 255 255 / 0.08),
-    0 0 0 1px rgb(0 0 0 / 0.25);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.3);
+  background: transparent;
   opacity: 0.35;
   transition: opacity 0.25s ease;
   z-index: var(--z-record-rim);
@@ -2078,14 +2075,6 @@ html.record-native-preview-active body {
   height: 1.5rem;
   width: 1.5rem;
   border-radius: 0.125rem;
-}
-
-.record-stage-ui__hint {
-  margin: 0;
-  max-width: 18rem;
-  font-size: 0.625rem;
-  color: var(--muted);
-  text-align: center;
 }
 
 .record-shape-picker {

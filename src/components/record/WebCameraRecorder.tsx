@@ -655,14 +655,6 @@ export function WebCameraRecorder({
               カメラアプリで撮影
             </button>
           )}
-
-          <p className="mt-3 text-[10px] text-muted">
-            {clips.length > 0
-              ? `${clips.length}クリップ · 残り時間はゲージで表示`
-              : isIOSSafari()
-                ? "1秒以上録画してから停止 · カメラアプリ撮影も利用可"
-                : "録画ボタンで開始 · 時間切れで自動停止"}
-          </p>
         </div>
       </div>
 

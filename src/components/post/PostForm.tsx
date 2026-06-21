@@ -582,16 +582,6 @@ export function PostForm() {
           </>
         )}
       </div>
-
-      {!showPostDetails && (
-        <div className="shrink-0 border-t border-border bg-surface-elevated/95 px-4 py-4 backdrop-blur-lg sm:px-5">
-          {!hasContent && !isUploading && (
-            <p className="text-center text-[10px] text-muted">
-              録画ボタンでクリップを撮影してください
-            </p>
-          )}
-        </div>
-      )}
     </form>
   );
 }

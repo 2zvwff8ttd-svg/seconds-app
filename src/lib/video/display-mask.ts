@@ -37,7 +37,7 @@ export const RECORD_LAYOUT = {
   /** Horizontal center (0.5 = middle) */
   centerXRatio: 0.5,
   /** Vertical center — slightly above middle (lower = higher on screen) */
-  centerYRatio: 0.38,
+  centerYRatio: 0.42,
   /** Space reserved below hole for dock + bottom nav (px, used in hole sizing) */
   bottomDockReservePx: 232,
   /** Bottom tab nav height clearance — dock sits above this (px, excl. safe-area) */
@@ -150,10 +150,8 @@ export function computeRecordHoleRect(
   );
 
   const radius = scaledDiameter / 2;
-  const centerX =
-    viewport.offsetX + viewport.width * RECORD_LAYOUT.centerXRatio;
-  const centerY =
-    viewport.offsetY + viewport.height * RECORD_LAYOUT.centerYRatio;
+  const centerX = viewport.width * RECORD_LAYOUT.centerXRatio;
+  const centerY = viewport.height * RECORD_LAYOUT.centerYRatio;
 
   return {
     x: centerX - radius,
@@ -206,10 +204,10 @@ export function computeRecordStageMinHeight(
 ): number {
   const hole = computeRecordHoleRect(DEFAULT_VIDEO_DISPLAY_MASK, viewport);
   return (
+    viewport.offsetY +
     hole.y +
     hole.height +
-    RECORD_LAYOUT.bottomDockReservePx -
-    viewport.offsetY
+    RECORD_LAYOUT.bottomDockReservePx
   );
 }
 

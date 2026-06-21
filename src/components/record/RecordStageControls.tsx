@@ -130,12 +130,6 @@ export function RecordStageControls({
           >
             <span className="record-stage-ui__record-inner" />
           </button>
-
-          <p className="record-stage-ui__hint">
-            {clipsCount > 0
-              ? `${clipsCount}クリップ · 残り時間はゲージで表示`
-              : "録画ボタンで開始 · 時間切れで自動停止"}
-          </p>
         </div>
       </div>
     </RecordStagePortal>
