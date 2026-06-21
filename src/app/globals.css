@@ -1724,7 +1724,7 @@ html.record-native-preview-active body {
   position: absolute;
   inset: 0;
   background: rgb(var(--bg-base-rgb, 10 10 10) / 0.97);
-  /* WKWebView は SVG マスクを alpha 扱いにすることがある — luminance を明示 */
+  /* WKWebView: circle scrim uses CSS radial-gradient mask (luminance). */
   -webkit-mask-mode: luminance;
   mask-mode: luminance;
   -webkit-mask-size: 100% 100%;
@@ -1733,6 +1733,18 @@ html.record-native-preview-active body {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
+}
+
+.record-mask-overlay__scrim--pending {
+  opacity: 0.97;
+}
+
+/* Star/square: inline SVG mask (WKWebView ignores data-URL CSS masks). */
+.record-mask-overlay__scrim-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  pointer-events: none;
 }
 
 .display-mask-media {

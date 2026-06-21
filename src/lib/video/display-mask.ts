@@ -55,23 +55,53 @@ const STAR_CLIP_PATH =
 const SQUARE_CLIP_PATH = "inset(4%)";
 const SQUARE_BORDER_RADIUS = "14%";
 
-/** Star/square record-hole polygons (SVG mask, no fill-rule evenodd). */
-const RECORD_SCRIM_STAR_POINTS =
+/** Star hole in 0–100 box (matches clip-path polygon proportions). */
+export const RECORD_SCRIM_STAR_POINTS =
   "50,8 56.27,25.66 74.64,25.66 60.05,37.15 66.46,54.85 50,46.05 33.54,54.85 39.95,37.15 25.36,25.66 43.73,25.66";
 
-const RECORD_SCRIM_SQUARE_POINTS = "22,8 22,64 78,64 78,8";
+/** Square hole inset (matches clip-path inset(4%) + border-radius 14%). */
+export const RECORD_SCRIM_SQUARE_INSET_RATIO = 0.04;
+export const RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO = 0.14;
+
+export type RecordHoleRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+/** Map normalized star points into viewport px within the measured hole rect. */
+export function buildRecordStarHolePolygonPoints(rect: RecordHoleRect): string {
+  return RECORD_SCRIM_STAR_POINTS.split(" ")
+    .map((pair) => {
+      const [px, py] = pair.split(",").map(Number);
+      const x = rect.x + (px / 100) * rect.width;
+      const y = rect.y + (py / 100) * rect.height;
+      return `${x},${y}`;
+    })
+    .join(" ");
+}
+
+/** Rounded-rect hole for square mask (inset + corner radius). */
+export function buildRecordSquareHoleRect(rect: RecordHoleRect): RecordHoleRect & {
+  rx: number;
+  ry: number;
+} {
+  const inset = RECORD_SCRIM_SQUARE_INSET_RATIO;
+  const innerWidth = rect.width * (1 - inset * 2);
+  const innerHeight = rect.height * (1 - inset * 2);
+  return {
+    x: rect.x + rect.width * inset,
+    y: rect.y + rect.height * inset,
+    width: innerWidth,
+    height: innerHeight,
+    rx: rect.width * RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO,
+    ry: rect.height * RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO,
+  };
+}
 
 function buildRecordCircleScrimMask(): string {
   return `radial-gradient(circle at ${RECORD_VIEWPORT_HOLE_CENTER_X} ${RECORD_VIEWPORT_HOLE_CENTER_Y}, transparent var(--record-mask-hole-radius), #000 var(--record-mask-hole-radius))`;
-}
-
-/** White scrim + black hole polygon (luminance mask). Built lazily, not at import. */
-function buildRecordPolygonHoleScrimMask(points: string): string {
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">` +
-    `<rect width="100" height="100" fill="#fff"/>` +
-    `<polygon points="${points}" fill="#000"/></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
 function buildMaskDefinitions(): Record<
@@ -95,7 +125,8 @@ function buildMaskDefinitions(): Record<
       modifier: "star",
       clipPath: STAR_CLIP_PATH,
       borderRadius: "0",
-      recordScrimMask: buildRecordPolygonHoleScrimMask(RECORD_SCRIM_STAR_POINTS),
+      /** Circle uses CSS radial-gradient scrim; star uses inline SVG mask overlay. */
+      recordScrimMask: "",
       recordRimClipPath: STAR_CLIP_PATH,
       pickerIconPath:
         "M 0 -1 L 0.224 -0.309 L 0.951 -0.309 L 0.363 0.118 L 0.588 0.809 L 0 0.382 L -0.588 0.809 L -0.363 0.118 L -0.951 -0.309 L -0.224 -0.309 Z",
@@ -106,7 +137,8 @@ function buildMaskDefinitions(): Record<
       modifier: "square",
       clipPath: SQUARE_CLIP_PATH,
       borderRadius: SQUARE_BORDER_RADIUS,
-      recordScrimMask: buildRecordPolygonHoleScrimMask(RECORD_SCRIM_SQUARE_POINTS),
+      /** Circle uses CSS radial-gradient scrim; square uses inline SVG mask overlay. */
+      recordScrimMask: "",
       recordRimClipPath: SQUARE_CLIP_PATH,
       pickerIconPath: "M 18 18 H 82 V 82 H 18 Z",
     },
