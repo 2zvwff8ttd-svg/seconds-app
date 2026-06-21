@@ -25,28 +25,29 @@ export function parseVideoDisplayMaskShape(
   return isVideoDisplayMaskShape(value) ? value : DEFAULT_VIDEO_DISPLAY_MASK;
 }
 
-export type VideoDisplayMaskDefinition = {
-  id: VideoDisplayMaskShape;
-  label: string;
-  modifier: VideoDisplayMaskShape;
-  clipPath: string;
-  borderRadius: string;
-  recordScrimMask: string;
-  recordRimClipPath: string;
-  pickerIconPath: string;
-};
-
-/** Shared hole diameter for record overlay layout (must be before lazy mask build). */
-export const RECORD_MASK_VW_RATIO = 0.64;
-export const RECORD_MASK_MAX_DIAMETER_PX = 300;
-
-export const RECORD_MASK_CENTER_Y_RATIO = 0.36;
-export const RECORD_VIEWPORT_HOLE_DIAMETER = `min(${RECORD_MASK_VW_RATIO * 100}vw, ${RECORD_MASK_MAX_DIAMETER_PX}px)`;
-
-export const RECORD_VIEWPORT_HOLE_CENTER_X = "50%";
-export const RECORD_VIEWPORT_HOLE_CENTER_Y = `${RECORD_MASK_CENTER_Y_RATIO * 100}%`;
-/** Spacer margin helper — matches RECORD_MASK_CENTER_Y_RATIO against small viewport height. */
-export const RECORD_VIEWPORT_HOLE_CENTER_Y_OFFSET = `${RECORD_MASK_CENTER_Y_RATIO * 100}svh`;
+/**
+ * Record stage layout — tune numbers here; hole, rim, scrim, and dock read these.
+ * Native camera stays fullscreen; only the Web scrim punches the hole.
+ */
+export const RECORD_LAYOUT = {
+  /** Hole width as fraction of viewport width */
+  holeWidthRatio: 0.92,
+  /** Hole height cap as fraction of usable vertical space */
+  holeHeightRatio: 0.78,
+  /** Horizontal center (0.5 = middle) */
+  centerXRatio: 0.5,
+  /** Vertical center — slightly above middle */
+  centerYRatio: 0.42,
+  /** Space reserved below hole for bottom dock (px) */
+  bottomDockReservePx: 156,
+  /** Space reserved above hole for header + gauge (px) */
+  topReservePx: 76,
+  /** Flip button inset from safe top / right (px) */
+  flipInsetTopPx: 8,
+  flipInsetRightPx: 12,
+  /** Bottom dock inset above safe area (px) */
+  dockBottomInsetPx: 12,
+} as const;
 
 /** Star polygon percentages — shared by clip-path, rim, and scrim hole. */
 const STAR_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
@@ -67,9 +68,20 @@ const STAR_CLIP_PATH = `polygon(${STAR_POLYGON_PERCENT_POINTS.map(([x, y]) => `$
 const SQUARE_CLIP_PATH = "inset(4%)";
 const SQUARE_BORDER_RADIUS = "14%";
 
-/** Square hole inset (matches clip-path inset(4%) + border-radius 14%). */
 export const RECORD_SCRIM_SQUARE_INSET_RATIO = 0.04;
 export const RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO = 0.14;
+
+export type VideoDisplayMaskDefinition = {
+  id: VideoDisplayMaskShape;
+  label: string;
+  modifier: VideoDisplayMaskShape;
+  /** Perceived-size multiplier (star < circle fill → scale up). */
+  visualScale: number;
+  clipPath: string;
+  borderRadius: string;
+  recordRimClipPath: string;
+  pickerIconPath: string;
+};
 
 export type RecordHoleRect = {
   x: number;
@@ -99,29 +111,56 @@ export function readRecordViewportMetrics(): ViewportMetrics {
   };
 }
 
+function computeBaseHoleDiameter(viewport: ViewportMetrics): number {
+  const usableHeight = Math.max(
+    180,
+    viewport.height -
+      RECORD_LAYOUT.bottomDockReservePx -
+      RECORD_LAYOUT.topReservePx,
+  );
+
+  return Math.min(
+    viewport.width * RECORD_LAYOUT.holeWidthRatio,
+    usableHeight * RECORD_LAYOUT.holeHeightRatio,
+  );
+}
+
 /**
- * Viewport-fixed hole box — same geometry as circle radial-gradient scrim and native preview.
+ * Viewport-fixed hole box for scrim + rim (native preview stays fullscreen).
  */
 export function computeRecordHoleRect(
+  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
   viewport: ViewportMetrics = readRecordViewportMetrics(),
 ): RecordHoleRect {
-  const diameter = Math.min(
-    viewport.width * RECORD_MASK_VW_RATIO,
-    RECORD_MASK_MAX_DIAMETER_PX,
+  const mask = getVideoDisplayMask(shape);
+  const usableHeight = Math.max(
+    180,
+    viewport.height -
+      RECORD_LAYOUT.bottomDockReservePx -
+      RECORD_LAYOUT.topReservePx,
   );
-  const radius = diameter / 2;
-  const centerX = viewport.offsetX + viewport.width * 0.5;
-  const centerY = viewport.offsetY + viewport.height * RECORD_MASK_CENTER_Y_RATIO;
+
+  const baseDiameter = computeBaseHoleDiameter(viewport);
+  const scaledDiameter = Math.min(
+    baseDiameter * mask.visualScale,
+    viewport.width * 0.98,
+    usableHeight * 0.98,
+  );
+
+  const radius = scaledDiameter / 2;
+  const centerX =
+    viewport.offsetX + viewport.width * RECORD_LAYOUT.centerXRatio;
+  const centerY =
+    viewport.offsetY + viewport.height * RECORD_LAYOUT.centerYRatio;
 
   return {
     x: centerX - radius,
     y: centerY - radius,
-    width: diameter,
-    height: diameter,
+    width: scaledDiameter,
+    height: scaledDiameter,
   };
 }
 
-/** Map star clip-path percentages into viewport px within the hole bounding box. */
 export function buildRecordStarHolePolygonPoints(rect: RecordHoleRect): string {
   return STAR_POLYGON_PERCENT_POINTS.map(([px, py]) => {
     const x = rect.x + (px / 100) * rect.width;
@@ -130,7 +169,18 @@ export function buildRecordStarHolePolygonPoints(rect: RecordHoleRect): string {
   }).join(" ");
 }
 
-/** Rounded-rect hole for square mask (inset + corner radius). */
+export function buildRecordCircleHoleAttrs(rect: RecordHoleRect): {
+  cx: number;
+  cy: number;
+  r: number;
+} {
+  return {
+    cx: rect.x + rect.width / 2,
+    cy: rect.y + rect.height / 2,
+    r: rect.width / 2,
+  };
+}
+
 export function buildRecordSquareHoleRect(rect: RecordHoleRect): RecordHoleRect & {
   rx: number;
   ry: number;
@@ -148,8 +198,17 @@ export function buildRecordSquareHoleRect(rect: RecordHoleRect): RecordHoleRect 
   };
 }
 
-function buildRecordCircleScrimMask(): string {
-  return `radial-gradient(circle at ${RECORD_VIEWPORT_HOLE_CENTER_X} ${RECORD_VIEWPORT_HOLE_CENTER_Y}, transparent var(--record-mask-hole-radius), #000 var(--record-mask-hole-radius))`;
+/** Scroll reserve so clip strip clears the fixed hole + dock. */
+export function computeRecordStageMinHeight(
+  viewport: ViewportMetrics = readRecordViewportMetrics(),
+): number {
+  const hole = computeRecordHoleRect(DEFAULT_VIDEO_DISPLAY_MASK, viewport);
+  return (
+    hole.y +
+    hole.height +
+    RECORD_LAYOUT.bottomDockReservePx -
+    viewport.offsetY
+  );
 }
 
 function buildMaskDefinitions(): Record<
@@ -161,9 +220,9 @@ function buildMaskDefinitions(): Record<
       id: "circle",
       label: "丸",
       modifier: "circle",
+      visualScale: 1,
       clipPath: "circle(50% at 50% 50%)",
       borderRadius: "50%",
-      recordScrimMask: buildRecordCircleScrimMask(),
       recordRimClipPath: "circle(50% at 50% 50%)",
       pickerIconPath: "M 50 8 A 42 42 0 1 1 49.99 8 Z",
     },
@@ -171,10 +230,9 @@ function buildMaskDefinitions(): Record<
       id: "star",
       label: "星",
       modifier: "star",
+      visualScale: 1.25,
       clipPath: STAR_CLIP_PATH,
       borderRadius: "0",
-      /** Circle uses CSS radial-gradient scrim; star uses inline SVG mask overlay. */
-      recordScrimMask: "",
       recordRimClipPath: STAR_CLIP_PATH,
       pickerIconPath:
         "M 0 -1 L 0.224 -0.309 L 0.951 -0.309 L 0.363 0.118 L 0.588 0.809 L 0 0.382 L -0.588 0.809 L -0.363 0.118 L -0.951 -0.309 L -0.224 -0.309 Z",
@@ -183,10 +241,9 @@ function buildMaskDefinitions(): Record<
       id: "square",
       label: "角丸",
       modifier: "square",
+      visualScale: 1,
       clipPath: SQUARE_CLIP_PATH,
       borderRadius: SQUARE_BORDER_RADIUS,
-      /** Circle uses CSS radial-gradient scrim; square uses inline SVG mask overlay. */
-      recordScrimMask: "",
       recordRimClipPath: SQUARE_CLIP_PATH,
       pickerIconPath: "M 18 18 H 82 V 82 H 18 Z",
     },
@@ -221,43 +278,18 @@ export function getVideoDisplayMaskCssVars(
   return {
     "--video-display-mask-clip": mask.clipPath,
     "--video-display-mask-radius": mask.borderRadius,
+    "--video-display-mask-visual-scale": String(mask.visualScale),
   };
 }
 
-export type RecordViewportMaskMetrics = {
-  shape: VideoDisplayMaskShape;
-  centerX: string;
-  centerY: string;
-  diameterCss: string;
-  radiusCss: string;
-};
-
-export function getRecordViewportMaskMetrics(
-  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
-): RecordViewportMaskMetrics {
-  return {
-    shape,
-    centerX: RECORD_VIEWPORT_HOLE_CENTER_X,
-    centerY: RECORD_VIEWPORT_HOLE_CENTER_Y,
-    diameterCss: RECORD_VIEWPORT_HOLE_DIAMETER,
-    radiusCss: `calc(${RECORD_VIEWPORT_HOLE_DIAMETER} / 2)`,
-  };
-}
-
-/** CSS custom properties for record mask layout (overlay + rim + scrim). */
 export function getRecordViewportMaskCssVars(
   shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): Record<string, string> {
-  const metrics = getRecordViewportMaskMetrics(shape);
   const mask = getVideoDisplayMask(shape);
   return {
     ...getVideoDisplayMaskCssVars(shape),
-    "--record-mask-center-x": metrics.centerX,
-    "--record-mask-center-y": metrics.centerY,
-    "--record-mask-center-y-offset": RECORD_VIEWPORT_HOLE_CENTER_Y_OFFSET,
-    "--record-mask-hole-diameter": metrics.diameterCss,
-    "--record-mask-hole-radius": metrics.radiusCss,
     "--record-mask-rim-clip": mask.recordRimClipPath,
+    "--record-mask-visual-scale": String(mask.visualScale),
   };
 }
 

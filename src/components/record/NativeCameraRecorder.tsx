@@ -2,8 +2,7 @@
 
 import type { CameraRecorderProps } from "@/components/record/camera-recorder-types";
 import { RecordMaskOverlay } from "@/components/record/RecordMaskOverlay";
-import { RecordShapePicker } from "@/components/record/RecordShapePicker";
-import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
+import { RecordStageControls } from "@/components/record/RecordStageControls";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
@@ -487,104 +486,33 @@ export function NativeCameraRecorder({
         aria-hidden
       />
 
-      <div className="record-camera-layout-spacer" aria-hidden>
-        <div className="record-camera-layout-spacer__hole" />
-        <div className="record-camera-layout-spacer__controls" />
-      </div>
+      <div className="record-camera-layout-spacer" aria-hidden />
 
       <RecordMaskOverlay cameraReady={cameraReady} shape={displayMaskShape} />
 
-      <div className="record-mask-controls">
-        <div className="record-mask-controls__gauge">
-          <TimeBudgetGauge
-            assignedSeconds={assignedSeconds}
-            usedSeconds={usedClipSeconds}
-            recordingElapsed={gaugeRecordingElapsed}
-          />
-        </div>
-
-        {!cameraReady && !isRecording && !error && (
-          <div className="record-mask-controls__loading">
-            <p className="text-sm font-medium text-foreground">カメラを準備中…</p>
-            <p className="mt-1 text-xs text-muted">アプリ内プレビューで録画します</p>
-          </div>
-        )}
-
-        {cameraStarting && (
-          <div className="record-mask-controls__loading record-mask-controls__loading--dim">
-            カメラを起動中…
-          </div>
-        )}
-
-        {recordingStarting && (
-          <div className="record-mask-controls__loading record-mask-controls__loading--dim">
-            録画を開始しています…
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => void switchCamera()}
-          disabled={isRecording || cameraStarting || disabled || !cameraReady}
-          className="record-mask-controls__flip"
-          aria-label="カメラ切り替え"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 7h4l2-3h8l2 3h4v12H4V7z" />
-            <circle cx="12" cy="13" r="3.5" />
-          </svg>
-        </button>
-
-        <div className="record-mask-controls__bottom">
-          <RecordShapePicker
-            value={displayMaskShape}
-            onChange={onDisplayMaskShapeChange}
-            disabled={
-              disabled ||
-              isRecording ||
-              cameraStarting ||
-              recordingStarting ||
-              clips.length > 0
-            }
-          />
-
-          {isRecording && (
-            <span className="record-mask-controls__recording-badge">
-              <span className="record-mask-controls__recording-dot" />
-              録画中
-            </span>
-          )}
-
-          {!canRecord &&
-            !isRecording &&
-            assignedSeconds !== null &&
-            usedClipSeconds >= assignedSeconds && (
-              <p className="record-mask-controls__limit-msg">撮影時間を使い切りました</p>
-            )}
-
-          <button
-            type="button"
-            onClick={invokeRecordPress}
-            onPointerUp={(e) => {
-              if (e.pointerType === "touch") {
-                e.preventDefault();
-                invokeRecordPress();
-              }
-            }}
-            disabled={(!canRecord && !isRecording) || cameraStarting || recordingStarting}
-            className={`record-mask-controls__record${isRecording ? " record-mask-controls__record--active" : ""}`}
-            aria-label={isRecording ? "録画を停止" : "録画を開始"}
-          >
-            <span className="record-mask-controls__record-inner" />
-          </button>
-
-          <p className="record-mask-controls__hint">
-            {clips.length > 0
-              ? `${clips.length}クリップ · 残り時間はゲージで表示`
-              : "録画ボタンで開始 · 時間切れで自動停止"}
-          </p>
-        </div>
-      </div>
+      <RecordStageControls
+        assignedSeconds={assignedSeconds}
+        usedClipSeconds={usedClipSeconds}
+        gaugeRecordingElapsed={gaugeRecordingElapsed}
+        cameraReady={cameraReady}
+        cameraStarting={cameraStarting}
+        recordingStarting={recordingStarting}
+        isRecording={isRecording}
+        canRecord={canRecord}
+        disabled={disabled}
+        error={error}
+        clipsCount={clips.length}
+        displayMaskShape={displayMaskShape}
+        onDisplayMaskShapeChange={onDisplayMaskShapeChange}
+        onSwitchCamera={() => void switchCamera()}
+        onRecordPress={invokeRecordPress}
+        showLimitMessage={
+          !canRecord &&
+          !isRecording &&
+          assignedSeconds !== null &&
+          usedClipSeconds >= assignedSeconds
+        }
+      />
 
       {error && (
         <div className="record-camera-error" role="alert">

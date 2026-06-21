@@ -1,4 +1,9 @@
-import { computeRecordHoleRect, readRecordViewportMetrics } from "@/lib/video/display-mask";
+import {
+  computeRecordHoleRect,
+  DEFAULT_VIDEO_DISPLAY_MASK,
+  readRecordViewportMetrics,
+  type VideoDisplayMaskShape,
+} from "@/lib/video/display-mask";
 import type { NativePreviewRect } from "@/lib/recording/native-camera-preview";
 
 /**
@@ -18,9 +23,11 @@ export function getFullscreenNativePreviewRect(): NativePreviewRect {
   };
 }
 
-/** Scrim-hole box in viewport px (star/square SVG masks only). */
-export function getRecordHoleNativePreviewRect(): NativePreviewRect {
-  const hole = computeRecordHoleRect(readRecordViewportMetrics());
+/** Scrim-hole box in viewport px (diagnostics only — native preview uses fullscreen). */
+export function getRecordHoleNativePreviewRect(
+  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+): NativePreviewRect {
+  const hole = computeRecordHoleRect(shape, readRecordViewportMetrics());
 
   return {
     x: Math.round(hole.x),

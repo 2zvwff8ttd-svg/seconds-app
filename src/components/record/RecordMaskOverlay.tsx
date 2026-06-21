@@ -2,11 +2,11 @@
 
 import {
   DEFAULT_VIDEO_DISPLAY_MASK,
+  buildRecordCircleHoleAttrs,
   buildRecordSquareHoleRect,
   buildRecordStarHolePolygonPoints,
   computeRecordHoleRect,
   getRecordViewportMaskCssVars,
-  getVideoDisplayMask,
   readRecordViewportMetrics,
   type RecordHoleRect,
   type VideoDisplayMaskShape,
@@ -23,12 +23,12 @@ type RecordMaskOverlayProps = {
   cameraReady?: boolean;
 };
 
-function useRecordHoleRect(): RecordHoleRect | null {
+function useRecordHoleRect(shape: VideoDisplayMaskShape): RecordHoleRect | null {
   const [holeRect, setHoleRect] = useState<RecordHoleRect | null>(null);
 
   useEffect(() => {
     const measure = () => {
-      setHoleRect(computeRecordHoleRect(readRecordViewportMetrics()));
+      setHoleRect(computeRecordHoleRect(shape, readRecordViewportMetrics()));
     };
 
     measure();
@@ -44,7 +44,7 @@ function useRecordHoleRect(): RecordHoleRect | null {
       window.visualViewport?.removeEventListener("scroll", measure);
       window.removeEventListener("orientationchange", measure);
     };
-  }, []);
+  }, [shape]);
 
   return holeRect;
 }
@@ -55,42 +55,32 @@ type RecordSvgScrimProps = {
   maskId: string;
 };
 
-/**
- * WKWebView 26 ignores CSS mask-image on data-URL SVGs; inline SVG luminance masks
- * use the same viewport hole box as the circle radial-gradient scrim.
- */
+/** Inline SVG luminance mask — all shapes (WKWebView-safe). Native camera is fullscreen behind. */
 function RecordSvgScrim({ shape, holeRect, maskId }: RecordSvgScrimProps) {
   const viewport = readRecordViewportMetrics();
-  const viewportWidth = viewport.width;
-  const viewportHeight = viewport.height;
-  const originX = viewport.offsetX;
-  const originY = viewport.offsetY;
+  const { width, height, offsetX, offsetY } = viewport;
 
   return (
     <svg
       className="record-mask-overlay__scrim-svg"
-      width={viewportWidth}
-      height={viewportHeight}
-      viewBox={`${originX} ${originY} ${viewportWidth} ${viewportHeight}`}
+      width={width}
+      height={height}
+      viewBox={`${offsetX} ${offsetY} ${width} ${height}`}
       aria-hidden
     >
       <defs>
         <mask
           id={maskId}
           maskUnits="userSpaceOnUse"
-          x={originX}
-          y={originY}
-          width={viewportWidth}
-          height={viewportHeight}
+          x={offsetX}
+          y={offsetY}
+          width={width}
+          height={height}
         >
-          <rect
-            x={originX}
-            y={originY}
-            width={viewportWidth}
-            height={viewportHeight}
-            fill="white"
-          />
-          {shape === "star" ? (
+          <rect x={offsetX} y={offsetY} width={width} height={height} fill="white" />
+          {shape === "circle" ? (
+            <circle {...buildRecordCircleHoleAttrs(holeRect)} fill="black" />
+          ) : shape === "star" ? (
             <polygon
               points={buildRecordStarHolePolygonPoints(holeRect)}
               fill="black"
@@ -101,10 +91,10 @@ function RecordSvgScrim({ shape, holeRect, maskId }: RecordSvgScrimProps) {
         </mask>
       </defs>
       <rect
-        x={originX}
-        y={originY}
-        width={viewportWidth}
-        height={viewportHeight}
+        x={offsetX}
+        y={offsetY}
+        width={width}
+        height={height}
         fill="rgb(10 10 10 / 0.97)"
         mask={`url(#${maskId})`}
       />
@@ -112,16 +102,24 @@ function RecordSvgScrim({ shape, holeRect, maskId }: RecordSvgScrimProps) {
   );
 }
 
+function holeRectToRimStyle(holeRect: RecordHoleRect): CSSProperties {
+  return {
+    left: holeRect.x + holeRect.width / 2,
+    top: holeRect.y + holeRect.height / 2,
+    width: holeRect.width,
+    height: holeRect.height,
+  };
+}
+
 /**
- * Fixed viewport scrim with a shape cutout. Native camera shows through the hole.
+ * Fixed viewport scrim with a shape cutout. Native fullscreen camera shows through the hole.
  */
 export function RecordMaskOverlay({
   shape = DEFAULT_VIDEO_DISPLAY_MASK,
   cameraReady = false,
 }: RecordMaskOverlayProps) {
   const layoutVars = getRecordViewportMaskCssVars(shape);
-  const scrimMask = getVideoDisplayMask(shape).recordScrimMask;
-  const holeRect = useRecordHoleRect();
+  const holeRect = useRecordHoleRect(shape);
   const maskId = useId().replace(/:/g, "");
 
   return (
@@ -130,24 +128,17 @@ export function RecordMaskOverlay({
       style={layoutVars as CSSProperties}
       aria-hidden
     >
-      {shape === "circle" ? (
-        <div
-          className="record-mask-overlay__scrim"
-          style={
-            {
-              WebkitMaskImage: scrimMask,
-              maskImage: scrimMask,
-            } as CSSProperties
-          }
-        />
-      ) : holeRect ? (
+      {holeRect ? (
         <RecordSvgScrim shape={shape} holeRect={holeRect} maskId={maskId} />
       ) : (
         <div className="record-mask-overlay__scrim record-mask-overlay__scrim--pending" />
       )}
-      <div
-        className={`record-mask-overlay__rim${cameraReady ? " record-mask-overlay__rim--ready" : ""}`}
-      />
+      {holeRect && (
+        <div
+          className={`record-mask-overlay__rim${cameraReady ? " record-mask-overlay__rim--ready" : ""}`}
+          style={holeRectToRimStyle(holeRect)}
+        />
+      )}
     </div>
   );
 }

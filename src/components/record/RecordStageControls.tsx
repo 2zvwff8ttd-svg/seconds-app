@@ -1,0 +1,143 @@
+"use client";
+
+import { RecordShapePicker } from "@/components/record/RecordShapePicker";
+import { RecordStagePortal } from "@/components/record/RecordStagePortal";
+import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
+import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
+
+type RecordStageControlsProps = {
+  assignedSeconds: number | null;
+  usedClipSeconds: number;
+  gaugeRecordingElapsed: number;
+  cameraReady: boolean;
+  cameraStarting: boolean;
+  recordingStarting: boolean;
+  isRecording: boolean;
+  canRecord: boolean;
+  disabled: boolean;
+  error: string | null;
+  clipsCount: number;
+  displayMaskShape: VideoDisplayMaskShape;
+  onDisplayMaskShapeChange: (shape: VideoDisplayMaskShape) => void;
+  onSwitchCamera: () => void;
+  onRecordPress: () => void;
+  showLimitMessage: boolean;
+};
+
+/**
+ * Fixed record UI on document.body (z-record-dock) — never clipped by ClipStrip.
+ *
+ * Layer stack (low → high): formContent 50 → scrim 100 → loading 150 → gauge 200
+ * → flip 210 → dock 300
+ */
+export function RecordStageControls({
+  assignedSeconds,
+  usedClipSeconds,
+  gaugeRecordingElapsed,
+  cameraReady,
+  cameraStarting,
+  recordingStarting,
+  isRecording,
+  canRecord,
+  disabled,
+  error,
+  clipsCount,
+  displayMaskShape,
+  onDisplayMaskShapeChange,
+  onSwitchCamera,
+  onRecordPress,
+  showLimitMessage,
+}: RecordStageControlsProps) {
+  return (
+    <RecordStagePortal>
+      <div className="record-stage-ui">
+        <div className="record-stage-ui__gauge">
+          <TimeBudgetGauge
+            assignedSeconds={assignedSeconds}
+            usedSeconds={usedClipSeconds}
+            recordingElapsed={gaugeRecordingElapsed}
+          />
+        </div>
+
+        {!cameraReady && !isRecording && !error && (
+          <div className="record-stage-ui__loading">
+            <p className="text-sm font-medium text-foreground">カメラを準備中…</p>
+            <p className="mt-1 text-xs text-muted">アプリ内プレビューで録画します</p>
+          </div>
+        )}
+
+        {cameraStarting && (
+          <div className="record-stage-ui__loading record-stage-ui__loading--dim">
+            カメラを起動中…
+          </div>
+        )}
+
+        {recordingStarting && (
+          <div className="record-stage-ui__loading record-stage-ui__loading--dim">
+            録画を開始しています…
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onSwitchCamera}
+          disabled={isRecording || cameraStarting || disabled || !cameraReady}
+          className="record-stage-ui__flip"
+          aria-label="カメラ切り替え"
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 7h4l2-3h8l2 3h4v12H4V7z" />
+            <circle cx="12" cy="13" r="3.5" />
+          </svg>
+        </button>
+
+        <div className="record-stage-ui__dock">
+          <RecordShapePicker
+            value={displayMaskShape}
+            onChange={onDisplayMaskShapeChange}
+            disabled={
+              disabled ||
+              isRecording ||
+              cameraStarting ||
+              recordingStarting ||
+              clipsCount > 0
+            }
+          />
+
+          {isRecording && (
+            <span className="record-stage-ui__recording-badge">
+              <span className="record-stage-ui__recording-dot" />
+              録画中
+            </span>
+          )}
+
+          {showLimitMessage && (
+            <p className="record-stage-ui__limit-msg">撮影時間を使い切りました</p>
+          )}
+
+          <button
+            type="button"
+            onClick={onRecordPress}
+            onPointerUp={(e) => {
+              if (e.pointerType === "touch") {
+                e.preventDefault();
+                onRecordPress();
+              }
+            }}
+            disabled={(!canRecord && !isRecording) || cameraStarting || recordingStarting}
+            className={`record-stage-ui__record${isRecording ? " record-stage-ui__record--active" : ""}`}
+            aria-label={isRecording ? "録画を停止" : "録画を開始"}
+          >
+            <span className="record-stage-ui__record-inner" />
+          </button>
+
+          <p className="record-stage-ui__hint">
+            {clipsCount > 0
+              ? `${clipsCount}クリップ · 残り時間はゲージで表示`
+              : "録画ボタンで開始 · 時間切れで自動停止"}
+          </p>
+        </div>
+      </div>
+    </RecordStagePortal>
+  );
+}

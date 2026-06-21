@@ -1636,18 +1636,37 @@ body {
   border-top: 1px solid var(--border);
 }
 
-/* ネイティブ camera-preview: WebView 背面にカメラを表示（くり抜きマスク方式） */
+/* ── Record stage (native camera + scrim hole) ─────────────────────────────
+   Z-index layers (see record-stage-z-index.ts):
+     50  form content (clip strip)
+    100  scrim cutout
+    101  shape rim
+    150  loading overlay
+    200  time gauge
+    210  flip camera
+    300  bottom dock (shape picker + record) — portal on body
+   Native camera: fullscreen behind WebView (toBack). Scrim punches hole only.
+   Tune hole/dock/scale in display-mask.ts → RECORD_LAYOUT + visualScale.
+   ─────────────────────────────────────────────────────────────────────── */
 :root {
-  --record-mask-center-x: 50%;
-  --record-mask-center-y: 36%;
-  --record-mask-center-y-offset: 36svh;
-  --record-mask-hole-diameter: min(64vw, 300px);
-  --record-mask-hole-radius: calc(var(--record-mask-hole-diameter) / 2);
-  --record-mask-rim-radius: 50%;
-  --record-mask-controls-height: 10rem;
-  --record-mask-gauge-top: calc(env(safe-area-inset-top, 0px) + 3.75rem);
+  --z-record-scrim: 100;
+  --z-record-rim: 101;
+  --z-record-loading: 150;
+  --z-record-gauge: 200;
+  --z-record-flip: 210;
+  --z-record-dock: 300;
+  --record-layout-bottom-dock: 156px;
+  --record-layout-top-reserve: 76px;
+  --record-layout-dock-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  --record-layout-flip-top: max(
+    calc(env(safe-area-inset-top, 0px) + 76px),
+    4.75rem
+  );
+  --record-layout-flip-right: max(12px, env(safe-area-inset-right, 0px));
+  --record-gauge-top: calc(env(safe-area-inset-top, 0px) + 3.5rem);
   --video-display-mask-clip: circle(50% at 50% 50%);
   --video-display-mask-radius: 50%;
+  --video-display-mask-visual-scale: 1;
 }
 
 html.record-native-preview-active,
@@ -1678,14 +1697,10 @@ html.record-native-preview-active body {
   padding-top: 0.25rem;
 }
 
-.record-native-preview-active .record-camera-root {
-  position: relative;
-  z-index: 120;
-}
-
 .record-camera-root {
   position: relative;
   width: 100%;
+  min-height: calc(100svh - 4rem);
 }
 
 .native-camera-preview-anchor {
@@ -1698,55 +1713,33 @@ html.record-native-preview-active body {
 }
 
 .record-camera-layout-spacer {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  display: block;
   width: 100%;
+  min-height: calc(
+    100svh - var(--record-layout-bottom-dock) - env(safe-area-inset-top, 0px) -
+      3rem
+  );
   pointer-events: none;
 }
 
-.record-camera-layout-spacer__hole {
-  width: var(--record-mask-hole-diameter);
-  height: var(--record-mask-hole-diameter);
-  margin-top: max(
-    0px,
-    calc(var(--record-mask-center-y-offset) - var(--record-mask-hole-radius))
-  );
-  flex-shrink: 0;
-}
-
+.record-camera-layout-spacer__hole,
 .record-camera-layout-spacer__controls {
-  height: var(--record-mask-controls-height);
-  flex-shrink: 0;
+  display: none;
 }
 
 .record-mask-overlay {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: var(--z-record-scrim);
   pointer-events: none;
 }
 
-.record-mask-overlay__scrim {
+.record-mask-overlay__scrim--pending {
   position: absolute;
   inset: 0;
   background: rgb(var(--bg-base-rgb, 10 10 10) / 0.97);
-  /* WKWebView: circle scrim uses CSS radial-gradient mask (luminance). */
-  -webkit-mask-mode: luminance;
-  mask-mode: luminance;
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
 }
 
-.record-mask-overlay__scrim--pending {
-  opacity: 0.97;
-}
-
-/* Star/square: inline SVG mask (WKWebView ignores data-URL CSS masks). */
 .record-mask-overlay__scrim-svg {
   position: absolute;
   inset: 0;
@@ -1758,6 +1751,11 @@ html.record-native-preview-active body {
   overflow: hidden;
   clip-path: var(--video-display-mask-clip);
   border-radius: var(--video-display-mask-radius);
+}
+
+.bubble-3d__media {
+  transform: scale(var(--video-display-mask-visual-scale, 1));
+  transform-origin: center center;
 }
 
 .clip-strip-thumb {
@@ -1788,10 +1786,6 @@ html.record-native-preview-active body {
 
 .record-mask-overlay__rim {
   position: absolute;
-  left: var(--record-mask-center-x);
-  top: var(--record-mask-center-y);
-  width: var(--record-mask-hole-diameter);
-  height: var(--record-mask-hole-diameter);
   transform: translate(-50%, -50%);
   clip-path: var(--record-mask-rim-clip);
   border-radius: 0;
@@ -1801,40 +1795,40 @@ html.record-native-preview-active body {
     0 0 0 1px rgb(0 0 0 / 0.25);
   opacity: 0.35;
   transition: opacity 0.25s ease;
+  z-index: var(--z-record-rim);
+  pointer-events: none;
 }
 
 .record-mask-overlay__rim--ready {
   opacity: 1;
 }
 
-.record-mask-controls {
-  position: fixed;
-  inset: 0;
-  z-index: 110;
+/* Portal-mounted controls (document.body) */
+.record-stage-ui {
   pointer-events: none;
 }
 
-.record-mask-controls__gauge {
+.record-stage-ui__gauge {
   position: fixed;
-  top: var(--record-mask-gauge-top);
+  top: var(--record-gauge-top);
   left: 0;
   right: 0;
-  z-index: 5;
+  z-index: var(--z-record-gauge);
   pointer-events: none;
 }
 
-.record-mask-controls__gauge > div {
+.record-stage-ui__gauge > div {
   position: relative;
   inset: auto;
 }
 
-.record-mask-controls__loading {
+.record-stage-ui__loading {
   position: fixed;
   left: 50%;
-  top: var(--record-mask-center-y);
+  top: 42%;
   transform: translate(-50%, -50%);
-  z-index: 4;
-  width: var(--record-mask-hole-diameter);
+  z-index: var(--z-record-loading);
+  max-width: min(78vw, 320px);
   padding: 1.25rem;
   border-radius: 1rem;
   background: rgb(0 0 0 / 0.72);
@@ -1842,65 +1836,64 @@ html.record-native-preview-active body {
   pointer-events: none;
 }
 
-.record-mask-controls__loading--dim {
+.record-stage-ui__loading--dim {
   width: auto;
   padding: 0.75rem 1.25rem;
   font-size: 0.875rem;
   color: var(--muted);
 }
 
-.record-mask-controls__flip {
+.record-stage-ui__flip {
   position: fixed;
-  top: calc(var(--record-mask-center-y) - var(--record-mask-hole-radius) + 0.75rem);
-  right: max(1rem, calc(50% - var(--record-mask-hole-radius) + 0.5rem));
-  z-index: 5;
+  top: var(--record-layout-flip-top);
+  right: var(--record-layout-flip-right);
+  z-index: var(--z-record-flip);
   display: flex;
-  height: 2.5rem;
-  width: 2.5rem;
+  height: 2.75rem;
+  width: 2.75rem;
   align-items: center;
   justify-content: center;
   border-radius: 9999px;
-  background: rgb(0 0 0 / 0.5);
+  border: 1px solid rgb(255 255 255 / 0.2);
+  background: rgb(0 0 0 / 0.55);
   color: white;
   backdrop-filter: blur(12px);
   transition: background 0.15s ease;
   pointer-events: auto;
 }
 
-.record-mask-controls__flip:disabled {
+.record-stage-ui__flip:disabled {
   opacity: 0.4;
 }
 
-.record-mask-controls__flip:not(:disabled):hover {
-  background: rgb(0 0 0 / 0.7);
+.record-stage-ui__flip:not(:disabled):hover {
+  background: rgb(0 0 0 / 0.75);
 }
 
-.record-mask-controls__bottom {
+.record-stage-ui__dock {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: max(1rem, env(safe-area-inset-bottom, 0px));
-  z-index: 200;
+  bottom: var(--record-layout-dock-bottom);
+  z-index: var(--z-record-dock);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.65rem;
   padding: 0 1rem 0.25rem;
-  background: none;
   pointer-events: none;
 }
 
-.record-mask-controls__recording-badge {
+.record-stage-ui__recording-badge {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.75rem;
   font-size: 0.75rem;
   font-weight: 500;
   color: rgb(248 113 113);
 }
 
-.record-mask-controls__recording-dot {
+.record-stage-ui__recording-dot {
   height: 0.5rem;
   width: 0.5rem;
   border-radius: 9999px;
@@ -1908,13 +1901,12 @@ html.record-native-preview-active body {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
-.record-mask-controls__limit-msg {
-  margin-bottom: 0.75rem;
+.record-stage-ui__limit-msg {
   font-size: 0.75rem;
   color: rgb(248 113 113);
 }
 
-.record-mask-controls__record {
+.record-stage-ui__record {
   position: relative;
   display: flex;
   height: 4rem;
@@ -1930,21 +1922,21 @@ html.record-native-preview-active body {
   pointer-events: auto;
 }
 
-.record-mask-controls__record:not(:disabled):hover {
+.record-stage-ui__record:not(:disabled):hover {
   background: rgb(255 255 255 / 0.2);
 }
 
-.record-mask-controls__record:disabled {
+.record-stage-ui__record:disabled {
   cursor: not-allowed;
   opacity: 0.4;
 }
 
-.record-mask-controls__record--active {
+.record-stage-ui__record--active {
   border-color: rgb(239 68 68 / 0.8);
   background: rgb(239 68 68 / 0.2);
 }
 
-.record-mask-controls__record-inner {
+.record-stage-ui__record-inner {
   display: block;
   height: 3rem;
   width: 3rem;
@@ -1953,13 +1945,13 @@ html.record-native-preview-active body {
   transition: all 0.15s ease;
 }
 
-.record-mask-controls__record--active .record-mask-controls__record-inner {
+.record-stage-ui__record--active .record-stage-ui__record-inner {
   height: 1.5rem;
   width: 1.5rem;
   border-radius: 0.125rem;
 }
 
-.record-mask-controls__hint {
+.record-stage-ui__hint {
   margin: 0;
   max-width: 18rem;
   font-size: 0.625rem;
@@ -1968,7 +1960,7 @@ html.record-native-preview-active body {
 }
 
 .record-shape-picker {
-  margin-bottom: 0.75rem;
+  margin: 0;
   width: 100%;
   max-width: 18rem;
   pointer-events: auto;
