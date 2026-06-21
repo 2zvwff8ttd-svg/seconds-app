@@ -8,54 +8,6 @@ import {
 } from "@/lib/auth/routes";
 import { getSupabaseAnonKey, getSupabaseUrl } from "./env";
 
-const DIAG_PATHS = new Set(["/diag-auth", "/api/diag-auth"]);
-
-function cookieStats(request: NextRequest) {
-  const all = request.cookies.getAll();
-  const header = request.headers.get("cookie") ?? "";
-  const sb = all.filter((c) => c.name.startsWith("sb-"));
-  const sbBytes = sb.reduce((sum, c) => sum + c.name.length + c.value.length + 2, 0);
-  return {
-    count: all.length,
-    headerBytes: new TextEncoder().encode(header).length,
-    sbCount: sb.length,
-    sbBytes,
-    sbNames: sb.map((c) => c.name).join(","),
-  };
-}
-
-function applyRefreshedCookies(
-  from: NextResponse,
-  to: NextResponse,
-): NextResponse {
-  for (const header of from.headers.getSetCookie()) {
-    to.headers.append("Set-Cookie", header);
-  }
-  return to;
-}
-
-function diagAuthHtml(stats: ReturnType<typeof cookieStats>, userId: string): string {
-  return `<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>diag-auth</title>
-</head>
-<body style="font-family:system-ui,sans-serif;padding:1.5rem;background:#111;color:#eee">
-  <h1>diag-auth OK</h1>
-  <p>ログイン済み・middleware直返し（Next.jsページ/RSCなし）</p>
-  <ul>
-    <li>user: ${userId.slice(0, 8)}…</li>
-    <li>cookies: ${stats.count}</li>
-    <li>Cookie header bytes: ${stats.headerBytes}</li>
-    <li>sb- cookies: ${stats.sbCount} (${stats.sbBytes} bytes)</li>
-    <li>sb names: ${stats.sbNames || "(none)"}</li>
-  </ul>
-</body>
-</html>`;
-}
-
 /**
  * Refreshes the session and enforces auth redirects.
  */
@@ -93,8 +45,6 @@ async function updateSessionInner(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isDiag = DIAG_PATHS.has(pathname);
-  const stats = isDiag ? cookieStats(request) : null;
 
   if (!user && !isPublicRoute(pathname)) {
     const loginUrl = request.nextUrl.clone();
@@ -113,22 +63,7 @@ async function updateSessionInner(request: NextRequest) {
     return NextResponse.redirect(homeUrl);
   }
 
-  /** Minimal HTML from middleware only — isolates cookie/middleware vs Next.js RSC. */
-  if (user && pathname === "/diag-auth" && stats) {
-    const html = diagAuthHtml(stats, user.id);
-    const diagResponse = new NextResponse(html, {
-      status: 200,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-        "X-Diag-Cookie-Bytes": String(stats.headerBytes),
-        "X-Diag-Sb-Cookie-Count": String(stats.sbCount),
-      },
-    });
-    return applyRefreshedCookies(supabaseResponse, diagResponse);
-  }
-
-  if (user && !isDiag) {
+  if (user) {
     let profile: { is_admin?: boolean; is_banned?: boolean } | null = null;
     try {
       const { data, error } = await supabase
@@ -158,11 +93,6 @@ async function updateSessionInner(request: NextRequest) {
       homeUrl.pathname = "/";
       return NextResponse.redirect(homeUrl);
     }
-  }
-
-  if (isDiag && stats) {
-    supabaseResponse.headers.set("X-Diag-Cookie-Bytes", String(stats.headerBytes));
-    supabaseResponse.headers.set("X-Diag-Sb-Cookie-Count", String(stats.sbCount));
   }
 
   return supabaseResponse;

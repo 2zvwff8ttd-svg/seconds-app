@@ -298,8 +298,3 @@ export function getRecordViewportOverlayStyle(
 ): CSSProperties {
   return getRecordViewportMaskCssVars(shape) as CSSProperties;
 }
-
-/** @internal Test-only: reset lazy cache between unit tests. */
-export function resetVideoDisplayMaskCacheForTests(): void {
-  maskDefinitionsCache = null;
-}
