@@ -37,27 +37,35 @@ export type VideoDisplayMaskDefinition = {
 };
 
 /** Shared hole diameter for record overlay layout (must be before lazy mask build). */
-export const RECORD_MASK_VW_RATIO = 0.64;
-export const RECORD_MASK_MAX_DIAMETER_PX = 300;
+export const RECORD_MASK_VW_RATIO = 0.78;
+export const RECORD_MASK_MAX_DIAMETER_PX = 360;
+
+export const RECORD_MASK_CENTER_Y_RATIO = 0.38;
 export const RECORD_VIEWPORT_HOLE_DIAMETER = `min(${RECORD_MASK_VW_RATIO * 100}vw, ${RECORD_MASK_MAX_DIAMETER_PX}px)`;
 
-export const RECORD_MASK_CENTER_Y_RATIO = 0.36;
 export const RECORD_VIEWPORT_HOLE_CENTER_X = "50%";
 export const RECORD_VIEWPORT_HOLE_CENTER_Y = `${RECORD_MASK_CENTER_Y_RATIO * 100}%`;
+/** Spacer margin helper — matches RECORD_MASK_CENTER_Y_RATIO against small viewport height. */
+export const RECORD_VIEWPORT_HOLE_CENTER_Y_OFFSET = `${RECORD_MASK_CENTER_Y_RATIO * 100}svh`;
 
-/**
- * iOS-safe clip paths (no path(evenodd) / inset(round) — Safari 26 WebView).
- * Star: polygon(). Square: inset + border-radius (not inset(round)).
- */
-const STAR_CLIP_PATH =
-  "polygon(50% 5%, 61% 35%, 93% 35%, 68% 57%, 79% 88%, 50% 71%, 21% 88%, 32% 57%, 7% 35%, 39% 35%)";
+/** Star polygon percentages — shared by clip-path, rim, and scrim hole. */
+const STAR_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
+  [50, 5],
+  [61, 35],
+  [93, 35],
+  [68, 57],
+  [79, 88],
+  [50, 71],
+  [21, 88],
+  [32, 57],
+  [7, 35],
+  [39, 35],
+];
+
+const STAR_CLIP_PATH = `polygon(${STAR_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
 
 const SQUARE_CLIP_PATH = "inset(4%)";
 const SQUARE_BORDER_RADIUS = "14%";
-
-/** Star hole in 0–100 box (matches clip-path polygon proportions). */
-export const RECORD_SCRIM_STAR_POINTS =
-  "50,8 56.27,25.66 74.64,25.66 60.05,37.15 66.46,54.85 50,46.05 33.54,54.85 39.95,37.15 25.36,25.66 43.73,25.66";
 
 /** Square hole inset (matches clip-path inset(4%) + border-radius 14%). */
 export const RECORD_SCRIM_SQUARE_INSET_RATIO = 0.04;
@@ -70,16 +78,56 @@ export type RecordHoleRect = {
   height: number;
 };
 
-/** Map normalized star points into viewport px within the measured hole rect. */
+export type ViewportMetrics = {
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+};
+
+export function readRecordViewportMetrics(): ViewportMetrics {
+  if (typeof window === "undefined") {
+    return { width: 0, height: 0, offsetX: 0, offsetY: 0 };
+  }
+
+  const viewport = window.visualViewport;
+  return {
+    width: viewport?.width ?? window.innerWidth,
+    height: viewport?.height ?? window.innerHeight,
+    offsetX: viewport?.offsetLeft ?? 0,
+    offsetY: viewport?.offsetTop ?? 0,
+  };
+}
+
+/**
+ * Viewport-fixed hole box — same geometry as circle radial-gradient scrim and native preview.
+ */
+export function computeRecordHoleRect(
+  viewport: ViewportMetrics = readRecordViewportMetrics(),
+): RecordHoleRect {
+  const diameter = Math.min(
+    viewport.width * RECORD_MASK_VW_RATIO,
+    RECORD_MASK_MAX_DIAMETER_PX,
+  );
+  const radius = diameter / 2;
+  const centerX = viewport.offsetX + viewport.width * 0.5;
+  const centerY = viewport.offsetY + viewport.height * RECORD_MASK_CENTER_Y_RATIO;
+
+  return {
+    x: centerX - radius,
+    y: centerY - radius,
+    width: diameter,
+    height: diameter,
+  };
+}
+
+/** Map star clip-path percentages into viewport px within the hole bounding box. */
 export function buildRecordStarHolePolygonPoints(rect: RecordHoleRect): string {
-  return RECORD_SCRIM_STAR_POINTS.split(" ")
-    .map((pair) => {
-      const [px, py] = pair.split(",").map(Number);
-      const x = rect.x + (px / 100) * rect.width;
-      const y = rect.y + (py / 100) * rect.height;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  return STAR_POLYGON_PERCENT_POINTS.map(([px, py]) => {
+    const x = rect.x + (px / 100) * rect.width;
+    const y = rect.y + (py / 100) * rect.height;
+    return `${x},${y}`;
+  }).join(" ");
 }
 
 /** Rounded-rect hole for square mask (inset + corner radius). */
@@ -206,6 +254,7 @@ export function getRecordViewportMaskCssVars(
     ...getVideoDisplayMaskCssVars(shape),
     "--record-mask-center-x": metrics.centerX,
     "--record-mask-center-y": metrics.centerY,
+    "--record-mask-center-y-offset": RECORD_VIEWPORT_HOLE_CENTER_Y_OFFSET,
     "--record-mask-hole-diameter": metrics.diameterCss,
     "--record-mask-hole-radius": metrics.radiusCss,
     "--record-mask-rim-clip": mask.recordRimClipPath,

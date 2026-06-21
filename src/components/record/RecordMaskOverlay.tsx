@@ -4,8 +4,10 @@ import {
   DEFAULT_VIDEO_DISPLAY_MASK,
   buildRecordSquareHoleRect,
   buildRecordStarHolePolygonPoints,
+  computeRecordHoleRect,
   getRecordViewportMaskCssVars,
   getVideoDisplayMask,
+  readRecordViewportMetrics,
   type RecordHoleRect,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
@@ -16,52 +18,31 @@ import {
   type CSSProperties,
 } from "react";
 
-const HOLE_SPACER_SELECTOR = ".record-camera-layout-spacer__hole";
-
 type RecordMaskOverlayProps = {
   shape?: VideoDisplayMaskShape;
   cameraReady?: boolean;
 };
-
-function readHoleRect(): RecordHoleRect | null {
-  const el = document.querySelector(HOLE_SPACER_SELECTOR);
-  if (!el) return null;
-  const rect = el.getBoundingClientRect();
-  if (rect.width < 2 || rect.height < 2) return null;
-  return {
-    x: rect.left,
-    y: rect.top,
-    width: rect.width,
-    height: rect.height,
-  };
-}
 
 function useRecordHoleRect(): RecordHoleRect | null {
   const [holeRect, setHoleRect] = useState<RecordHoleRect | null>(null);
 
   useEffect(() => {
     const measure = () => {
-      setHoleRect(readHoleRect());
+      setHoleRect(computeRecordHoleRect(readRecordViewportMetrics()));
     };
 
     measure();
 
-    const spacer = document.querySelector(HOLE_SPACER_SELECTOR);
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined" && spacer
-        ? new ResizeObserver(measure)
-        : null;
-    resizeObserver?.observe(spacer as Element);
-
     window.addEventListener("resize", measure);
     window.visualViewport?.addEventListener("resize", measure);
     window.visualViewport?.addEventListener("scroll", measure);
+    window.addEventListener("orientationchange", measure);
 
     return () => {
-      resizeObserver?.disconnect();
       window.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("scroll", measure);
+      window.removeEventListener("orientationchange", measure);
     };
   }, []);
 
@@ -75,33 +56,36 @@ type RecordSvgScrimProps = {
 };
 
 /**
- * WKWebView 26 ignores CSS mask-image on data-URL SVGs; an inline SVG mask
- * with a luminance hole matches the working circle radial-gradient scrim.
+ * WKWebView 26 ignores CSS mask-image on data-URL SVGs; inline SVG luminance masks
+ * use the same viewport hole box as the circle radial-gradient scrim.
  */
 function RecordSvgScrim({ shape, holeRect, maskId }: RecordSvgScrimProps) {
-  const viewportWidth =
-    typeof window !== "undefined" ? window.innerWidth : holeRect.width;
-  const viewportHeight =
-    typeof window !== "undefined" ? window.innerHeight : holeRect.height;
+  const viewport = readRecordViewportMetrics();
+  const viewportWidth = viewport.width;
+  const viewportHeight = viewport.height;
+  const originX = viewport.offsetX;
+  const originY = viewport.offsetY;
 
   return (
     <svg
       className="record-mask-overlay__scrim-svg"
       width={viewportWidth}
       height={viewportHeight}
-      viewBox={`0 0 ${viewportWidth} ${viewportHeight}`}
+      viewBox={`${originX} ${originY} ${viewportWidth} ${viewportHeight}`}
       aria-hidden
     >
       <defs>
         <mask
           id={maskId}
           maskUnits="userSpaceOnUse"
-          x={0}
-          y={0}
+          x={originX}
+          y={originY}
           width={viewportWidth}
           height={viewportHeight}
         >
           <rect
+            x={originX}
+            y={originY}
             width={viewportWidth}
             height={viewportHeight}
             fill="white"
@@ -112,14 +96,13 @@ function RecordSvgScrim({ shape, holeRect, maskId }: RecordSvgScrimProps) {
               fill="black"
             />
           ) : (
-            <rect
-              {...buildRecordSquareHoleRect(holeRect)}
-              fill="black"
-            />
+            <rect {...buildRecordSquareHoleRect(holeRect)} fill="black" />
           )}
         </mask>
       </defs>
       <rect
+        x={originX}
+        y={originY}
         width={viewportWidth}
         height={viewportHeight}
         fill="rgb(10 10 10 / 0.97)"
