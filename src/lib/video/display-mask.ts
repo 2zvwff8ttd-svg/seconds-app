@@ -232,7 +232,7 @@ function buildMaskDefinitions(): Record<
       id: "star",
       label: "星",
       modifier: "star",
-      visualScale: 1.4,
+      visualScale: 1.55,
       clipPath: STAR_CLIP_PATH,
       borderRadius: "0",
       recordRimClipPath: STAR_CLIP_PATH,

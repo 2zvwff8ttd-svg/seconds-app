@@ -107,11 +107,9 @@ export function PostForm() {
 
   const {
     draftReady,
-    draftRestored,
     draftSaveError,
     dismissDraftSaveError,
     notifyPostSuccess,
-    discardDraft,
   } = useVlogDraftSession({
     clips,
     setClips,
@@ -429,27 +427,6 @@ export function PostForm() {
   return (
     <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <div className="post-form-scroll min-h-0 flex-1 px-4 pt-2 pb-4 sm:px-5">
-        {draftRestored && hasContent && !showPostDetails && (
-          <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-violet-400/30 bg-violet-500/10 px-3 py-2.5">
-            <div>
-              <p className="text-xs font-medium text-violet-200">
-                続きから撮影できます
-              </p>
-              <p className="mt-0.5 text-[10px] text-muted">
-                {clips.length}クリップを復元しました。ホームに戻っても保存されます。
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void discardDraft()}
-              disabled={isUploading}
-              className="shrink-0 rounded-lg border border-border px-2 py-1 text-[10px] font-medium text-muted transition hover:text-foreground disabled:opacity-40"
-            >
-              撮り直す
-            </button>
-          </div>
-        )}
-
         {draftSaveError && (
           <div
             role="alert"

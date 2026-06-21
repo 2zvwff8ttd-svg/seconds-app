@@ -1,11 +1,14 @@
 "use client";
 
 import { PostForm } from "@/components/post/PostForm";
-import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "@/components/home/BottomNav";
+import {
+  POST_NAV_COLLAPSED_INSET_PX,
+  PostBottomNavSheet,
+} from "@/components/home/PostBottomNavSheet";
 import { useState } from "react";
 
 export default function PostPage() {
-  const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
+  const [bottomInset, setBottomInset] = useState(POST_NAV_COLLAPSED_INSET_PX);
 
   return (
     <div className="app-page post-page-root flex h-[100dvh] flex-col bg-black">
@@ -17,7 +20,7 @@ export default function PostPage() {
       <div className="flex min-h-0 flex-1 flex-col" style={{ paddingBottom: bottomInset }}>
         <PostForm />
       </div>
-      <BottomNav onInsetChange={setBottomInset} />
+      <PostBottomNavSheet onInsetChange={setBottomInset} />
     </div>
   );
 }
