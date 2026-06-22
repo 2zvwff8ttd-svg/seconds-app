@@ -3,6 +3,7 @@
 import { ChatScreen } from "@/components/messages/ChatScreen";
 import { fetchProfile } from "@/lib/videos/profile-feed";
 import { findDmThreadWithUser } from "@/lib/dm/threads";
+import { isUserBlockedByMe } from "@/lib/blocks/list";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 
@@ -26,6 +27,11 @@ export default function NewMessagePage({ params }: PageProps) {
         const existingId = await findDmThreadWithUser(userId);
         if (existingId) {
           router.replace(`/messages/${existingId}`);
+          return;
+        }
+
+        if (await isUserBlockedByMe(userId)) {
+          setError("このユーザーとはメッセージのやり取りができません");
           return;
         }
 

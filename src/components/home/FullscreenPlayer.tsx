@@ -5,6 +5,7 @@ import { FullscreenVideoMask } from "@/components/home/FullscreenVideoMask";
 import { HomeStarfieldBackground } from "@/components/home/HomeStarfieldBackground";
 import { useFullscreenMaskFlip } from "@/components/home/useFullscreenMaskFlip";
 import { ReportButton } from "@/components/reports/ReportButton";
+import { BlockUserButton } from "@/components/blocks/BlockUserButton";
 import { useBgmPlayback } from "@/components/video/useBgmPlayback";
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
 import {
@@ -31,6 +32,7 @@ type FullscreenPlayerProps = {
   onFlipComplete?: () => void;
   onLikeEngagement?: () => void;
   onCommentEngagement?: () => void;
+  onUserBlocked?: (userId: string) => void;
 };
 
 function nextClipIndex(current: number, total: number): number {
@@ -60,6 +62,7 @@ export function FullscreenPlayer({
   onFlipComplete,
   onLikeEngagement,
   onCommentEngagement,
+  onUserBlocked,
 }: FullscreenPlayerProps) {
   const slotARef = useRef<HTMLVideoElement>(null);
   const slotBRef = useRef<HTMLVideoElement>(null);
@@ -459,7 +462,17 @@ export function FullscreenPlayer({
       </button>
 
       {currentUserId && currentUserId !== video.creatorId && (
-        <div className="fullscreen-player__chrome-layer absolute right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30">
+        <div className="fullscreen-player__chrome-layer absolute right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 flex flex-col items-end gap-2">
+          <BlockUserButton
+            userId={video.creatorId}
+            username={video.creatorName}
+            compact
+            className="rounded-full bg-black/45 px-3 py-2 text-xs font-medium text-white backdrop-blur-md transition hover:bg-black/65 hover:text-red-300"
+            onBlocked={() => {
+              onUserBlocked?.(video.creatorId);
+              requestClose();
+            }}
+          />
           <ReportButton
             targetType="video"
             targetId={video.id}

@@ -1,4 +1,6 @@
 import { detectCountryCode } from "@/lib/country/detect";
+import { fetchBlockedUserIds } from "@/lib/blocks/list";
+import { filterVideosByBlocked } from "@/lib/blocks/filter";
 import {
   BASE_VIDEO_SELECT,
   buildVideoSelect,
@@ -107,6 +109,7 @@ export async function fetchHomeFeed(): Promise<{
     : BASE_VIDEO_SELECT;
 
   const viralVideo = await fetchViralVideo(supabase, countryCode, select, caps);
+  const blockedIds = await fetchBlockedUserIds();
 
   let query = supabase.from("videos").select(select);
   query = applyPublishedFilter(query, caps);
@@ -155,7 +158,10 @@ export async function fetchHomeFeed(): Promise<{
           normalizeVideoRow(row as unknown as Record<string, unknown>),
         ),
     );
-      const retryVideos = viralVideo ? [viralVideo, ...retryOthers] : retryOthers;
+      const retryVideos = filterVideosByBlocked(
+        viralVideo ? [viralVideo, ...retryOthers] : retryOthers,
+        blockedIds,
+      );
       return { videos: retryVideos, countryCode };
     }
     throw new Error(error.message);
@@ -169,7 +175,10 @@ export async function fetchHomeFeed(): Promise<{
       ),
     );
 
-  const videos = viralVideo ? [viralVideo, ...others] : others;
+  const videos = filterVideosByBlocked(
+    viralVideo ? [viralVideo, ...others] : others,
+    blockedIds,
+  );
 
   return { videos, countryCode };
 }

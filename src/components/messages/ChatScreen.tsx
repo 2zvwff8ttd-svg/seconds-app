@@ -12,6 +12,7 @@ import {
   declineDmRequest,
   fetchDmThreadMeta,
 } from "@/lib/dm/threads";
+import { isUserBlockedByMe } from "@/lib/blocks/list";
 import { createClient } from "@/lib/supabase/client";
 import { formatRelativeTime } from "@/lib/utils/format-time";
 import type { DmMessage } from "@/types/dm";
@@ -60,6 +61,9 @@ export function ChatScreen({
   const loadMeta = useCallback(async (id: string) => {
     const meta = await fetchDmThreadMeta(id);
     if (!meta) return;
+    if (await isUserBlockedByMe(meta.otherUserId)) {
+      throw new Error("このユーザーとはメッセージのやり取りができません");
+    }
     setIsRequest(meta.isRequest);
     setStatus(meta.status);
     setIsInitiator(meta.isInitiator);

@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
+import { fetchBlockedUserIds } from "@/lib/blocks/list";
+import { filterDmThreadsByBlocked } from "@/lib/blocks/filter";
 import type { DmThreadStatus, DmThreadSummary } from "@/types/dm";
 
 type ThreadRow = {
@@ -128,13 +130,21 @@ export async function fetchDmThreadsForUser(): Promise<{
     });
   }
 
+  const blockedIds = await fetchBlockedUserIds();
+
   return {
-    inbox: summaries.filter(
-      (t) =>
-        t.status === "active" ||
-        (t.status === "pending" && t.isInitiator),
+    inbox: filterDmThreadsByBlocked(
+      summaries.filter(
+        (t) =>
+          t.status === "active" ||
+          (t.status === "pending" && t.isInitiator),
+      ),
+      blockedIds,
     ),
-    requests: summaries.filter((t) => t.isRequest),
+    requests: filterDmThreadsByBlocked(
+      summaries.filter((t) => t.isRequest),
+      blockedIds,
+    ),
   };
 }
 

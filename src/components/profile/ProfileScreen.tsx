@@ -1,6 +1,10 @@
 "use client";
 
 import { ReportButton } from "@/components/reports/ReportButton";
+import { BlockUserButton } from "@/components/blocks/BlockUserButton";
+import { unblockUser } from "@/lib/blocks/actions";
+import { fetchBlockedUserIds } from "@/lib/blocks/list";
+import { filterVideosByBlocked } from "@/lib/blocks/filter";
 import { ConfirmDeleteVideoDialog } from "@/components/profile/ConfirmDeleteVideoDialog";
 import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import { FollowButton } from "@/components/profile/FollowButton";
@@ -75,6 +79,8 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FeedVideo | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [unblocking, setUnblocking] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,6 +89,10 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
       const current = await fetchCurrentProfile();
       const targetUserId = userIdProp ?? current.userId;
       const own = targetUserId === current.userId;
+
+      const blockedIds = await fetchBlockedUserIds();
+      const blocked = !own && blockedIds.has(targetUserId);
+      setIsBlocked(blocked);
 
       const [p, stats, videos] = await Promise.all([
         own ? Promise.resolve(current) : fetchProfile(targetUserId),
@@ -93,11 +103,11 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
       setProfile(p);
       setFollowStats(stats);
       setIsOwnProfile(own);
-      setUserVideos(videos);
+      setUserVideos(blocked ? [] : videos);
 
       if (own) {
         const liked = await fetchLikedVideos(targetUserId);
-        setLikedVideos(liked);
+        setLikedVideos(filterVideosByBlocked(liked, blockedIds));
         setTab((t) => (t === "likes" ? "likes" : t));
       } else {
         setLikedVideos([]);
@@ -138,6 +148,21 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
     }
   };
 
+  const handleUnblock = async () => {
+    if (!profile) return;
+    setUnblocking(true);
+    setError(null);
+    try {
+      await unblockUser(profile.userId);
+      setIsBlocked(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "解除に失敗しました");
+    } finally {
+      setUnblocking(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-border px-4 py-4 sm:px-5">
@@ -157,7 +182,7 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
                   <p className="mt-1 text-sm text-muted">{profile.bio}</p>
                 )}
                 <p className="mt-1 text-xs text-muted">{profile.country}</p>
-                {followStats && (
+                {followStats && !isBlocked && (
                   <ProfileStats
                     stats={followStats}
                     onFollowersClick={() => setFollowListKind("followers")}
@@ -177,7 +202,7 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
                   Edit Profile
                 </button>
               )}
-              {!isOwnProfile && (
+              {!isOwnProfile && !isBlocked && (
                 <div className="flex flex-col gap-2 sm:items-end">
                   {followStats && (
                     <FollowButton
@@ -192,11 +217,33 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
                   >
                     メッセージ
                   </Link>
+                  <BlockUserButton
+                    userId={profile.userId}
+                    username={profile.username}
+                    onBlocked={() => {
+                      setIsBlocked(true);
+                      setUserVideos([]);
+                      setFollowStats(null);
+                    }}
+                  />
                   <ReportButton
                     targetType="profile"
                     targetId={profile.userId}
                     targetLabel={`ユーザー @${profile.username}`}
                   />
+                </div>
+              )}
+              {!isOwnProfile && isBlocked && (
+                <div className="flex flex-col gap-2 sm:items-end">
+                  <p className="text-xs text-muted">このユーザーをブロックしています</p>
+                  <button
+                    type="button"
+                    onClick={() => void handleUnblock()}
+                    disabled={unblocking}
+                    className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition hover:border-violet-400/40 hover:bg-violet-500/10 disabled:opacity-50"
+                  >
+                    {unblocking ? "解除中…" : "ブロックを解除"}
+                  </button>
                 </div>
               )}
             </div>
@@ -244,6 +291,10 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
 
         {loading ? (
           <p className="text-center text-sm text-muted">読み込み中…</p>
+        ) : isBlocked ? (
+          <p className="text-center text-sm text-muted">
+            このユーザーの投稿は表示されません
+          </p>
         ) : (
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {isOwnProfile && tab === "likes" ? (

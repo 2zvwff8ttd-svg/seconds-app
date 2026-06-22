@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
+import { fetchBlockedUserIds } from "@/lib/blocks/list";
+import { filterCommentsByBlocked } from "@/lib/blocks/filter";
 import type { CommentItem } from "@/types/social";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
@@ -30,9 +32,11 @@ export async function fetchComments(videoId: string): Promise<CommentItem[]> {
     .order("created_at", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) =>
+  const blockedIds = await fetchBlockedUserIds();
+  const comments = (data ?? []).map((row) =>
     mapComment(row as unknown as Record<string, unknown>),
   );
+  return filterCommentsByBlocked(comments, blockedIds);
 }
 
 export async function postComment(

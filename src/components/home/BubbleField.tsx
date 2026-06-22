@@ -209,6 +209,17 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
     applySessionCommentSignal(sessionPrefRef.current, selection.video);
   }, [selection]);
 
+  const handleUserBlocked = useCallback((userId: string) => {
+    const removeBlocked = (videos: FeedVideo[]) =>
+      videos.filter((video) => video.creatorId !== userId);
+
+    setFeedPool((prev) => removeBlocked(prev));
+    feedPoolRef.current = removeBlocked(feedPoolRef.current);
+    setActiveBubbles((prev) => removeBlocked(prev));
+    setSelection(null);
+    setHiddenBubbleId(null);
+  }, []);
+
   const slotCount = Math.min(BUBBLE_SLOT_COUNT, placements.length);
 
   const toBubblePreview = useCallback(
@@ -318,6 +329,7 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
           onClose={handleClose}
           onLikeEngagement={handleLikeEngagement}
           onCommentEngagement={handleCommentEngagement}
+          onUserBlocked={handleUserBlocked}
         />
       )}
     </>
