@@ -3,7 +3,8 @@
 import { REPORT_REASONS } from "@/lib/reports/reasons";
 import { submitReport } from "@/lib/reports/submit";
 import type { ReportReason, ReportTargetType } from "@/types/report";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 type ReportDialogProps = {
   targetType: ReportTargetType;
@@ -25,6 +26,23 @@ export function ReportDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
@@ -45,9 +63,11 @@ export function ReportDialog({
     }
   };
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
-      className="z-fullscreen fixed inset-0 flex items-end justify-center bg-black/70 p-4 sm:items-center"
+      className="z-modal fixed inset-0 flex items-end justify-center bg-black/75 p-4 backdrop-blur-sm sm:items-center"
       role="dialog"
       aria-modal
       aria-labelledby="report-dialog-title"
@@ -135,6 +155,7 @@ export function ReportDialog({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

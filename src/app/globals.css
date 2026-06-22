@@ -23,6 +23,7 @@
   --z-bottom-nav: 100;
   --z-global-upload: 150;
   --z-fullscreen: 200;
+  --z-modal: 500;
   --z-onboarding: 300;
   --z-opening: 350;
 }
@@ -92,6 +93,10 @@ body {
 
 .z-fullscreen {
   z-index: var(--z-fullscreen);
+}
+
+.z-modal {
+  z-index: var(--z-modal);
 }
 
 .z-onboarding {
