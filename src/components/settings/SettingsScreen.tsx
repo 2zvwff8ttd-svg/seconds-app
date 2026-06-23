@@ -1,7 +1,7 @@
 import { AppFooter } from "@/components/layout/AppFooter";
 import { BlockedUsersSection } from "@/components/settings/BlockedUsersSection";
 import { DeleteAccountSection } from "@/components/settings/DeleteAccountSection";
-import { LEGAL_DOCUMENTS } from "@/lib/legal/documents";
+import { LEGAL_DOCUMENTS, SUPPORT_EMAIL } from "@/lib/legal/documents";
 import Link from "next/link";
 
 export function SettingsScreen() {
@@ -36,6 +36,23 @@ export function SettingsScreen() {
               </li>
             ))}
           </ul>
+        </section>
+
+        <section className="mt-8">
+          <h2 className="text-xs font-medium uppercase tracking-wider text-muted">
+            サポート
+          </h2>
+          <div className="mt-3 rounded-2xl border border-border bg-surface-elevated px-4 py-3.5 text-sm">
+            <p className="text-muted">
+              お問い合わせ:{" "}
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                className="font-medium text-foreground underline decoration-border underline-offset-2 transition hover:decoration-foreground"
+              >
+                {SUPPORT_EMAIL}
+              </a>
+            </p>
+          </div>
         </section>
 
         <BlockedUsersSection />

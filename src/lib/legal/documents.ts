@@ -1,3 +1,5 @@
+export const SUPPORT_EMAIL = "support@getseconds.app";
+
 export type LegalDocumentId = "privacy" | "terms" | "guidelines";
 
 export type LegalDocumentMeta = {

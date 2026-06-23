@@ -74,7 +74,7 @@
 本ポリシーに関するお問い合わせは、以下までご連絡ください。
 
 - 運営者：?Seconds Team
-- メールアドレス：k.kai0702@icloud.com
+- メールアドレス：support@getseconds.app
 
 ---
 
