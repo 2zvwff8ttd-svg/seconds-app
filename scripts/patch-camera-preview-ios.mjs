@@ -16,6 +16,96 @@ const pluginRoot = resolve(
 const controllerPath = resolve(pluginRoot, "CameraController.swift");
 const pluginPath = resolve(pluginRoot, "CameraPreviewPlugin.swift");
 
+/** Shared Swift block injected into CameraController extension (quality capture). */
+const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
+    private enum SecondsAppCaptureSettings {
+        static let movieMinAverageBitRate = 6_000_000
+        static let hdShortSideThreshold: Int32 = 1080
+        static let sdShortSideThreshold: Int32 = 720
+    }
+
+    private func formatShortSide(for format: AVCaptureDevice.Format) -> Int32 {
+        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        return min(dimensions.width, dimensions.height)
+    }
+
+    private func formatPixelCount(for format: AVCaptureDevice.Format) -> Int64 {
+        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        return Int64(dimensions.width) * Int64(dimensions.height)
+    }
+
+    private func pickBestCaptureFormat(from formats: [AVCaptureDevice.Format]) -> AVCaptureDevice.Format? {
+        guard !formats.isEmpty else { return nil }
+        let hdFormats = formats.filter {
+            formatShortSide(for: $0) >= SecondsAppCaptureSettings.hdShortSideThreshold
+        }
+        let sdFormats = formats.filter {
+            formatShortSide(for: $0) >= SecondsAppCaptureSettings.sdShortSideThreshold
+        }
+        let pool = hdFormats.isEmpty ? sdFormats : hdFormats
+        if pool.isEmpty {
+            return formats.max { lhs, rhs in
+                formatPixelCount(for: lhs) < formatPixelCount(for: rhs)
+            }
+        }
+        return pool.max { lhs, rhs in
+            let leftPixels = formatPixelCount(for: lhs)
+            let rightPixels = formatPixelCount(for: rhs)
+            if leftPixels != rightPixels {
+                return leftPixels < rightPixels
+            }
+            return lhs.videoFieldOfView < rhs.videoFieldOfView
+        }
+    }
+
+    private func configureMovieFileOutput(_ movieOutput: AVCaptureMovieFileOutput) {
+        guard let connection = movieOutput.connection(with: .video) else { return }
+        let codecs = movieOutput.availableVideoCodecTypes
+        guard !codecs.isEmpty else { return }
+
+        let codec: AVVideoCodecType
+        if codecs.contains(.hevc) {
+            codec = .hevc
+        } else if codecs.contains(.h264) {
+            codec = .h264
+        } else {
+            codec = codecs[0]
+        }
+
+        let compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: NSNumber(value: SecondsAppCaptureSettings.movieMinAverageBitRate),
+            AVVideoExpectedSourceFrameRateKey: NSNumber(value: 30),
+            AVVideoMaxKeyFrameIntervalKey: NSNumber(value: 30),
+        ]
+        let outputSettings: [String: Any] = [
+            AVVideoCodecKey: codec,
+            AVVideoCompressionPropertiesKey: compressionProperties,
+        ]
+        movieOutput.setOutputSettings(outputSettings, for: connection)
+    }
+
+    /// seconds-app: reset zoom and pick highest-resolution format (1080p+, then widest FOV).
+    private func applyNaturalPreviewDeviceSettings(to device: AVCaptureDevice) throws {
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+        device.videoZoomFactor = 1.0
+        if let bestFormat = pickBestCaptureFormat(from: device.formats) {
+            device.activeFormat = bestFormat
+        }
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+    }
+
+    func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
+
+const controllerImportsOld = `import AVFoundation
+import UIKit`;
+
+const controllerImportsNew = `import AVFoundation
+import CoreMedia
+import UIKit`;
+
 const controllerPropertiesOld = `    var zoomFactor: CGFloat = 1.0
 }`;
 
@@ -616,6 +706,12 @@ let controller = await readFile(controllerPath, "utf8");
 
 await patchFile(
   controllerPath,
+  [[controllerImportsOld, controllerImportsNew]],
+  "CameraController.swift (CoreMedia import)",
+);
+
+await patchFile(
+  controllerPath,
   [
     [controllerPropertiesOld, controllerPropertiesNew],
     [configurePhotoOld, configurePhotoNew],
@@ -744,81 +840,7 @@ extension CameraController {
 
 const naturalPreviewHelperNew = `}
 
-extension CameraController {
-    private static let movieMinAverageBitRate = 6_000_000
-
-    private func formatDimensions(_ format: AVCaptureDevice.Format) -> CMVideoDimensions {
-        CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-    }
-
-    private func formatShortSide(_ format: AVCaptureDevice.Format) -> Int32 {
-        let dimensions = formatDimensions(format)
-        return min(dimensions.width, dimensions.height)
-    }
-
-    private func formatPixelCount(_ format: AVCaptureDevice.Format) -> Int64 {
-        let dimensions = formatDimensions(format)
-        return Int64(dimensions.width) * Int64(dimensions.height)
-    }
-
-    private func pickBestCaptureFormat(from formats: [AVCaptureDevice.Format]) -> AVCaptureDevice.Format? {
-        guard !formats.isEmpty else { return nil }
-        let hdFormats = formats.filter { formatShortSide($0) >= 1080 }
-        let sdFormats = formats.filter { formatShortSide($0) >= 720 }
-        let pool = hdFormats.isEmpty ? sdFormats : hdFormats
-        if pool.isEmpty {
-            return formats.max(by: { formatPixelCount($0) < formatPixelCount($1) })
-        }
-        return pool.max(by: { left, right in
-            let leftPixels = formatPixelCount(left)
-            let rightPixels = formatPixelCount(right)
-            if leftPixels != rightPixels {
-                return leftPixels < rightPixels
-            }
-            return left.videoFieldOfView < right.videoFieldOfView
-        })
-    }
-
-    private func configureMovieFileOutput(_ movieOutput: AVCaptureMovieFileOutput) {
-        guard let connection = movieOutput.connection(with: .video) else { return }
-        let codecs = movieOutput.availableVideoCodecTypes(for: connection)
-        guard !codecs.isEmpty else { return }
-
-        let codec: AVVideoCodecType
-        if codecs.contains(.hevc) {
-            codec = .hevc
-        } else if codecs.contains(.h264) {
-            codec = .h264
-        } else {
-            codec = codecs[0]
-        }
-
-        let compressionProperties: [String: Any] = [
-            AVVideoAverageBitRateKey: NSNumber(value: CameraController.movieMinAverageBitRate),
-            AVVideoExpectedSourceFrameRateKey: NSNumber(value: 30),
-            AVVideoMaxKeyFrameIntervalKey: NSNumber(value: 30),
-        ]
-        let outputSettings: [String: Any] = [
-            AVVideoCodecKey: codec,
-            AVVideoCompressionPropertiesKey: compressionProperties,
-        ]
-        movieOutput.setOutputSettings(outputSettings, for: connection)
-    }
-
-    /// seconds-app: reset zoom and pick highest-resolution format (1080p+, then widest FOV).
-    private func applyNaturalPreviewDeviceSettings(to device: AVCaptureDevice) throws {
-        try device.lockForConfiguration()
-        defer { device.unlockForConfiguration() }
-        device.videoZoomFactor = 1.0
-        if let bestFormat = pickBestCaptureFormat(from: device.formats) {
-            device.activeFormat = bestFormat
-        }
-        if device.isFocusModeSupported(.continuousAutoFocus) {
-            device.focusMode = .continuousAutoFocus
-        }
-    }
-
-    func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
+${QUALITY_CAPTURE_EXTENSION}`;
 
 const createCaptureSessionOld = `        func createCaptureSession() {
             self.captureSession = AVCaptureSession()
@@ -1054,7 +1076,15 @@ const naturalPreviewQualityV1Old = `extension CameraController {
 
     func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
 
-const naturalPreviewQualityV2New = `extension CameraController {
+const naturalPreviewQualityV2New = QUALITY_CAPTURE_EXTENSION;
+
+await patchFile(
+  controllerPath,
+  [[naturalPreviewQualityV1Old, naturalPreviewQualityV2New]],
+  "CameraController.swift (quality v1→v2 format scoring)",
+);
+
+const naturalPreviewQualityV2BrokenOld = `extension CameraController {
     private static let movieMinAverageBitRate = 6_000_000
 
     private func formatDimensions(_ format: AVCaptureDevice.Format) -> CMVideoDimensions {
@@ -1130,10 +1160,12 @@ const naturalPreviewQualityV2New = `extension CameraController {
 
     func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
 
+const naturalPreviewQualityV3FixedNew = QUALITY_CAPTURE_EXTENSION;
+
 await patchFile(
   controllerPath,
-  [[naturalPreviewQualityV1Old, naturalPreviewQualityV2New]],
-  "CameraController.swift (quality v1→v2 format scoring)",
+  [[naturalPreviewQualityV2BrokenOld, naturalPreviewQualityV3FixedNew]],
+  "CameraController.swift (quality v2→v3 compile fixes)",
 );
 
 const sessionPresetV1Old = `            self.captureSession?.sessionPreset = .high`;

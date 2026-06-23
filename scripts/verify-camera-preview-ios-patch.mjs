@@ -34,6 +34,11 @@ const forbiddenPatterns = [
     pattern: /\.layerWidthSizable|\.layerHeightSizable/,
     sources: [{ name: "CameraController.swift", content: controller }],
   },
+  {
+    label: "availableVideoCodecTypes(for:) invalid API",
+    pattern: /availableVideoCodecTypes\(for:/,
+    sources: [{ name: "CameraController.swift", content: controller }],
+  },
 ];
 
 const checks = [
@@ -51,6 +56,26 @@ const checks = [
     label: "natural preview device settings helper",
     ok: controller.includes("applyNaturalPreviewDeviceSettings"),
     fail: "applyNaturalPreviewDeviceSettings helper missing",
+  },
+  {
+    label: "CoreMedia import",
+    ok: controller.includes("import CoreMedia"),
+    fail: "import CoreMedia missing in CameraController.swift",
+  },
+  {
+    label: "SecondsAppCaptureSettings enum",
+    ok: controller.includes("enum SecondsAppCaptureSettings"),
+    fail: "SecondsAppCaptureSettings enum missing",
+  },
+  {
+    label: "uses availableVideoCodecTypes property",
+    ok: controller.includes("movieOutput.availableVideoCodecTypes"),
+    fail: "movieOutput.availableVideoCodecTypes missing",
+  },
+  {
+    label: "does not call availableVideoCodecTypes(for:)",
+    ok: !controller.includes("availableVideoCodecTypes(for:"),
+    fail: "availableVideoCodecTypes(for:) still present (invalid on AVCaptureMovieFileOutput)",
   },
   {
     label: "pickBestCaptureFormat helper",
