@@ -5,6 +5,7 @@ import {
   buildRecordCircleHoleAttrs,
   buildRecordSquareHoleRect,
   buildRecordStarHolePolygonPoints,
+  computeRecordClipStripBandRect,
   computeRecordHoleRect,
   getRecordViewportMaskCssVars,
   readRecordViewportMetrics,
@@ -18,6 +19,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom";
 
 /** Sub-pixel expansion so luminance-mask antialiasing does not leave scrim fringing. */
 const HOLE_MASK_BLEED_PX = 1;
@@ -30,13 +32,16 @@ type RecordMaskOverlayProps = {
 function useRecordViewportState(shape: VideoDisplayMaskShape): {
   viewport: ViewportMetrics;
   holeRect: RecordHoleRect | null;
+  clipBand: { top: number; bottom: number } | null;
 } {
   const [state, setState] = useState<{
     viewport: ViewportMetrics;
     holeRect: RecordHoleRect | null;
+    clipBand: { top: number; bottom: number } | null;
   }>({
     viewport: { width: 0, height: 0, offsetX: 0, offsetY: 0 },
     holeRect: null,
+    clipBand: null,
   });
 
   useEffect(() => {
@@ -47,6 +52,10 @@ function useRecordViewportState(shape: VideoDisplayMaskShape): {
         holeRect:
           viewport.width > 0 && viewport.height > 0
             ? computeRecordHoleRect(shape, viewport)
+            : null,
+        clipBand:
+          viewport.width > 0 && viewport.height > 0
+            ? computeRecordClipStripBandRect(viewport, shape)
             : null,
       });
     };
@@ -88,6 +97,7 @@ function buildStarHoleMaskPoints(rect: RecordHoleRect): string {
 type RecordSvgScrimProps = {
   shape: VideoDisplayMaskShape;
   holeRect: RecordHoleRect;
+  clipBand: { top: number; bottom: number } | null;
   maskId: string;
   viewport: ViewportMetrics;
 };
@@ -96,11 +106,16 @@ type RecordSvgScrimProps = {
 function RecordSvgScrim({
   shape,
   holeRect,
+  clipBand,
   maskId,
   viewport,
 }: RecordSvgScrimProps) {
   const { width, height } = viewport;
   const squareHole = buildRecordSquareHoleRect(holeRect);
+  const clipBandHeight =
+    clipBand && clipBand.bottom > clipBand.top
+      ? clipBand.bottom - clipBand.top
+      : 0;
 
   return (
     <svg
@@ -139,6 +154,15 @@ function RecordSvgScrim({
               fill="black"
             />
           )}
+          {clipBandHeight > 0 && (
+            <rect
+              x={0}
+              y={clipBand!.top}
+              width={width}
+              height={clipBandHeight}
+              fill="black"
+            />
+          )}
         </mask>
       </defs>
       <rect
@@ -164,15 +188,20 @@ function holeRectToRimStyle(holeRect: RecordHoleRect): CSSProperties {
 
 /**
  * Fixed viewport scrim with a shape cutout. Native fullscreen camera shows through the hole.
- * Overlay is pinned to visualViewport so scrim holes align on iOS WKWebView / Safari.
+ * Portaled to document.body so z-index stacks with ClipStrip (295) above scrim (100).
  */
 export function RecordMaskOverlay({
   shape = DEFAULT_VIDEO_DISPLAY_MASK,
   cameraReady = false,
 }: RecordMaskOverlayProps) {
   const layoutVars = getRecordViewportMaskCssVars(shape);
-  const { viewport, holeRect } = useRecordViewportState(shape);
+  const { viewport, holeRect, clipBand } = useRecordViewportState(shape);
   const maskId = useId().replace(/:/g, "");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const overlayStyle: CSSProperties = {
     ...(layoutVars as CSSProperties),
@@ -182,7 +211,9 @@ export function RecordMaskOverlay({
     height: viewport.height,
   };
 
-  return (
+  if (!mounted) return null;
+
+  const overlay = (
     <div
       className="record-mask-overlay"
       style={overlayStyle}
@@ -192,6 +223,7 @@ export function RecordMaskOverlay({
         <RecordSvgScrim
           shape={shape}
           holeRect={holeRect}
+          clipBand={clipBand}
           maskId={maskId}
           viewport={viewport}
         />
@@ -206,4 +238,6 @@ export function RecordMaskOverlay({
       )}
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }
