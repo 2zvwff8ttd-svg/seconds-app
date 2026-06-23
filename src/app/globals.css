@@ -1980,17 +1980,38 @@ html.record-native-preview-active body {
   right: 0;
   bottom: var(--record-layout-dock-bottom);
   z-index: var(--z-record-dock);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto var(--record-dock-status-height, 1.25rem) auto;
   align-items: center;
+  justify-items: center;
   gap: 0.65rem;
   padding: 0 1rem 0.25rem;
   pointer-events: none;
 }
 
-.record-stage-ui__recording-badge {
+.record-stage-ui__dock-status {
+  position: relative;
+  width: 100%;
+  height: var(--record-dock-status-height, 1.25rem);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.record-stage-ui__recording-badge,
+.record-stage-ui__limit-msg {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.record-stage-ui__dock-status-item--hidden {
+  visibility: hidden;
+}
+
+.record-stage-ui__recording-badge {
   gap: 0.5rem;
   font-size: 0.75rem;
   font-weight: 500;

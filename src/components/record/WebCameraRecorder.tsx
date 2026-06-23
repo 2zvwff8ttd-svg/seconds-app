@@ -597,19 +597,19 @@ export function WebCameraRecorder({
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex flex-col items-center bg-gradient-to-t from-black/80 to-transparent pb-6 pt-10">
-          {isRecording && (
-            <span className="mb-3 flex items-center gap-2 text-xs font-medium text-red-400">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
-              録画中
-            </span>
-          )}
-
-          {!canRecord &&
-            !isRecording &&
-            assignedSeconds !== null &&
-            usedClipSeconds >= assignedSeconds && (
-            <p className="mb-3 text-xs text-red-400">撮影時間を使い切りました</p>
-          )}
+          <div className="mb-3 flex h-5 w-full items-center justify-center">
+            {isRecording ? (
+              <span className="flex items-center gap-2 text-xs font-medium text-red-400">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+                録画中
+              </span>
+            ) : !canRecord &&
+              !isRecording &&
+              assignedSeconds !== null &&
+              usedClipSeconds >= assignedSeconds ? (
+              <p className="text-xs text-red-400">撮影時間を使い切りました</p>
+            ) : null}
+          </div>
 
           <div className="pointer-events-auto mb-3">
             <RecordShapePicker

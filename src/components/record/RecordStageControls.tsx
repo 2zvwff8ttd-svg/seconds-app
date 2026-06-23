@@ -104,16 +104,19 @@ export function RecordStageControls({
             }
           />
 
-          {isRecording && (
-            <span className="record-stage-ui__recording-badge">
+          <div className="record-stage-ui__dock-status" aria-live="polite">
+            <span
+              className={`record-stage-ui__recording-badge${isRecording ? "" : " record-stage-ui__dock-status-item--hidden"}`}
+            >
               <span className="record-stage-ui__recording-dot" />
               録画中
             </span>
-          )}
-
-          {showLimitMessage && (
-            <p className="record-stage-ui__limit-msg">撮影時間を使い切りました</p>
-          )}
+            <p
+              className={`record-stage-ui__limit-msg${showLimitMessage ? "" : " record-stage-ui__dock-status-item--hidden"}`}
+            >
+              撮影時間を使い切りました
+            </p>
+          </div>
 
           <button
             type="button"
