@@ -1643,12 +1643,13 @@ body {
 
 /* ── Record stage (native camera + scrim hole) ─────────────────────────────
    Z-index layers (see record-stage-z-index.ts):
-     50  form content (clip strip)
+     50  form content (banners)
     100  scrim cutout
     101  shape rim
     150  loading overlay
     200  time gauge
     210  flip camera
+    295  clip strip (hole–dock band, portaled to body)
     300  bottom dock (shape picker + record) — portal on body
    Native camera: fullscreen behind WebView (toBack). Scrim punches hole only.
    Tune hole/dock/scale in display-mask.ts → RECORD_LAYOUT + visualScale.
@@ -1660,7 +1661,7 @@ body {
   --z-record-gauge: 200;
   --z-record-flip: 210;
   --z-record-dock: 300;
-  --record-layout-bottom-dock: 232px;
+  --z-record-clip-dock: 295;
   --record-layout-top-reserve: 76px;
   --record-layout-bottom-nav: 88px;
   --record-layout-dock-bottom: calc(
@@ -1673,10 +1674,10 @@ body {
   --record-layout-flip-right: max(12px, env(safe-area-inset-right, 0px));
   --record-gauge-top: calc(env(safe-area-inset-top, 0px) + 3.5rem);
   --record-layout-dock-height: 9.75rem;
+  --record-layout-bottom-dock: 232px;
   --video-display-mask-clip: circle(50% at 50% 50%);
   --video-display-mask-radius: 50%;
   --video-display-mask-visual-scale: 1;
-  --z-record-clip-dock: 290;
   --z-post-nav-handle: 360;
   --z-post-nav-scrim: 400;
   --z-post-nav-sheet: 410;

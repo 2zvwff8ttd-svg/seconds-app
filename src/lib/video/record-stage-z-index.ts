@@ -15,6 +15,8 @@ export const RECORD_STAGE_Z = {
   gauge: 200,
   /** Front / rear camera flip */
   flip: 210,
+  /** Clip strip between hole and dock (portaled to body during native record) */
+  clipStrip: 295,
   /** Bottom dock: shape picker + record button (always topmost) */
   dock: 300,
 } as const;
