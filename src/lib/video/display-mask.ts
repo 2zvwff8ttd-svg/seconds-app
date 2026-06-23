@@ -79,6 +79,8 @@ export type VideoDisplayMaskDefinition = {
   modifier: VideoDisplayMaskShape;
   /** Perceived-size multiplier (star < circle fill → scale up). */
   visualScale: number;
+  /** Home bubble media scale (defaults to visualScale). */
+  bubbleVisualScale?: number;
   clipPath: string;
   borderRadius: string;
   recordRimClipPath: string;
@@ -232,6 +234,7 @@ function buildMaskDefinitions(): Record<
       label: "星",
       modifier: "star",
       visualScale: 1.55,
+      bubbleVisualScale: 2.05,
       clipPath: STAR_CLIP_PATH,
       borderRadius: "0",
       recordRimClipPath: STAR_CLIP_PATH,
@@ -280,6 +283,19 @@ export function getVideoDisplayMaskCssVars(
     "--video-display-mask-clip": mask.clipPath,
     "--video-display-mask-radius": mask.borderRadius,
     "--video-display-mask-visual-scale": String(mask.visualScale),
+  };
+}
+
+/** Bubble feed — star uses a larger bubbleVisualScale so perceived size matches circle/square. */
+export function getBubbleDisplayMaskCssVars(
+  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+): Record<string, string> {
+  const mask = getVideoDisplayMask(shape);
+  return {
+    ...getVideoDisplayMaskCssVars(shape),
+    "--video-display-mask-visual-scale": String(
+      mask.bubbleVisualScale ?? mask.visualScale,
+    ),
   };
 }
 
