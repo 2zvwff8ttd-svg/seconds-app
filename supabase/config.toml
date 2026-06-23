@@ -13,3 +13,6 @@ major_version = 15
 #   - SQL Editor → supabase/sql/schedule-daily-morning-cron.sql
 [functions.daily-morning]
 verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = true

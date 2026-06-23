@@ -1,5 +1,6 @@
 import { AppFooter } from "@/components/layout/AppFooter";
 import { BlockedUsersSection } from "@/components/settings/BlockedUsersSection";
+import { DeleteAccountSection } from "@/components/settings/DeleteAccountSection";
 import { LEGAL_DOCUMENTS } from "@/lib/legal/documents";
 import Link from "next/link";
 
@@ -38,6 +39,8 @@ export function SettingsScreen() {
         </section>
 
         <BlockedUsersSection />
+
+        <DeleteAccountSection />
 
         <section className="mt-8">
           <h2 className="text-xs font-medium uppercase tracking-wider text-muted">
