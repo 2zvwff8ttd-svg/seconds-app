@@ -201,14 +201,40 @@ export function buildRecordSquareHoleRect(rect: RecordHoleRect): RecordHoleRect 
 /** Scroll reserve so clip strip clears the fixed hole + dock. */
 export function computeRecordStageMinHeight(
   viewport: ViewportMetrics = readRecordViewportMetrics(),
+  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): number {
-  const hole = computeRecordHoleRect(DEFAULT_VIDEO_DISPLAY_MASK, viewport);
+  const hole = computeRecordHoleRect(shape, viewport);
   return (
     viewport.offsetY +
     hole.y +
     hole.height +
     RECORD_LAYOUT.bottomDockReservePx
   );
+}
+
+const RECORD_CLIP_STRIP_GAP_PX = 8;
+
+/** Pin clip strip below the scrim hole during native record (viewport coordinates). */
+export function applyRecordLayoutCssVars(
+  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+): void {
+  if (typeof document === "undefined") return;
+
+  const viewport = readRecordViewportMetrics();
+  const hole = computeRecordHoleRect(shape, viewport);
+  const holeBottom = viewport.offsetY + hole.y + hole.height;
+  const clipStripTop = holeBottom + RECORD_CLIP_STRIP_GAP_PX;
+
+  const root = document.documentElement;
+  root.style.setProperty("--record-hole-bottom-px", `${holeBottom}px`);
+  root.style.setProperty("--record-clip-strip-top", `${clipStripTop}px`);
+}
+
+export function clearRecordLayoutCssVars(): void {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  root.style.removeProperty("--record-hole-bottom-px");
+  root.style.removeProperty("--record-clip-strip-top");
 }
 
 function buildMaskDefinitions(): Record<

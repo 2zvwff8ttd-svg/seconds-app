@@ -1699,25 +1699,38 @@ html.post-nav-expanded {
   );
 }
 
-html.post-nav-collapsed.record-native-preview-active .clip-strip {
+html.record-native-preview-active .clip-strip {
   position: fixed;
   left: 0;
   right: 0;
   z-index: var(--z-record-clip-dock);
-  bottom: calc(
-    var(--record-layout-dock-bottom) + var(--record-layout-dock-height)
-  );
+  top: var(--record-clip-strip-top, 58vh);
+  bottom: auto;
   margin: 0;
-  padding: 0.5rem 1rem 0.35rem;
-  border-radius: 1rem 1rem 0 0;
+  padding: 0.35rem 1rem 0.25rem;
+  max-height: calc(
+    100svh - var(--record-clip-strip-top, 58vh) -
+      var(--record-layout-dock-bottom) - var(--record-layout-dock-height) -
+      env(safe-area-inset-bottom, 0px) - 4px
+  );
+  overflow: hidden;
+  border-radius: 0.75rem 0.75rem 0 0;
   background: rgb(var(--bg-base-rgb, 10 10 10) / 0.94);
   backdrop-filter: blur(10px);
   pointer-events: auto;
 }
 
-html.post-nav-collapsed.record-native-preview-active .clip-strip h3,
-html.post-nav-collapsed.record-native-preview-active .clip-strip > p {
-  margin-bottom: 0.35rem;
+html.record-native-preview-active .clip-strip h3,
+html.record-native-preview-active .clip-strip > p {
+  margin-bottom: 0.25rem;
+}
+
+html.record-native-preview-active .clip-strip h3 {
+  font-size: 0.65rem;
+}
+
+html.record-native-preview-active .clip-strip > p {
+  display: none;
 }
 
 /* ── Post page collapsible bottom nav (sheet) ───────────────────────────── */
@@ -1826,9 +1839,10 @@ html.record-native-preview-active body {
   background-color: rgb(var(--bg-base-rgb, 10 10 10));
 }
 
-.record-native-preview-active .clip-strip {
-  border-radius: 1rem 1rem 0 0;
-  padding-top: 0.25rem;
+.record-native-preview-active .post-form-scroll > .clip-strip {
+  position: fixed;
+  z-index: var(--z-record-clip-dock);
+  background-color: rgb(var(--bg-base-rgb, 10 10 10) / 0.94);
 }
 
 .record-camera-root {

@@ -8,6 +8,10 @@ import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
 import { getMinRecordingMs } from "@/lib/recording/recorder-utils";
 import {
+  applyRecordLayoutCssVars,
+  clearRecordLayoutCssVars,
+} from "@/lib/video/display-mask";
+import {
   flipNativeCamera,
   NATIVE_CAMERA_PREVIEW_ID,
   startNativePreview,
@@ -114,8 +118,27 @@ export function NativeCameraRecorder({
     return () => {
       document.documentElement.classList.remove("record-native-preview-active");
       document.body.classList.remove("record-native-preview-active");
+      clearRecordLayoutCssVars();
     };
   }, []);
+
+  useEffect(() => {
+    const syncLayout = () => applyRecordLayoutCssVars(displayMaskShape);
+
+    syncLayout();
+    window.addEventListener("resize", syncLayout);
+    window.visualViewport?.addEventListener("resize", syncLayout);
+    window.visualViewport?.addEventListener("scroll", syncLayout);
+    window.addEventListener("orientationchange", syncLayout);
+
+    return () => {
+      window.removeEventListener("resize", syncLayout);
+      window.visualViewport?.removeEventListener("resize", syncLayout);
+      window.visualViewport?.removeEventListener("scroll", syncLayout);
+      window.removeEventListener("orientationchange", syncLayout);
+      clearRecordLayoutCssVars();
+    };
+  }, [displayMaskShape]);
 
   useEffect(() => {
     fetchTodayAssignedSeconds()
