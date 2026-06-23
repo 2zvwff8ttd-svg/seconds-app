@@ -452,12 +452,6 @@ export function PostForm() {
               displayMaskShape={displayMaskShape}
               onDisplayMaskShapeChange={setDisplayMaskShape}
             />
-            <ClipStrip
-              clips={clips}
-              onRemove={handleRemoveClip}
-              disabled={isUploading}
-              displayMaskShape={displayMaskShape}
-            />
             {hasContent && !isUploading && assignedSeconds !== null && (
               <p className="mt-4 text-center text-xs leading-relaxed text-muted">
                 割り当て時間（{assignedSeconds}秒）をすべて使うと、

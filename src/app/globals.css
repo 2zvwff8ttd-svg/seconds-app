@@ -1649,7 +1649,6 @@ body {
     150  loading overlay
     200  time gauge
     210  flip camera
-    295  clip strip (hole–dock band, portaled to body)
     300  bottom dock (shape picker + record) — portal on body
    Native camera: fullscreen behind WebView (toBack). Scrim punches hole only.
    Tune hole/dock/scale in display-mask.ts → RECORD_LAYOUT + visualScale.
@@ -1661,7 +1660,6 @@ body {
   --z-record-gauge: 200;
   --z-record-flip: 210;
   --z-record-dock: 300;
-  --z-record-clip-dock: 295;
   --record-layout-top-reserve: 76px;
   --record-layout-bottom-nav: 88px;
   --record-layout-dock-bottom: calc(
@@ -1698,40 +1696,6 @@ html.post-nav-expanded {
   --record-layout-dock-bottom: calc(
     88px + 12px + env(safe-area-inset-bottom, 0px)
   );
-}
-
-html.record-native-preview-active .clip-strip {
-  position: fixed;
-  left: 0;
-  right: 0;
-  z-index: var(--z-record-clip-dock);
-  top: var(--record-clip-strip-top, 58vh);
-  bottom: auto;
-  margin: 0;
-  padding: 0.35rem 1rem 0.25rem;
-  max-height: calc(
-    100svh - var(--record-clip-strip-top, 58vh) -
-      var(--record-layout-dock-bottom) - var(--record-layout-dock-height) -
-      env(safe-area-inset-bottom, 0px) - 4px
-  );
-  overflow: hidden;
-  border-radius: 0.75rem 0.75rem 0 0;
-  background: rgb(var(--bg-base-rgb, 10 10 10) / 0.94);
-  backdrop-filter: blur(10px);
-  pointer-events: auto;
-}
-
-html.record-native-preview-active .clip-strip h3,
-html.record-native-preview-active .clip-strip > p {
-  margin-bottom: 0.25rem;
-}
-
-html.record-native-preview-active .clip-strip h3 {
-  font-size: 0.65rem;
-}
-
-html.record-native-preview-active .clip-strip > p {
-  display: none;
 }
 
 /* ── Post page collapsible bottom nav (sheet) ───────────────────────────── */
@@ -1838,12 +1802,6 @@ html.record-native-preview-active body {
   position: relative;
   z-index: 50;
   background-color: rgb(var(--bg-base-rgb, 10 10 10));
-}
-
-.record-native-preview-active .post-form-scroll > .clip-strip {
-  position: fixed;
-  z-index: var(--z-record-clip-dock);
-  background-color: rgb(var(--bg-base-rgb, 10 10 10) / 0.94);
 }
 
 .record-camera-root {

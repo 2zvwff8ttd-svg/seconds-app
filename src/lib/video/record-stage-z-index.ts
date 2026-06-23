@@ -1,9 +1,9 @@
 /**
  * Record stage stacking order (low → high).
- * Controls portal to document.body uses these values — never fight ClipStrip z-index.
+ * Controls portaled to document.body use these values.
  */
 export const RECORD_STAGE_Z = {
-  /** Document-flow form content (clip strip, banners) */
+  /** Document-flow form content (banners) */
   formContent: 50,
   /** Dark scrim with shape cutout */
   scrim: 100,
@@ -15,8 +15,6 @@ export const RECORD_STAGE_Z = {
   gauge: 200,
   /** Front / rear camera flip */
   flip: 210,
-  /** Clip strip between hole and dock (portaled to body during native record) */
-  clipStrip: 295,
   /** Bottom dock: shape picker + record button (always topmost) */
   dock: 300,
 } as const;
