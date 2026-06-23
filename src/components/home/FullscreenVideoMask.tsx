@@ -33,6 +33,7 @@ export function FullscreenVideoMask({
           ...style,
           "--fs-mask-clip": mask.clipPath,
           "--fs-mask-radius": mask.borderRadius,
+          "--fs-mask-visual-scale": String(mask.visualScale),
         } as CSSProperties
       }
     >

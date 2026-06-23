@@ -563,7 +563,8 @@ body {
   display: block;
   width: 100%;
   height: 100%;
-  border-radius: 50%;
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   filter:
     drop-shadow(0 10px 22px rgba(6, 4, 22, 0.42))
     drop-shadow(0 18px 36px rgba(18, 10, 42, 0.22));
@@ -589,7 +590,8 @@ body {
   position: relative;
   display: block;
   isolation: isolate;
-  border-radius: 50%;
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
 }
 
 .bubble-3d {
@@ -623,7 +625,8 @@ body {
   content: "";
   position: absolute;
   inset: -3px;
-  border-radius: 50%;
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   pointer-events: none;
   z-index: 12;
   border: 2.5px solid rgba(251, 191, 36, 0.92);
@@ -670,7 +673,7 @@ body {
   height: 100%;
   aspect-ratio: 1 / 1;
   overflow: hidden;
-  border-radius: 50%;
+  border-radius: var(--video-display-mask-radius, 50%);
   clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   background: #050508;
 }
@@ -680,8 +683,10 @@ body {
   inset: 0;
   z-index: 0;
   overflow: hidden;
-  border-radius: 50%;
+  border-radius: var(--video-display-mask-radius, 50%);
   clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
+  transform: scale(var(--video-display-mask-visual-scale, 1));
+  transform-origin: center center;
 }
 
 .bubble-3d__body::after {
@@ -689,7 +694,8 @@ body {
   position: absolute;
   inset: 0;
   z-index: 5;
-  border-radius: 50%;
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   pointer-events: none;
   box-shadow:
     inset 0 0 14px 3px rgba(20, 14, 42, 0.22),
@@ -711,9 +717,15 @@ body {
   filter: blur(0.6px);
 }
 
+.bubble-3d--star .bubble-3d__body::after,
+.bubble-3d--square .bubble-3d__body::after {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
 .bubble-3d__thumb {
   opacity: 0.94;
-  border-radius: 50%;
+  border-radius: var(--video-display-mask-radius, 50%);
   clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
 }
 
@@ -730,7 +742,8 @@ body {
   inset: 0;
   z-index: 6;
   overflow: hidden;
-  border-radius: 50%;
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   pointer-events: none;
 }
 
@@ -1355,6 +1368,12 @@ body {
   background: transparent;
 }
 
+.fullscreen-video-mask__media > video,
+.fullscreen-video-mask__media > img {
+  transform: scale(var(--fs-mask-visual-scale, 1));
+  transform-origin: center center;
+}
+
 .fullscreen-player--entering .fullscreen-video-mask__ground-blend,
 .fullscreen-player--entering .fullscreen-video-mask__feather {
   opacity: 0.2;
@@ -1464,6 +1483,29 @@ body {
   box-shadow:
     0 0 0 1px rgba(72, 55, 120, 0.18),
     0 0 32px rgba(55, 35, 95, 0.28),
+    inset 0 0 0 1px rgba(120, 100, 170, 0.08);
+}
+
+.fullscreen-video-mask--star .fullscreen-video-mask__edge,
+.fullscreen-video-mask--square .fullscreen-video-mask__edge,
+.fullscreen-video-mask--star .fullscreen-video-mask__rim,
+.fullscreen-video-mask--square .fullscreen-video-mask__rim {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.fullscreen-video-mask--star .fullscreen-video-mask__feather,
+.fullscreen-video-mask--square .fullscreen-video-mask__feather {
+  clip-path: var(--fs-mask-clip);
+  border-radius: var(--fs-mask-radius);
+  background: none;
+  opacity: 0.35;
+}
+
+.fullscreen-video-mask--star .fullscreen-video-mask__frame,
+.fullscreen-video-mask--square .fullscreen-video-mask__frame {
+  box-shadow:
+    0 0 0 1px rgba(72, 55, 120, 0.18),
     inset 0 0 0 1px rgba(120, 100, 170, 0.08);
 }
 
@@ -1857,11 +1899,6 @@ html.record-native-preview-active body {
   overflow: hidden;
   clip-path: var(--video-display-mask-clip);
   border-radius: var(--video-display-mask-radius);
-}
-
-.bubble-3d__media {
-  transform: scale(var(--video-display-mask-visual-scale, 1));
-  transform-origin: center center;
 }
 
 .clip-strip-thumb {

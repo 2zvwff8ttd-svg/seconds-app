@@ -1,7 +1,10 @@
 "use client";
 
-import { getVideoDisplayMaskCssVars } from "@/lib/video/display-mask";
-import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
+import {
+  getVideoDisplayMask,
+  getVideoDisplayMaskCssVars,
+  type VideoDisplayMaskShape,
+} from "@/lib/video/display-mask";
 import { useCallback, useMemo, useRef, type CSSProperties } from "react";
 import type { BubbleGlassStyle } from "@/lib/bubble-glass-vars";
 import type { BubbleOriginRect } from "@/lib/home/bubble-origin-rect";
@@ -80,6 +83,10 @@ export function VideoBubble({
       }),
     [video.thumbnailUrl, video.clipThumbnailUrls, video.videoUrl],
   );
+  const mask = useMemo(
+    () => getVideoDisplayMask(video.displayMaskShape),
+    [video.displayMaskShape],
+  );
   const maskStyle = useMemo(
     () => getVideoDisplayMaskCssVars(video.displayMaskShape) as CSSProperties,
     [video.displayMaskShape],
@@ -117,15 +124,16 @@ export function VideoBubble({
           className={`bubble-3d-shadow${
             isViral ? " bubble-3d-shadow--viral bubble-3d-shadow--viral-hero" : ""
           }`}
+          style={maskStyle}
         >
           <span
-            className={`bubble-3d${
+            className={`bubble-3d bubble-3d--${mask.modifier}${
               isViral ? " bubble-3d--viral bubble-3d--viral-hero" : ""
             }`}
             style={glassStyle}
           >
-            <span className="bubble-3d__body" style={maskStyle}>
-              <span className="bubble-3d__media" style={maskStyle}>
+            <span className="bubble-3d__body">
+              <span className="bubble-3d__media">
                 {displayUrls.length > 1 ? (
                   <BubbleThumbnailSlideshow urls={displayUrls} />
                 ) : displayUrls.length === 1 ? (
