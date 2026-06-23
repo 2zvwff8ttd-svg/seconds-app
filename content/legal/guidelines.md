@@ -66,5 +66,5 @@
 
 本ガイドラインに関するお問い合わせは、以下までご連絡ください。
 
-- 運営者：?Seconds Team
+- 運営者：?Seconds 運営
 - メールアドレス：support@getseconds.app
