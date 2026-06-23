@@ -53,9 +53,31 @@ const checks = [
     fail: "applyNaturalPreviewDeviceSettings helper missing",
   },
   {
-    label: "session preset high",
-    ok: controller.includes("sessionPreset = .high"),
-    fail: "captureSession.sessionPreset = .high missing",
+    label: "pickBestCaptureFormat helper",
+    ok: controller.includes("pickBestCaptureFormat(from:"),
+    fail: "pickBestCaptureFormat helper missing",
+  },
+  {
+    label: "configureMovieFileOutput helper",
+    ok: controller.includes("func configureMovieFileOutput(_ movieOutput: AVCaptureMovieFileOutput)"),
+    fail: "configureMovieFileOutput helper missing",
+  },
+  {
+    label: "movie minimum average bitrate",
+    ok: controller.includes("AVVideoAverageBitRateKey"),
+    fail: "AVVideoAverageBitRateKey missing in movie output settings",
+  },
+  {
+    label: "session preset hd1920x1080",
+    ok: controller.includes("sessionPreset = .hd1920x1080"),
+    fail: "captureSession.sessionPreset = .hd1920x1080 missing",
+  },
+  {
+    label: "does not pick widest FOV only",
+    ok: !controller.includes(
+      "device.formats.max(by: { $0.videoFieldOfView < $1.videoFieldOfView })",
+    ),
+    fail: "widest-FOV-only format selection still present",
   },
   {
     label: "builtInWideAngleCamera default device",
