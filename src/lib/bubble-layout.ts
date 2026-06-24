@@ -26,8 +26,19 @@ function shuffle<T>(items: T[], random: () => number): T[] {
   return copy;
 }
 
-export function getCollisionRadius(radius: number): number {
-  return radius;
+export function getCollisionRadius(radius: number, frameScale = 1): number {
+  // Star frames need a little extra separation beyond the square bbox.
+  const padding = frameScale > 1 ? radius * 0.06 : 0;
+  return radius + padding;
+}
+
+function pairCollisionGap(
+  baseGap: number,
+  frameScaleA: number,
+  frameScaleB: number,
+): number {
+  const boost = Math.max(frameScaleA, frameScaleB, 1);
+  return baseGap + Math.max(0, boost - 1) * 14;
 }
 
 function circlesOverlap(
@@ -224,7 +235,10 @@ function sampleInCell(
     cellH * offsetRatio - collisionRadius * 0.25,
   );
   const ox = (random() - 0.5) * 2 * maxOffsetX;
-  const oy = (random() - 0.5) * 2 * maxOffsetY;
+  let oy = (random() - 0.5) * 2 * maxOffsetY;
+  if (cell.row === rows - 1) {
+    oy -= cellH * 0.1;
+  }
 
   const x = clamp(
     cx + ox,
@@ -250,14 +264,16 @@ function cellCenterPosition(
   height: number,
   inset: number,
 ): BubblePlacement {
-  const { cx, cy } = getCellMetrics(cell, cols, rows, width, height, inset);
+  const { cx, cy, cellH } = getCellMetrics(cell, cols, rows, width, height, inset);
+  const targetY =
+    cell.row === rows - 1 ? cy - cellH * 0.08 : cy;
   const x = clamp(
     cx,
     collisionRadius + inset,
     width - collisionRadius - inset,
   );
   const y = clamp(
-    cy,
+    targetY,
     collisionRadius + inset,
     height - collisionRadius - inset,
   );
@@ -273,17 +289,19 @@ export function getBubbleRadii(
   height: number,
   count: number,
   viralFirst = true,
+  maxFrameScale = 1,
 ): number[] {
   const minDim = Math.min(width, height);
   const isCompact = width <= 430;
   const { edge: inset } = getLayoutInsets(width);
   const { cols, rows } = getGridShape(count, width, height);
+  const frameDivisor = Math.max(1, maxFrameScale);
 
   const usableW = width - inset * 2;
   const usableH = height - inset * 2;
   const cellMin = Math.min(usableW / cols, usableH / rows);
-  const maxBaseRadius = cellMin * 0.41;
-  const maxViralRadius = cellMin * 0.48;
+  const maxBaseRadius = (cellMin * 0.41) / frameDivisor;
+  const maxViralRadius = (cellMin * 0.48) / frameDivisor;
 
   const baseRadius = Math.min(
     minDim * (isCompact ? 0.19 : 0.15),
@@ -324,7 +342,17 @@ export function computeBubbleLayout(
 
   const viralFirst = options?.viralFirst ?? true;
   const frameScales = options?.frameScales;
-  const baseRadii = getBubbleRadii(width, height, count, viralFirst);
+  const maxFrameScale = Math.max(
+    1,
+    ...(frameScales?.slice(0, count) ?? [1]),
+  );
+  const baseRadii = getBubbleRadii(
+    width,
+    height,
+    count,
+    viralFirst,
+    maxFrameScale,
+  );
   const { edge: inset, gap } = getLayoutInsets(width);
   const { cols, rows } = getGridShape(count, width, height);
 
@@ -339,13 +367,18 @@ export function computeBubbleLayout(
     random,
   );
 
-  const placed: BubblePlacement[] = [];
+  const placed: Array<BubblePlacement | null> = new Array(count).fill(null);
+  const placeOrder = Array.from({ length: count }, (_, i) => i).sort(
+    (a, b) =>
+      baseRadii[b]! * (frameScales?.[b] ?? 1) -
+      baseRadii[a]! * (frameScales?.[a] ?? 1),
+  );
   const maxAttemptsPerBubble = 120;
 
-  for (let i = 0; i < count; i++) {
+  for (const i of placeOrder) {
     const frameScale = frameScales?.[i] ?? 1;
     const radius = Math.round(baseRadii[i]! * frameScale);
-    const collisionRadius = getCollisionRadius(radius);
+    const collisionRadius = getCollisionRadius(radius, frameScale);
     const cell = cellAssignments[i];
     let position: BubblePlacement | null = null;
 
@@ -367,17 +400,19 @@ export function computeBubbleLayout(
         continue;
       }
 
-      const overlaps = placed.some((p) =>
-        circlesOverlap(
+      const overlaps = Object.entries(placed).some(([idx, p]) => {
+        if (!p) return false;
+        const otherScale = frameScales?.[Number(idx)] ?? 1;
+        return circlesOverlap(
           x,
           y,
           collisionRadius,
           p.x,
           p.y,
-          getCollisionRadius(p.radius),
-          gap,
-        ),
-      );
+          getCollisionRadius(p.radius, otherScale),
+          pairCollisionGap(gap, frameScale, otherScale),
+        );
+      });
       if (overlaps) continue;
 
       position = { x, y, radius };
@@ -397,24 +432,26 @@ export function computeBubbleLayout(
       );
 
       if (
-        placed.some((p) =>
-          circlesOverlap(
+        Object.entries(placed).some(([idx, p]) => {
+          if (!p) return false;
+          const otherScale = frameScales?.[Number(idx)] ?? 1;
+          return circlesOverlap(
             position!.x,
             position!.y,
             collisionRadius,
             p.x,
             p.y,
-            getCollisionRadius(p.radius),
-            gap * 0.5,
-          ),
-        )
+            getCollisionRadius(p.radius, otherScale),
+            pairCollisionGap(gap * 0.5, frameScale, otherScale),
+          );
+        })
       ) {
         const nudges = [
           { dx: gap, dy: 0 },
           { dx: -gap, dy: 0 },
-          { dx: 0, dy: gap },
           { dx: 0, dy: -gap },
-          { dx: gap, dy: gap },
+          { dx: 0, dy: gap },
+          { dx: gap, dy: -gap },
           { dx: -gap, dy: -gap },
         ];
         for (const nudge of nudges) {
@@ -429,17 +466,19 @@ export function computeBubbleLayout(
             height - collisionRadius - inset,
           );
           const candidate = { x, y, radius };
-          const overlaps = placed.some((p) =>
-            circlesOverlap(
+          const overlaps = Object.entries(placed).some(([idx, p]) => {
+            if (!p) return false;
+            const otherScale = frameScales?.[Number(idx)] ?? 1;
+            return circlesOverlap(
               x,
               y,
               collisionRadius,
               p.x,
               p.y,
-              getCollisionRadius(p.radius),
-              gap * 0.5,
-            ),
-          );
+              getCollisionRadius(p.radius, otherScale),
+              pairCollisionGap(gap * 0.5, frameScale, otherScale),
+            );
+          });
           if (!overlaps) {
             position = candidate;
             break;
@@ -448,10 +487,10 @@ export function computeBubbleLayout(
       }
     }
 
-    placed.push(position);
+    placed[i] = position;
   }
 
-  return placed;
+  return placed as BubblePlacement[];
 }
 
 /** Float distance scales slightly with viewport for larger bubbles. */
