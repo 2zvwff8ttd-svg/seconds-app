@@ -38,7 +38,7 @@ function pairCollisionGap(
   frameScaleB: number,
 ): number {
   const boost = Math.max(frameScaleA, frameScaleB, 1);
-  return baseGap + Math.max(0, boost - 1) * 14;
+  return baseGap + Math.max(0, boost - 1) * 18;
 }
 
 function circlesOverlap(
@@ -289,19 +289,17 @@ export function getBubbleRadii(
   height: number,
   count: number,
   viralFirst = true,
-  maxFrameScale = 1,
 ): number[] {
   const minDim = Math.min(width, height);
   const isCompact = width <= 430;
   const { edge: inset } = getLayoutInsets(width);
   const { cols, rows } = getGridShape(count, width, height);
-  const frameDivisor = Math.max(1, maxFrameScale);
 
   const usableW = width - inset * 2;
   const usableH = height - inset * 2;
   const cellMin = Math.min(usableW / cols, usableH / rows);
-  const maxBaseRadius = (cellMin * 0.41) / frameDivisor;
-  const maxViralRadius = (cellMin * 0.48) / frameDivisor;
+  const maxBaseRadius = cellMin * 0.41;
+  const maxViralRadius = cellMin * 0.48;
 
   const baseRadius = Math.min(
     minDim * (isCompact ? 0.19 : 0.15),
@@ -342,17 +340,7 @@ export function computeBubbleLayout(
 
   const viralFirst = options?.viralFirst ?? true;
   const frameScales = options?.frameScales;
-  const maxFrameScale = Math.max(
-    1,
-    ...(frameScales?.slice(0, count) ?? [1]),
-  );
-  const baseRadii = getBubbleRadii(
-    width,
-    height,
-    count,
-    viralFirst,
-    maxFrameScale,
-  );
+  const baseRadii = getBubbleRadii(width, height, count, viralFirst);
   const { edge: inset, gap } = getLayoutInsets(width);
   const { cols, rows } = getGridShape(count, width, height);
 
