@@ -696,45 +696,10 @@ body {
   clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   pointer-events: none;
   box-shadow:
-    inset 0 0 14px 3px rgba(20, 14, 42, 0.22),
-    inset 0 0 0 1px rgba(90, 70, 140, 0.12);
-  -webkit-mask-image: radial-gradient(
-    circle at 50% 50%,
-    transparent 0%,
-    transparent 72%,
-    black 92%,
-    black 100%
-  );
-  mask-image: radial-gradient(
-    circle at 50% 50%,
-    transparent 0%,
-    transparent 72%,
-    black 92%,
-    black 100%
-  );
-  filter: blur(0.6px);
-}
-
-.bubble-3d--star .bubble-3d__body::after,
-.bubble-3d--square .bubble-3d__body::after {
-  -webkit-mask-image: none;
-  mask-image: none;
-}
-
-.bubble-3d--square .bubble-3d__body::after,
-.bubble-3d--square .bubble-glass__rim,
-.bubble-3d--square .bubble-glass__edge-soft,
-.bubble-3d--square .bubble-glass__iris-conic,
-.bubble-3d--square .bubble-glass__iris-edge {
-  display: none;
-}
-
-.bubble-3d--square .bubble-glass--thumb {
-  display: none;
-}
-
-.bubble-3d--square .bubble-3d__body {
-  box-shadow: inset 0 0 0 1px rgb(90 70 140 / 0.16);
+    inset 0 0 16px 4px rgba(20, 14, 42, 0.24),
+    inset 0 0 0 1px rgba(90, 70, 140, 0.14),
+    inset 0 0 28px 10px rgba(100, 80, 150, 0.1);
+  filter: blur(0.5px);
 }
 
 .bubble-3d__thumb {
@@ -930,23 +895,12 @@ body {
 .bubble-glass__edge-soft {
   position: absolute;
   inset: -2px;
-  border-radius: 50%;
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   pointer-events: none;
-  box-shadow: 0 0 calc(10px * var(--bubble-edge-glow, 0.22)) 2px rgba(70, 50, 120, 0.28);
-  -webkit-mask-image: radial-gradient(
-    circle at 50% 50%,
-    transparent 0%,
-    transparent 66%,
-    black 86%,
-    black 100%
-  );
-  mask-image: radial-gradient(
-    circle at 50% 50%,
-    transparent 0%,
-    transparent 66%,
-    black 86%,
-    black 100%
-  );
+  box-shadow:
+    0 0 calc(12px * var(--bubble-edge-glow, 0.22)) 2px rgba(70, 50, 120, 0.32),
+    inset 0 0 14px 2px rgba(100, 80, 150, 0.08);
   filter: blur(1.2px);
   opacity: calc(0.5 + var(--bubble-edge-glow, 0.22));
 }
@@ -954,14 +908,9 @@ body {
 .bubble-glass__rim {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 50% 50%,
-    transparent 0%,
-    transparent 58%,
-    rgba(90, 70, 140, 0.08) 82%,
-    rgba(120, 95, 170, 0.16) 100%
-  );
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
+  background: transparent;
   box-shadow:
     inset 0 0 0 1px rgba(100, 80, 150, 0.14),
     inset 0 1px 10px rgba(160, 140, 210, 0.06),
@@ -1004,24 +953,10 @@ body {
     inset 0 -8px 20px rgba(0, 0, 0, 0.5);
 }
 
-/* 大シャボン玉：中央サムネはクリア、光・屈折は縁リングのみ */
+/* 大シャボン玉：縁のガラス層のみ（clip-path で形に追従、円形マスクは使わない） */
 .bubble-glass--thumb {
-  -webkit-mask-image: radial-gradient(
-    circle at 50% 50%,
-    transparent 0%,
-    transparent 44%,
-    rgba(0, 0, 0, 0.35) 54%,
-    black 70%,
-    black 100%
-  );
-  mask-image: radial-gradient(
-    circle at 50% 50%,
-    transparent 0%,
-    transparent 44%,
-    rgba(0, 0, 0, 0.35) 54%,
-    black 70%,
-    black 100%
-  );
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .bubble-3d .bubble-glass--thumb .bubble-glass__atmosphere {
@@ -1097,30 +1032,20 @@ body {
 
 .bubble-3d .bubble-glass--thumb .bubble-glass__edge-soft {
   inset: -3px;
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   filter: blur(1.5px);
 }
 
 .bubble-3d .bubble-glass--thumb .bubble-glass__rim {
-  background: radial-gradient(
-    circle at 50% 50%,
-    transparent 0%,
-    transparent 52%,
-    rgba(80, 65, 130, 0.1) 84%,
-    rgba(110, 90, 160, 0.18) 100%
-  );
+  background: transparent;
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
   box-shadow:
     inset 0 0 0 1.5px rgba(255, 255, 255, 0.42),
     inset 0 0 0 2.5px rgba(140, 120, 200, 0.18),
     inset 0 -10px 18px rgba(15, 10, 35, 0.32),
     0 0 12px rgba(120, 90, 180, 0.12);
-}
-
-.bubble-3d--square .bubble-glass--thumb,
-.bubble-3d--square .bubble-glass--thumb .bubble-glass__rim,
-.bubble-3d--square .bubble-glass--thumb .bubble-glass__edge-soft,
-.bubble-3d--square .bubble-glass--thumb .bubble-glass__sphere,
-.bubble-3d--square .bubble-glass--thumb .bubble-glass__atmosphere {
-  display: none;
 }
 
 .bubble-3d--viral-hero .bubble-glass--thumb .bubble-glass__highlight {

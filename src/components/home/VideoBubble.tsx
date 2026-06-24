@@ -130,7 +130,7 @@ export function VideoBubble({
             className={`bubble-3d bubble-3d--${mask.modifier}${
               isViral ? " bubble-3d--viral bubble-3d--viral-hero" : ""
             }`}
-            style={glassStyle}
+            style={{ ...glassStyle, ...maskStyle }}
           >
             <span className="bubble-3d__body">
               <span className="bubble-3d__media">
