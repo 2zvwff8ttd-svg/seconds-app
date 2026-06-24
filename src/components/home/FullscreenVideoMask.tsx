@@ -3,6 +3,7 @@
 import {
   DEFAULT_VIDEO_DISPLAY_MASK,
   getVideoDisplayMask,
+  getVideoDisplayMaskCssVars,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
 import type { CSSProperties, ReactNode } from "react";
@@ -24,15 +25,15 @@ export function FullscreenVideoMask({
   style,
 }: FullscreenVideoMaskProps) {
   const mask = getVideoDisplayMask(shape);
+  const maskStyle = getVideoDisplayMaskCssVars(shape);
 
   return (
     <div
-      className={`fullscreen-video-mask fullscreen-video-mask--${mask.modifier}${className ? ` ${className}` : ""}`}
+      className={`fullscreen-video-mask${className ? ` ${className}` : ""}`}
       style={
         {
+          ...maskStyle,
           ...style,
-          "--fs-mask-clip": mask.clipPath,
-          "--fs-mask-radius": mask.borderRadius,
           "--fs-mask-visual-scale": String(mask.visualScale),
         } as CSSProperties
       }
@@ -42,9 +43,10 @@ export function FullscreenVideoMask({
       <div className="fullscreen-video-mask__frame">
         <div className="fullscreen-video-mask__media">
           {children}
-          <div className="fullscreen-video-mask__edge" aria-hidden />
-          <div className="fullscreen-video-mask__rim" aria-hidden />
-          <div className="fullscreen-video-mask__feather" aria-hidden />
+          <div
+            className="display-mask-edge fullscreen-video-mask__edge"
+            aria-hidden
+          />
         </div>
       </div>
     </div>

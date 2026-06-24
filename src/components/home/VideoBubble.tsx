@@ -6,7 +6,6 @@ import {
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
 import { useCallback, useMemo, useRef, type CSSProperties } from "react";
-import type { BubbleGlassStyle } from "@/lib/bubble-glass-vars";
 import type { BubbleOriginRect } from "@/lib/home/bubble-origin-rect";
 import { getBubbleOriginRect } from "@/lib/home/bubble-origin-rect";
 import type { BubblePlacement } from "@/lib/bubble-layout";
@@ -30,7 +29,6 @@ type VideoBubbleProps = {
   video: BubbleVideoPreview;
   placement: BubblePlacement;
   floatStyle: React.CSSProperties;
-  glassStyle: BubbleGlassStyle;
   isHidden?: boolean;
   spawnAnimate?: boolean;
   /** Stagger index for bubble-float--spawn delay (--spawn-index) */
@@ -39,32 +37,10 @@ type VideoBubbleProps = {
   zIndex: number;
 };
 
-/** 球体シェード・屈折・大気感・ハイライト（縁寄り） */
-function BubbleGlassLayers({ edgeOnly = false }: { edgeOnly?: boolean }) {
-  return (
-    <span
-      className={`bubble-glass${edgeOnly ? " bubble-glass--thumb" : ""}`}
-      aria-hidden
-    >
-      <span className="bubble-glass__atmosphere" />
-      <span className="bubble-glass__sphere" />
-      <span className="bubble-glass__refraction-bottom" />
-      <span className="bubble-glass__shadow" />
-      <span className="bubble-glass__iris-conic" />
-      <span className="bubble-glass__iris-edge" />
-      <span className="bubble-glass__highlight" />
-      <span className="bubble-glass__highlight-spec" />
-      <span className="bubble-glass__edge-soft" />
-      <span className="bubble-glass__rim" />
-    </span>
-  );
-}
-
 export function VideoBubble({
   video,
   placement,
   floatStyle,
-  glassStyle,
   isHidden = false,
   spawnAnimate = false,
   spawnIndex = 0,
@@ -130,7 +106,7 @@ export function VideoBubble({
             className={`bubble-3d bubble-3d--${mask.modifier}${
               isViral ? " bubble-3d--viral bubble-3d--viral-hero" : ""
             }`}
-            style={{ ...glassStyle, ...maskStyle }}
+            style={maskStyle}
           >
             <span className="bubble-3d__body">
               <span className="bubble-3d__media">
@@ -152,7 +128,7 @@ export function VideoBubble({
                   </span>
                 )}
               </span>
-              <BubbleGlassLayers edgeOnly />
+              <span className="display-mask-edge bubble-display-edge" aria-hidden />
             </span>
           </span>
         </span>

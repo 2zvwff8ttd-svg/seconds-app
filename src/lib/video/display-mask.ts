@@ -73,6 +73,39 @@ const SQUARE_BORDER_RADIUS = "14%";
 export const RECORD_SCRIM_SQUARE_INSET_RATIO = 0.04;
 export const RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO = 0.14;
 
+/**
+ * Shape-agnostic inset edge tokens — home bubbles, fullscreen, previews.
+ * Applied via clip-path + inset box-shadow (no circular gradients).
+ */
+export const DISPLAY_MASK_EDGE = {
+  lineColor: "rgba(90, 70, 140, 0.14)",
+  lineWidth: "1px",
+  glowInnerColor: "rgba(20, 14, 42, 0.24)",
+  glowInnerBlur: "16px",
+  glowInnerSpread: "4px",
+  glowSoftColor: "rgba(100, 80, 150, 0.1)",
+  glowSoftBlur: "28px",
+  glowSoftSpread: "10px",
+  filterBlur: "0.5px",
+} as const;
+
+export type DisplayMaskEdgeTokens = typeof DISPLAY_MASK_EDGE;
+
+export function getDisplayMaskEdgeCssVars(): Record<string, string> {
+  const edge = DISPLAY_MASK_EDGE;
+  return {
+    "--display-mask-edge-line": edge.lineColor,
+    "--display-mask-edge-line-width": edge.lineWidth,
+    "--display-mask-edge-glow-inner": edge.glowInnerColor,
+    "--display-mask-edge-glow-inner-blur": edge.glowInnerBlur,
+    "--display-mask-edge-glow-inner-spread": edge.glowInnerSpread,
+    "--display-mask-edge-glow-soft": edge.glowSoftColor,
+    "--display-mask-edge-glow-soft-blur": edge.glowSoftBlur,
+    "--display-mask-edge-glow-soft-spread": edge.glowSoftSpread,
+    "--display-mask-edge-filter-blur": edge.filterBlur,
+  };
+}
+
 export type VideoDisplayMaskDefinition = {
   id: VideoDisplayMaskShape;
   label: string;
@@ -280,6 +313,7 @@ export function getVideoDisplayMaskCssVars(
 ): Record<string, string> {
   const mask = getVideoDisplayMask(shape);
   return {
+    ...getDisplayMaskEdgeCssVars(),
     "--video-display-mask-clip": mask.clipPath,
     "--video-display-mask-radius": mask.borderRadius,
     "--video-display-mask-visual-scale": String(mask.visualScale),
