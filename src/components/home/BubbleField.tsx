@@ -11,6 +11,7 @@ import {
   getFloatPresets,
   type BubblePlacement,
 } from "@/lib/bubble-layout";
+import { getBubbleFrameScale } from "@/lib/video/display-mask";
 import {
   emptyRecommendationContext,
   fetchUserRecommendationContext,
@@ -144,10 +145,14 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
     if (size.width === 0 || size.height === 0 || count === 0) {
       return [];
     }
+    const frameScales = displayVideos
+      .slice(0, count)
+      .map((video) => getBubbleFrameScale(video.displayMaskShape));
     return computeBubbleLayout(size.width, size.height, count, {
       viralFirst: true,
+      frameScales,
     });
-  }, [size.width, size.height, displayVideos.length]);
+  }, [size.width, size.height, displayVideos]);
 
   const floatPresets = useMemo(
     () => getFloatPresets(Math.min(size.width, size.height) || 375),

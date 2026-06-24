@@ -685,8 +685,6 @@ body {
   overflow: hidden;
   border-radius: var(--video-display-mask-radius, 50%);
   clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
-  transform: scale(var(--video-display-mask-visual-scale, 1));
-  transform-origin: center center;
 }
 
 .bubble-3d__body::after {

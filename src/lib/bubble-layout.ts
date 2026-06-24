@@ -318,12 +318,13 @@ export function computeBubbleLayout(
   width: number,
   height: number,
   count: number,
-  options?: { viralFirst?: boolean },
+  options?: { viralFirst?: boolean; frameScales?: number[] },
 ): BubblePlacement[] {
   if (width <= 0 || height <= 0 || count <= 0) return [];
 
   const viralFirst = options?.viralFirst ?? true;
-  const radii = getBubbleRadii(width, height, count, viralFirst);
+  const frameScales = options?.frameScales;
+  const baseRadii = getBubbleRadii(width, height, count, viralFirst);
   const { edge: inset, gap } = getLayoutInsets(width);
   const { cols, rows } = getGridShape(count, width, height);
 
@@ -342,7 +343,8 @@ export function computeBubbleLayout(
   const maxAttemptsPerBubble = 120;
 
   for (let i = 0; i < count; i++) {
-    const radius = radii[i];
+    const frameScale = frameScales?.[i] ?? 1;
+    const radius = Math.round(baseRadii[i]! * frameScale);
     const collisionRadius = getCollisionRadius(radius);
     const cell = cellAssignments[i];
     let position: BubblePlacement | null = null;
