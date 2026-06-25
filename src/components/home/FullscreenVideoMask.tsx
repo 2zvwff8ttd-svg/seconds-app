@@ -44,7 +44,7 @@ export function FullscreenVideoMask({
         <div className="fullscreen-video-mask__media">
           {children}
           <div
-            className="display-mask-edge fullscreen-video-mask__edge"
+            className="display-mask-feather fullscreen-video-mask__feather"
             aria-hidden
           />
         </div>

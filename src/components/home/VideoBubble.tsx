@@ -128,7 +128,7 @@ export function VideoBubble({
                   </span>
                 )}
               </span>
-              <span className="display-mask-edge bubble-display-edge" aria-hidden />
+              <span className="display-mask-feather bubble-display-feather" aria-hidden />
             </span>
           </span>
         </span>

@@ -74,35 +74,41 @@ export const RECORD_SCRIM_SQUARE_INSET_RATIO = 0.04;
 export const RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO = 0.14;
 
 /**
- * Shape-agnostic inset edge tokens — home bubbles, fullscreen, previews.
- * Applied via clip-path + inset box-shadow (no circular gradients).
+ * Shape-agnostic feather tokens — soft outer dissolve into background.
+ * Applied via clip-path feather layer + zero-offset drop-shadow bloom.
  */
-export const DISPLAY_MASK_EDGE = {
-  lineColor: "rgba(90, 70, 140, 0.14)",
-  lineWidth: "1px",
-  glowInnerColor: "rgba(20, 14, 42, 0.24)",
-  glowInnerBlur: "16px",
-  glowInnerSpread: "4px",
-  glowSoftColor: "rgba(100, 80, 150, 0.1)",
-  glowSoftBlur: "28px",
-  glowSoftSpread: "10px",
-  filterBlur: "0.5px",
+export const DISPLAY_MASK_FEATHER = {
+  tint: "rgba(30, 18, 55, 0.18)",
+  blur: "6px",
+  opacity: "0.55",
+  insetExpand: "-4%",
+  blendMode: "multiply",
+  thumbOpacity: "0.94",
+  bloom1Blur: "6px",
+  bloom1Color: "rgba(100, 80, 150, 0.22)",
+  bloom2Blur: "14px",
+  bloom2Color: "rgba(55, 35, 95, 0.14)",
+  bloom3Blur: "24px",
+  bloom3Color: "rgba(30, 18, 55, 0.08)",
 } as const;
 
-export type DisplayMaskEdgeTokens = typeof DISPLAY_MASK_EDGE;
+export type DisplayMaskFeatherTokens = typeof DISPLAY_MASK_FEATHER;
 
-export function getDisplayMaskEdgeCssVars(): Record<string, string> {
-  const edge = DISPLAY_MASK_EDGE;
+export function getDisplayMaskFeatherCssVars(): Record<string, string> {
+  const feather = DISPLAY_MASK_FEATHER;
+  const bloomFilter = [
+    `drop-shadow(0 0 ${feather.bloom1Blur} ${feather.bloom1Color})`,
+    `drop-shadow(0 0 ${feather.bloom2Blur} ${feather.bloom2Color})`,
+    `drop-shadow(0 0 ${feather.bloom3Blur} ${feather.bloom3Color})`,
+  ].join(" ");
   return {
-    "--display-mask-edge-line": edge.lineColor,
-    "--display-mask-edge-line-width": edge.lineWidth,
-    "--display-mask-edge-glow-inner": edge.glowInnerColor,
-    "--display-mask-edge-glow-inner-blur": edge.glowInnerBlur,
-    "--display-mask-edge-glow-inner-spread": edge.glowInnerSpread,
-    "--display-mask-edge-glow-soft": edge.glowSoftColor,
-    "--display-mask-edge-glow-soft-blur": edge.glowSoftBlur,
-    "--display-mask-edge-glow-soft-spread": edge.glowSoftSpread,
-    "--display-mask-edge-filter-blur": edge.filterBlur,
+    "--display-mask-feather-tint": feather.tint,
+    "--display-mask-feather-blur": feather.blur,
+    "--display-mask-feather-opacity": feather.opacity,
+    "--display-mask-feather-inset-expand": feather.insetExpand,
+    "--display-mask-feather-blend-mode": feather.blendMode,
+    "--display-mask-feather-thumb-opacity": feather.thumbOpacity,
+    "--display-mask-feather-bloom-filter": bloomFilter,
   };
 }
 
@@ -313,7 +319,7 @@ export function getVideoDisplayMaskCssVars(
 ): Record<string, string> {
   const mask = getVideoDisplayMask(shape);
   return {
-    ...getDisplayMaskEdgeCssVars(),
+    ...getDisplayMaskFeatherCssVars(),
     "--video-display-mask-clip": mask.clipPath,
     "--video-display-mask-radius": mask.borderRadius,
     "--video-display-mask-visual-scale": String(mask.visualScale),
