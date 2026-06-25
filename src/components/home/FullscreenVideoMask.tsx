@@ -47,6 +47,10 @@ export function FullscreenVideoMask({
             className="display-mask-feather fullscreen-video-mask__feather"
             aria-hidden
           />
+          <div
+            className="display-mask-membrane fullscreen-video-mask__membrane"
+            aria-hidden
+          />
         </div>
       </div>
     </div>

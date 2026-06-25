@@ -74,8 +74,9 @@ export const RECORD_SCRIM_SQUARE_INSET_RATIO = 0.04;
 export const RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO = 0.14;
 
 /**
- * Shape-agnostic feather tokens — soft outer dissolve into background.
- * Applied via clip-path feather layer + zero-offset drop-shadow bloom.
+ * Shape-agnostic feather + membrane tokens.
+ * Feather/bloom: outer dissolve into background.
+ * Membrane: thin clip-path-following ring (inset strokes + soft band).
  */
 export const DISPLAY_MASK_FEATHER = {
   tint: "rgba(30, 18, 55, 0.18)",
@@ -90,6 +91,19 @@ export const DISPLAY_MASK_FEATHER = {
   bloom2Color: "rgba(55, 35, 95, 0.14)",
   bloom3Blur: "24px",
   bloom3Color: "rgba(30, 18, 55, 0.08)",
+  membraneLine1Color: "rgba(255, 255, 255, 0.42)",
+  membraneLine1Width: "1.5px",
+  membraneLine2Color: "rgba(140, 120, 200, 0.18)",
+  membraneLine2Width: "2.5px",
+  membraneBandColor: "rgba(100, 80, 150, 0.12)",
+  membraneBandBlur: "12px",
+  membraneBandSpread: "4px",
+  membraneFilterBlur: "1.5px",
+  membraneBottomShadeColor: "rgba(15, 10, 35, 0.32)",
+  membraneBottomShadeOffsetY: "10px",
+  membraneBottomShadeBlur: "18px",
+  membraneOuterGlowColor: "rgba(120, 90, 180, 0.12)",
+  membraneOuterGlowBlur: "12px",
 } as const;
 
 export type DisplayMaskFeatherTokens = typeof DISPLAY_MASK_FEATHER;
@@ -109,6 +123,19 @@ export function getDisplayMaskFeatherCssVars(): Record<string, string> {
     "--display-mask-feather-blend-mode": feather.blendMode,
     "--display-mask-feather-thumb-opacity": feather.thumbOpacity,
     "--display-mask-feather-bloom-filter": bloomFilter,
+    "--display-mask-membrane-line-1-color": feather.membraneLine1Color,
+    "--display-mask-membrane-line-1-width": feather.membraneLine1Width,
+    "--display-mask-membrane-line-2-color": feather.membraneLine2Color,
+    "--display-mask-membrane-line-2-width": feather.membraneLine2Width,
+    "--display-mask-membrane-band-color": feather.membraneBandColor,
+    "--display-mask-membrane-band-blur": feather.membraneBandBlur,
+    "--display-mask-membrane-band-spread": feather.membraneBandSpread,
+    "--display-mask-membrane-filter-blur": feather.membraneFilterBlur,
+    "--display-mask-membrane-bottom-shade-color": feather.membraneBottomShadeColor,
+    "--display-mask-membrane-bottom-shade-offset-y": feather.membraneBottomShadeOffsetY,
+    "--display-mask-membrane-bottom-shade-blur": feather.membraneBottomShadeBlur,
+    "--display-mask-membrane-outer-glow-color": feather.membraneOuterGlowColor,
+    "--display-mask-membrane-outer-glow-blur": feather.membraneOuterGlowBlur,
   };
 }
 
