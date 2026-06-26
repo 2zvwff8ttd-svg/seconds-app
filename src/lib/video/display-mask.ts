@@ -74,51 +74,24 @@ const STAR_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
 
 const STAR_CLIP_PATH = `polygon(${STAR_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
 
-/** Sample a parametric heart curve into percentage polygon points (scales with element). */
-function buildHeartPercentPoints(
-  segments = 64,
-  paddingPercent = 5,
-): ReadonlyArray<readonly [number, number]> {
-  const samples: [number, number][] = [];
-  for (let i = 0; i < segments; i++) {
-    const t = (i / segments) * Math.PI * 2;
-    const x = 16 * Math.sin(t) ** 3;
-    const y = -(
-      13 * Math.cos(t) -
-      5 * Math.cos(2 * t) -
-      2 * Math.cos(3 * t) -
-      Math.cos(4 * t)
-    );
-    samples.push([x, y]);
-  }
-
-  const xs = samples.map(([x]) => x);
-  const ys = samples.map(([, y]) => y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const span = Math.max(maxX - minX, maxY - minY);
-  const pad = paddingPercent;
-  const usable = 100 - pad * 2;
-
-  return samples.map(([x, y]) => {
-    const px = pad + ((x - minX) / span) * usable;
-    const py = pad + ((y - minY) / span) * usable;
-    return [Math.round(px * 100) / 100, Math.round(py * 100) / 100] as const;
-  });
-}
-
-const HEART_POLYGON_PERCENT_POINTS = buildHeartPercentPoints(64);
-
-const HEART_CLIP_PATH = `polygon(${HEART_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
+/** SVG <clipPath> id — defs live in DisplayMaskClipDefs (objectBoundingBox, scales with element). */
+export const DISPLAY_MASK_HEART_CLIP_ID = "seconds-display-mask-heart";
 
 /**
- * Smooth bezier heart for SVG record-hole mask (0–100 design space).
- * CSS clip-path uses the dense polygon above; scrim uses this path for curves.
+ * Emoji-style heart (❤️): two round upper lobes, top cleft, bottom tip.
+ * 0–100 design space — shared by record scrim SVG and picker icon.
  */
-export const HEART_RECORD_PATH_D =
-  "M 50 25 C 50 25 25 10 25 38 C 25 55 50 70 50 88 C 50 70 75 55 75 38 C 75 10 50 25 50 25 Z";
+export const HEART_MASK_PATH_D =
+  "M 50 92 C 50 92 8 60 8 34 C 8 14 24 4 50 22 C 76 4 92 14 92 34 C 92 60 50 92 50 92 Z";
+
+/** Same heart normalized to objectBoundingBox (0–1) for responsive clip-path. */
+export const HEART_MASK_PATH_OBJECT_BOUNDING_BOX_D =
+  "M 0.5 0.92 C 0.5 0.92 0.08 0.60 0.08 0.34 C 0.08 0.14 0.24 0.04 0.5 0.22 C 0.76 0.04 0.92 0.14 0.92 0.34 C 0.92 0.60 0.5 0.92 0.5 0.92 Z";
+
+const HEART_CLIP_PATH = `url(#${DISPLAY_MASK_HEART_CLIP_ID})`;
+
+/** @deprecated Use HEART_MASK_PATH_D */
+export const HEART_RECORD_PATH_D = HEART_MASK_PATH_D;
 
 /** Diamond (rhombus) — four corners inset slightly from the square viewport. */
 const DIAMOND_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
@@ -296,11 +269,7 @@ export function buildRecordStarHolePolygonPoints(rect: RecordHoleRect): string {
   return buildRecordPolygonHolePoints(rect, STAR_POLYGON_PERCENT_POINTS);
 }
 
-export function buildRecordHeartHolePolygonPoints(rect: RecordHoleRect): string {
-  return buildRecordPolygonHolePoints(rect, HEART_POLYGON_PERCENT_POINTS);
-}
-
-/** Sub-pixel expansion so luminance-mask antialiasing does not leave scrim fringing. */
+/** Sub-pixel expansion for record scrim luminance-mask antialiasing. */
 const HOLE_MASK_BLEED_PX = 1;
 
 export function buildRecordHeartHolePathProps(rect: RecordHoleRect): {
@@ -313,7 +282,7 @@ export function buildRecordHeartHolePathProps(rect: RecordHoleRect): {
   const scaleX = (rect.width / 100) * bleedScale;
   const scaleY = (rect.height / 100) * bleedScale;
   return {
-    d: HEART_RECORD_PATH_D,
+    d: HEART_MASK_PATH_D,
     transform: `translate(${cx} ${cy}) scale(${scaleX} ${scaleY}) translate(-50 -50)`,
   };
 }
@@ -424,8 +393,7 @@ function buildMaskDefinitions(): Record<
       clipPath: HEART_CLIP_PATH,
       borderRadius: "0",
       recordRimClipPath: HEART_CLIP_PATH,
-      pickerIconPath:
-        "M 50 25 C 50 25 25 10 25 38 C 25 55 50 70 50 88 C 50 70 75 55 75 38 C 75 10 50 25 50 25 Z",
+      pickerIconPath: HEART_MASK_PATH_D,
     },
     diamond: {
       id: "diamond",
