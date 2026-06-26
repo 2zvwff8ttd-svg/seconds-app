@@ -1,7 +1,12 @@
 import type { CSSProperties } from "react";
 
-/** Phase 1 shapes; extend in Phase 2 (heart, diamond, clover). */
-export type VideoDisplayMaskShape = "circle" | "star" | "square";
+/** Display mask shapes — add definitions in buildMaskDefinitions(). */
+export type VideoDisplayMaskShape =
+  | "circle"
+  | "star"
+  | "square"
+  | "heart"
+  | "diamond";
 
 export const DEFAULT_VIDEO_DISPLAY_MASK: VideoDisplayMaskShape = "circle";
 
@@ -9,14 +14,16 @@ export const MASK_SHAPE_ORDER: VideoDisplayMaskShape[] = [
   "circle",
   "star",
   "square",
+  "heart",
+  "diamond",
 ];
 
-const PHASE1_SHAPES = new Set<string>(MASK_SHAPE_ORDER);
+const VALID_MASK_SHAPES = new Set<string>(MASK_SHAPE_ORDER);
 
 export function isVideoDisplayMaskShape(
   value: unknown,
 ): value is VideoDisplayMaskShape {
-  return typeof value === "string" && PHASE1_SHAPES.has(value);
+  return typeof value === "string" && VALID_MASK_SHAPES.has(value);
 }
 
 export function parseVideoDisplayMaskShape(
@@ -66,6 +73,52 @@ const STAR_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
 ];
 
 const STAR_CLIP_PATH = `polygon(${STAR_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
+
+/**
+ * Heart polygon — dense points approximating lobe curves (clip-path has no path() in our stack).
+ * Clockwise from top cleft → left lobe → tip → right lobe.
+ */
+const HEART_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
+  [50, 17],
+  [42, 11],
+  [34, 8],
+  [26, 10],
+  [20, 15],
+  [16, 22],
+  [13, 30],
+  [13, 39],
+  [16, 47],
+  [21, 53],
+  [28, 58],
+  [36, 62],
+  [44, 66],
+  [50, 74],
+  [50, 91],
+  [56, 66],
+  [64, 62],
+  [72, 58],
+  [79, 53],
+  [84, 47],
+  [87, 39],
+  [87, 30],
+  [84, 22],
+  [80, 15],
+  [74, 10],
+  [66, 8],
+  [58, 11],
+];
+
+const HEART_CLIP_PATH = `polygon(${HEART_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
+
+/** Diamond (rhombus) — four corners inset slightly from the square viewport. */
+const DIAMOND_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
+  [50, 5],
+  [95, 50],
+  [50, 95],
+  [5, 50],
+];
+
+const DIAMOND_CLIP_PATH = `polygon(${DIAMOND_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
 
 const SQUARE_CLIP_PATH = "inset(4%)";
 const SQUARE_BORDER_RADIUS = "14%";
@@ -230,11 +283,28 @@ export function computeRecordHoleRect(
 }
 
 export function buildRecordStarHolePolygonPoints(rect: RecordHoleRect): string {
-  return STAR_POLYGON_PERCENT_POINTS.map(([px, py]) => {
-    const x = rect.x + (px / 100) * rect.width;
-    const y = rect.y + (py / 100) * rect.height;
-    return `${x},${y}`;
-  }).join(" ");
+  return buildRecordPolygonHolePoints(rect, STAR_POLYGON_PERCENT_POINTS);
+}
+
+export function buildRecordHeartHolePolygonPoints(rect: RecordHoleRect): string {
+  return buildRecordPolygonHolePoints(rect, HEART_POLYGON_PERCENT_POINTS);
+}
+
+export function buildRecordDiamondHolePolygonPoints(rect: RecordHoleRect): string {
+  return buildRecordPolygonHolePoints(rect, DIAMOND_POLYGON_PERCENT_POINTS);
+}
+
+function buildRecordPolygonHolePoints(
+  rect: RecordHoleRect,
+  percentPoints: ReadonlyArray<readonly [number, number]>,
+): string {
+  return percentPoints
+    .map(([px, py]) => {
+      const x = rect.x + (px / 100) * rect.width;
+      const y = rect.y + (py / 100) * rect.height;
+      return `${x},${y}`;
+    })
+    .join(" ");
 }
 
 export function buildRecordCircleHoleAttrs(rect: RecordHoleRect): {
@@ -316,6 +386,29 @@ function buildMaskDefinitions(): Record<
       borderRadius: SQUARE_BORDER_RADIUS,
       recordRimClipPath: SQUARE_CLIP_PATH,
       pickerIconPath: "M 18 18 H 82 V 82 H 18 Z",
+    },
+    heart: {
+      id: "heart",
+      label: "ハート",
+      modifier: "heart",
+      visualScale: 1.5,
+      bubbleFrameScale: 1.5,
+      clipPath: HEART_CLIP_PATH,
+      borderRadius: "0",
+      recordRimClipPath: HEART_CLIP_PATH,
+      pickerIconPath:
+        "M 50 26 C 50 26 28 14 28 40 C 28 56 50 72 50 86 C 50 72 72 56 72 40 C 72 14 50 26 50 26 Z",
+    },
+    diamond: {
+      id: "diamond",
+      label: "菱形",
+      modifier: "diamond",
+      visualScale: 1.4,
+      bubbleFrameScale: 1.4,
+      clipPath: DIAMOND_CLIP_PATH,
+      borderRadius: "0",
+      recordRimClipPath: DIAMOND_CLIP_PATH,
+      pickerIconPath: "M 50 12 L 84 50 L 50 88 L 16 50 Z",
     },
   };
 }

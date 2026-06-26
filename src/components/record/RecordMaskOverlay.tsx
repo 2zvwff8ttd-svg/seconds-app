@@ -3,6 +3,8 @@
 import {
   DEFAULT_VIDEO_DISPLAY_MASK,
   buildRecordCircleHoleAttrs,
+  buildRecordDiamondHolePolygonPoints,
+  buildRecordHeartHolePolygonPoints,
   buildRecordSquareHoleRect,
   buildRecordStarHolePolygonPoints,
   computeRecordHoleRect,
@@ -69,12 +71,14 @@ function useRecordViewportState(shape: VideoDisplayMaskShape): {
   return state;
 }
 
-function buildStarHoleMaskPoints(rect: RecordHoleRect): string {
+function buildBleedPolygonHoleMaskPoints(
+  rect: RecordHoleRect,
+  basePoints: string,
+): string {
   const cx = rect.x + rect.width / 2;
   const cy = rect.y + rect.height / 2;
   const scale = 1 + (HOLE_MASK_BLEED_PX * 2) / rect.width;
-  const base = buildRecordStarHolePolygonPoints(rect);
-  return base
+  return basePoints
     .split(" ")
     .map((pair) => {
       const [xStr, yStr] = pair.split(",");
@@ -83,6 +87,22 @@ function buildStarHoleMaskPoints(rect: RecordHoleRect): string {
       return `${cx + (x - cx) * scale},${cy + (y - cy) * scale}`;
     })
     .join(" ");
+}
+
+function buildRecordHolePolygonPoints(
+  shape: VideoDisplayMaskShape,
+  rect: RecordHoleRect,
+): string | null {
+  switch (shape) {
+    case "star":
+      return buildRecordStarHolePolygonPoints(rect);
+    case "heart":
+      return buildRecordHeartHolePolygonPoints(rect);
+    case "diamond":
+      return buildRecordDiamondHolePolygonPoints(rect);
+    default:
+      return null;
+  }
 }
 
 type RecordSvgScrimProps = {
@@ -101,6 +121,10 @@ function RecordSvgScrim({
 }: RecordSvgScrimProps) {
   const { width, height } = viewport;
   const squareHole = buildRecordSquareHoleRect(holeRect);
+  const polygonPoints = buildRecordHolePolygonPoints(shape, holeRect);
+  const bleedPolygonPoints = polygonPoints
+    ? buildBleedPolygonHoleMaskPoints(holeRect, polygonPoints)
+    : null;
 
   return (
     <svg
@@ -126,8 +150,8 @@ function RecordSvgScrim({
               r={holeRect.width / 2 + HOLE_MASK_BLEED_PX}
               fill="black"
             />
-          ) : shape === "star" ? (
-            <polygon points={buildStarHoleMaskPoints(holeRect)} fill="black" />
+          ) : bleedPolygonPoints ? (
+            <polygon points={bleedPolygonPoints} fill="black" />
           ) : (
             <rect
               x={squareHole.x - HOLE_MASK_BLEED_PX}

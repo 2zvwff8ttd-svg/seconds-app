@@ -1662,7 +1662,7 @@ html.record-native-preview-active body {
 .record-shape-picker {
   margin: 0;
   width: 100%;
-  max-width: 18rem;
+  max-width: 22rem;
   pointer-events: auto;
 }
 

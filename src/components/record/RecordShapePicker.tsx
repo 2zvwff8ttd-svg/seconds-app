@@ -29,6 +29,28 @@ function ShapeIcon({ shape }: { shape: VideoDisplayMaskShape }) {
       />
     );
   }
+  if (shape === "heart") {
+    return (
+      <path
+        d="M 50 26 C 50 26 28 14 28 40 C 28 56 50 72 50 86 C 50 72 72 56 72 40 C 72 14 50 26 50 26 Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="4"
+        strokeLinejoin="round"
+      />
+    );
+  }
+  if (shape === "diamond") {
+    return (
+      <path
+        d="M 50 12 L 84 50 L 50 88 L 16 50 Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="4"
+        strokeLinejoin="round"
+      />
+    );
+  }
   return (
     <rect
       x="16"
