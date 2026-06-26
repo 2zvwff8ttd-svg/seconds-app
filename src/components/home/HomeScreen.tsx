@@ -2,13 +2,17 @@
 
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { scheduleHomeNavPrefetches } from "@/lib/navigation/prefetch-routes";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { BubbleField } from "./BubbleField";
 import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "./BottomNav";
 import { HomeStarfieldBackground } from "./HomeStarfieldBackground";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function HomeScreen() {
+  const router = useRouter();
+  const prefetchCleanupRef = useRef<(() => void) | null>(null);
   const [countryCode, setCountryCode] = useState("JP");
   const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
   const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
@@ -17,6 +21,17 @@ export function HomeScreen() {
     fetchTodayAssignedSeconds()
       .then(setAssignedSeconds)
       .catch(() => setAssignedSeconds(null));
+  }, []);
+
+  const handleFeedReady = useCallback(() => {
+    prefetchCleanupRef.current?.();
+    prefetchCleanupRef.current = scheduleHomeNavPrefetches(router);
+  }, [router]);
+
+  useEffect(() => {
+    return () => {
+      prefetchCleanupRef.current?.();
+    };
   }, []);
 
   return (
@@ -44,7 +59,11 @@ export function HomeScreen() {
         </div>
       </header>
 
-      <BubbleField bottomInset={bottomInset} onCountryChange={setCountryCode} />
+      <BubbleField
+        bottomInset={bottomInset}
+        onCountryChange={setCountryCode}
+        onFeedReady={handleFeedReady}
+      />
       <BottomNav onInsetChange={setBottomInset} />
     </div>
   );

@@ -32,9 +32,11 @@ import { usePathname } from "next/navigation";
 type BubbleFieldProps = {
   bottomInset: number;
   onCountryChange?: (countryCode: string) => void;
+  /** Called once home feed fetch finishes (success or failure). */
+  onFeedReady?: () => void;
 };
 
-export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) {
+export function BubbleField({ bottomInset, onCountryChange, onFeedReady }: BubbleFieldProps) {
   const pathname = usePathname();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -108,8 +110,9 @@ export function BubbleField({ bottomInset, onCountryChange }: BubbleFieldProps) 
       setActiveBubbles([]);
     } finally {
       setLoading(false);
+      onFeedReady?.();
     }
-  }, [applyFeedPool, onCountryChange]);
+  }, [applyFeedPool, onCountryChange, onFeedReady]);
 
   useEffect(() => {
     if (pathname === "/") {

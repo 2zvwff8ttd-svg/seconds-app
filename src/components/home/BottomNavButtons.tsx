@@ -1,6 +1,7 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export const NAV_ITEMS = [
   { id: "home", label: "Home", href: "/" },
@@ -49,6 +50,10 @@ export function NavIcon({ id }: { id: string }) {
   }
 }
 
+function shouldPrefetchRoute(href: string): boolean {
+  return href !== "/post";
+}
+
 type BottomNavButtonsProps = {
   dmUnreadCount?: number;
   onNavigate?: (href: string) => void;
@@ -61,13 +66,6 @@ export function BottomNavButtons({
   className = "grid grid-cols-5 items-end px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-2 sm:pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pt-2",
 }: BottomNavButtonsProps) {
   const pathname = usePathname();
-  const router = useRouter();
-
-  const navigate = (href: string) => {
-    if (href === "#") return;
-    onNavigate?.(href);
-    router.push(href);
-  };
 
   return (
     <div className={className}>
@@ -79,7 +77,7 @@ export function BottomNavButtons({
         const isPrimary = "primary" in item && item.primary;
         const showDmBadge = item.id === "messages" && dmUnreadCount > 0;
 
-        const buttonClassName = isPrimary
+        const linkClassName = isPrimary
           ? "relative z-0 -mt-5 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/30 touch-manipulation"
           : `relative z-10 flex min-h-11 min-w-11 flex-col items-center justify-center gap-0.5 px-1 py-1 text-[10px] transition touch-manipulation ${
               isActive
@@ -87,31 +85,35 @@ export function BottomNavButtons({
                 : "text-muted hover:text-foreground/80"
             }`;
 
+        const label = showDmBadge
+          ? `${item.label}（未読${dmUnreadCount}件）`
+          : item.label;
+
         if (isPrimary) {
           return (
-            <button
+            <Link
               key={item.id}
-              type="button"
+              href={item.href}
+              prefetch={false}
               data-record-button
-              onClick={() => navigate(item.href)}
-              className={buttonClassName}
+              onClick={() => onNavigate?.(item.href)}
+              className={linkClassName}
               aria-label={item.label}
               aria-current={isActive ? "page" : undefined}
             >
               <NavIcon id={item.id} />
-            </button>
+            </Link>
           );
         }
 
         return (
-          <button
+          <Link
             key={item.id}
-            type="button"
-            onClick={() => navigate(item.href)}
-            className={buttonClassName}
-            aria-label={
-              showDmBadge ? `${item.label}（未読${dmUnreadCount}件）` : item.label
-            }
+            href={item.href}
+            prefetch={shouldPrefetchRoute(item.href)}
+            onClick={() => onNavigate?.(item.href)}
+            className={linkClassName}
+            aria-label={label}
             aria-current={isActive ? "page" : undefined}
           >
             <span className="relative">
@@ -126,7 +128,7 @@ export function BottomNavButtons({
               )}
             </span>
             <span>{item.label}</span>
-          </button>
+          </Link>
         );
       })}
     </div>

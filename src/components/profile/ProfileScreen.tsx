@@ -21,6 +21,8 @@ import {
   fetchProfile,
   fetchUserVideos,
 } from "@/lib/videos/profile-feed";
+import { NAV_CACHE_KEYS, readNavCache, writeNavCache } from "@/lib/cache/nav-data-cache";
+import type { OwnProfileCacheData } from "@/lib/prefetch/prefetch-nav-data";
 import type { FeedVideo } from "@/types/feed";
 import type { FollowListKind, FollowStats, ProfileData } from "@/types/profile";
 import Link from "next/link";
@@ -82,8 +84,11 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
   const [isBlocked, setIsBlocked] = useState(false);
   const [unblocking, setUnblocking] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const current = await fetchCurrentProfile();
@@ -107,22 +112,48 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
 
       if (own) {
         const liked = await fetchLikedVideos(targetUserId);
-        setLikedVideos(filterVideosByBlocked(liked, blockedIds));
+        const filteredLiked = filterVideosByBlocked(liked, blockedIds);
+        setLikedVideos(filteredLiked);
         setTab((t) => (t === "likes" ? "likes" : t));
+        writeNavCache<OwnProfileCacheData>(NAV_CACHE_KEYS.OWN_PROFILE, {
+          profile: p,
+          followStats: stats,
+          userVideos: blocked ? [] : videos,
+          likedVideos: filteredLiked,
+        });
       } else {
         setLikedVideos([]);
         setTab("videos");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "読み込みに失敗しました");
+      if (!silent) {
+        setError(err instanceof Error ? err.message : "読み込みに失敗しました");
+      }
     } finally {
       setLoading(false);
     }
   }, [userIdProp]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (userIdProp) {
+      void load();
+      return;
+    }
+
+    const cached = readNavCache<OwnProfileCacheData>(NAV_CACHE_KEYS.OWN_PROFILE);
+    if (cached) {
+      setProfile(cached.data.profile);
+      setFollowStats(cached.data.followStats);
+      setUserVideos(cached.data.userVideos);
+      setLikedVideos(cached.data.likedVideos);
+      setIsOwnProfile(true);
+      setIsBlocked(false);
+      setLoading(false);
+      void load({ silent: true });
+    } else {
+      void load();
+    }
+  }, [userIdProp, load]);
 
   const handleDeleteRequest = (video: FeedVideo) => {
     setDeleteTarget(video);
