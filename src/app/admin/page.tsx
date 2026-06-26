@@ -32,7 +32,7 @@ export default function AdminPage() {
 
   return (
     <div className="flex h-[100dvh] flex-col bg-black">
-      <header className="z-header relative shrink-0 border-b border-border px-4 py-4 sm:px-6">
+      <header className="z-header relative shrink-0 border-b border-border px-4 pb-4 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-6 sm:pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="flex items-center gap-3">
           <Link
             href="/"

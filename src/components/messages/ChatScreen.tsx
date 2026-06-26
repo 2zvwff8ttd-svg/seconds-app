@@ -200,7 +200,7 @@ export function ChatScreen({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="z-header relative flex shrink-0 items-center gap-3 border-b border-border px-3 py-3 sm:px-4">
+      <header className="z-header relative flex shrink-0 items-center gap-3 border-b border-border px-3 pb-3 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-4 sm:pt-[max(0.75rem,env(safe-area-inset-top))]">
         <Link
           href="/messages"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-muted transition hover:text-foreground"

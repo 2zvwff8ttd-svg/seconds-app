@@ -30,7 +30,7 @@ export function MessageComposer({
   };
 
   return (
-    <div className="flex shrink-0 items-end gap-2 border-t border-border bg-surface/95 px-3 py-3 backdrop-blur-lg sm:px-4">
+    <div className="flex shrink-0 items-end gap-2 border-t border-border bg-surface/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-lg sm:px-4">
       <textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}
