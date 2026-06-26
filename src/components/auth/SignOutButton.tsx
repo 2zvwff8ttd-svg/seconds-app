@@ -1,6 +1,7 @@
 "use client";
 
 import { clearAllVlogDraftsForUser } from "@/lib/draft/vlog-draft-store";
+import { disablePushNotifications } from "@/lib/push/register-push";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -22,6 +23,7 @@ export function SignOutButton() {
         console.warn("[SignOutButton] clear vlog drafts failed", err);
       }
     }
+    await disablePushNotifications();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();

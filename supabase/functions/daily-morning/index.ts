@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { sendMorningDigestPushes } from "../_shared/morning-digest-push.ts";
 
 const JST = "Asia/Tokyo";
 
@@ -11,6 +12,7 @@ const JST = "Asia/Tokyo";
  * 2. 全ユーザーに 5〜30 秒の撮影時間を daily_assignments に登録
  * 3. 当日公開があったユーザーへ「昨日の動画が公開されました！今日の撮影時間は〇秒です。」
  * 4. それ以外へ「今日の撮影時間は〇秒です。」
+ * 5. （Phase 1 push）enabled な iOS トークンへ morning_digest APNs 送信
  *
  * スケジュール（7:00 JST = 22:00 UTC）:
  *   Dashboard → Edge Functions → daily-morning → Schedules
@@ -21,6 +23,7 @@ const JST = "Asia/Tokyo";
  *
  * シークレット（自動注入）: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  * 任意: CRON_SECRET（手動呼び出し時に x-cron-secret ヘッダ）
+ * プッシュ: APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY, APNS_BUNDLE_ID, APNS_ENVIRONMENT
  */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -70,8 +73,14 @@ Deno.serve(async (req) => {
     );
   }
 
+  const pushSummary = await sendMorningDigestPushes(supabase, startedAt);
+
   const elapsedMs = Date.now() - startedAt.getTime();
-  console.log("[daily-morning] completed", { result: data, elapsedMs });
+  console.log("[daily-morning] completed", {
+    result: data,
+    push: pushSummary,
+    elapsedMs,
+  });
 
   return json({
     ok: true,
@@ -79,6 +88,7 @@ Deno.serve(async (req) => {
     scheduled_hour_jst: 7,
     elapsed_ms: elapsedMs,
     result: data,
+    push: pushSummary,
   });
 });
 

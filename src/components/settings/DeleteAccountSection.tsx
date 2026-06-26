@@ -2,6 +2,7 @@
 
 import { deleteOwnAccount } from "@/lib/account/delete-account";
 import { clearAllVlogDraftsForUser } from "@/lib/draft/vlog-draft-store";
+import { disablePushNotifications } from "@/lib/push/register-push";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -103,6 +104,7 @@ export function DeleteAccountSection() {
                 console.warn("[DeleteAccount] clear vlog drafts failed", err);
               }
             }
+            await disablePushNotifications();
             await supabase.auth.signOut();
             router.push("/login");
             router.refresh();
