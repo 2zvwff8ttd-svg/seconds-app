@@ -5,6 +5,7 @@ import {
   MASK_SHAPE_ORDER,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
+import { useCallback, useEffect, useRef } from "react";
 
 type RecordShapePickerProps = {
   value: VideoDisplayMaskShape;
@@ -71,30 +72,75 @@ export function RecordShapePicker({
   onChange,
   disabled = false,
 }: RecordShapePickerProps) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef(new Map<VideoDisplayMaskShape, HTMLButtonElement>());
+  const isFirstScrollRef = useRef(true);
+
+  const scrollShapeIntoView = useCallback(
+    (shape: VideoDisplayMaskShape, behavior: ScrollBehavior) => {
+      itemRefs.current.get(shape)?.scrollIntoView({
+        inline: "center",
+        block: "nearest",
+        behavior,
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    scrollShapeIntoView(
+      value,
+      isFirstScrollRef.current ? "instant" : "smooth",
+    );
+    isFirstScrollRef.current = false;
+  }, [value, scrollShapeIntoView]);
+
+  const setItemRef = useCallback(
+    (shape: VideoDisplayMaskShape, node: HTMLButtonElement | null) => {
+      if (node) {
+        itemRefs.current.set(shape, node);
+      } else {
+        itemRefs.current.delete(shape);
+      }
+    },
+    [],
+  );
+
   return (
     <div className="record-shape-picker" role="radiogroup" aria-label="撮影する形">
-      <div className="record-shape-picker__track">
-        {MASK_SHAPE_ORDER.map((shape) => {
-          const def = getVideoDisplayMask(shape);
-          const selected = value === shape;
-          return (
-            <button
-              key={shape}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              aria-label={def.label}
-              disabled={disabled}
-              onClick={() => onChange(shape)}
-              className={`record-shape-picker__item${selected ? " record-shape-picker__item--selected" : ""}`}
-            >
-              <svg viewBox="0 0 100 100" className="record-shape-picker__icon" aria-hidden>
-                <ShapeIcon shape={shape} />
-              </svg>
-              <span className="record-shape-picker__label">{def.label}</span>
-            </button>
-          );
-        })}
+      <div className="record-shape-picker__edge record-shape-picker__edge--start" aria-hidden />
+      <div className="record-shape-picker__edge record-shape-picker__edge--end" aria-hidden />
+      <div
+        ref={viewportRef}
+        className="record-shape-picker__viewport"
+        aria-orientation="horizontal"
+      >
+        <div className="record-shape-picker__track">
+          {MASK_SHAPE_ORDER.map((shape) => {
+            const def = getVideoDisplayMask(shape);
+            const selected = value === shape;
+            return (
+              <button
+                key={shape}
+                ref={(node) => setItemRef(shape, node)}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={def.label}
+                disabled={disabled}
+                onClick={() => onChange(shape)}
+                className={`record-shape-picker__item${selected ? " record-shape-picker__item--selected" : ""}`}
+              >
+                <span className="record-shape-picker__icon-wrap" aria-hidden>
+                  <svg viewBox="0 0 100 100" className="record-shape-picker__icon">
+                    <ShapeIcon shape={shape} />
+                  </svg>
+                </span>
+                <span className="record-shape-picker__label">{def.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

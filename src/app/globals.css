@@ -1572,6 +1572,12 @@ html.record-native-preview-active body {
   pointer-events: none;
 }
 
+.record-stage-ui__dock > .record-shape-picker {
+  width: calc(100% + 2rem);
+  max-width: calc(100% + 2rem);
+  margin-inline: -1rem;
+}
+
 .record-stage-ui__dock-status {
   position: relative;
   width: 100%;
@@ -1660,36 +1666,108 @@ html.record-native-preview-active body {
 }
 
 .record-shape-picker {
+  --record-shape-picker-item-size: 3.75rem;
+  position: relative;
   margin: 0;
   width: 100%;
-  max-width: 22rem;
+  max-width: 100%;
   pointer-events: auto;
+  isolation: isolate;
+}
+
+.record-shape-picker__viewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.record-shape-picker__viewport::-webkit-scrollbar {
+  display: none;
 }
 
 .record-shape-picker__track {
   display: flex;
-  justify-content: center;
+  align-items: flex-end;
   gap: 0.5rem;
+  width: max-content;
+  min-width: 100%;
+  padding-inline: max(
+    1rem,
+    calc(50% - var(--record-shape-picker-item-size) / 2)
+  );
+}
+
+.record-shape-picker__edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1.75rem;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.record-shape-picker__edge--start {
+  left: 0;
+  background: linear-gradient(
+    to right,
+    rgb(10 10 10 / 0.72),
+    rgb(10 10 10 / 0)
+  );
+}
+
+.record-shape-picker__edge--end {
+  right: 0;
+  background: linear-gradient(
+    to left,
+    rgb(10 10 10 / 0.72),
+    rgb(10 10 10 / 0)
+  );
 }
 
 .record-shape-picker__item {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
-  min-width: 3.25rem;
-  padding: 0.35rem 0.5rem;
+  gap: 0.25rem;
+  width: var(--record-shape-picker-item-size);
+  padding: 0.35rem 0.25rem 0.3rem;
   border-radius: 0.75rem;
-  border: 1px solid rgb(255 255 255 / 0.15);
-  background: rgb(0 0 0 / 0.35);
-  color: rgb(255 255 255 / 0.75);
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: rgb(0 0 0 / 0.32);
+  color: rgb(255 255 255 / 0.62);
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .record-shape-picker__item--selected {
-  border-color: rgb(167 139 250 / 0.85);
-  background: rgb(139 92 246 / 0.22);
+  border-color: rgb(167 139 250 / 0.9);
+  background: rgb(139 92 246 / 0.28);
   color: white;
+  transform: scale(1.06);
+  box-shadow:
+    0 0 0 1px rgb(167 139 250 / 0.35),
+    0 4px 14px rgb(88 28 135 / 0.35);
+}
+
+.record-shape-picker__icon-wrap {
+  display: flex;
+  height: 1.75rem;
+  width: 1.75rem;
+  align-items: center;
+  justify-content: center;
 }
 
 .record-shape-picker__item:disabled {
@@ -1706,6 +1784,7 @@ html.record-native-preview-active body {
   font-size: 0.625rem;
   font-weight: 600;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .record-camera-error {
