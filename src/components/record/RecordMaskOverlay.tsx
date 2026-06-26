@@ -8,6 +8,7 @@ import {
   buildRecordSquareHoleRect,
   buildRecordStarHolePolygonPoints,
   computeRecordHoleRect,
+  getRecordHoleMaskBleedPx,
   getRecordViewportMaskCssVars,
   readRecordViewportMetrics,
   type RecordHoleRect,
@@ -22,13 +23,29 @@ import {
 } from "react";
 import { RecordStagePortal } from "@/components/record/RecordStagePortal";
 
-/** Sub-pixel expansion so luminance-mask antialiasing does not leave scrim fringing. */
-const HOLE_MASK_BLEED_PX = 1;
-
 type RecordMaskOverlayProps = {
   shape?: VideoDisplayMaskShape;
   cameraReady?: boolean;
 };
+
+function buildBleedPolygonHoleMaskPoints(
+  rect: RecordHoleRect,
+  basePoints: string,
+  bleedPx: number,
+): string {
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  const scale = 1 + (bleedPx * 2) / rect.width;
+  return basePoints
+    .split(" ")
+    .map((pair) => {
+      const [xStr, yStr] = pair.split(",");
+      const x = Number(xStr);
+      const y = Number(yStr);
+      return `${cx + (x - cx) * scale},${cy + (y - cy) * scale}`;
+    })
+    .join(" ");
+}
 
 function useRecordViewportState(shape: VideoDisplayMaskShape): {
   viewport: ViewportMetrics;
@@ -72,24 +89,6 @@ function useRecordViewportState(shape: VideoDisplayMaskShape): {
   return state;
 }
 
-function buildBleedPolygonHoleMaskPoints(
-  rect: RecordHoleRect,
-  basePoints: string,
-): string {
-  const cx = rect.x + rect.width / 2;
-  const cy = rect.y + rect.height / 2;
-  const scale = 1 + (HOLE_MASK_BLEED_PX * 2) / rect.width;
-  return basePoints
-    .split(" ")
-    .map((pair) => {
-      const [xStr, yStr] = pair.split(",");
-      const x = Number(xStr);
-      const y = Number(yStr);
-      return `${cx + (x - cx) * scale},${cy + (y - cy) * scale}`;
-    })
-    .join(" ");
-}
-
 function buildRecordHolePolygonPoints(
   shape: VideoDisplayMaskShape,
   rect: RecordHoleRect,
@@ -119,12 +118,13 @@ function RecordSvgScrim({
   viewport,
 }: RecordSvgScrimProps) {
   const { width, height } = viewport;
+  const bleedPx = getRecordHoleMaskBleedPx(shape);
   const squareHole = buildRecordSquareHoleRect(holeRect);
   const heartHole =
-    shape === "heart" ? buildRecordHeartHolePathProps(holeRect) : null;
+    shape === "heart" ? buildRecordHeartHolePathProps(holeRect, shape) : null;
   const polygonPoints = buildRecordHolePolygonPoints(shape, holeRect);
   const bleedPolygonPoints = polygonPoints
-    ? buildBleedPolygonHoleMaskPoints(holeRect, polygonPoints)
+    ? buildBleedPolygonHoleMaskPoints(holeRect, polygonPoints, bleedPx)
     : null;
 
   return (
@@ -148,7 +148,7 @@ function RecordSvgScrim({
           {shape === "circle" ? (
             <circle
               {...buildRecordCircleHoleAttrs(holeRect)}
-              r={holeRect.width / 2 + HOLE_MASK_BLEED_PX}
+              r={holeRect.width / 2 + bleedPx}
               fill="black"
             />
           ) : heartHole ? (
@@ -161,10 +161,10 @@ function RecordSvgScrim({
             <polygon points={bleedPolygonPoints} fill="black" />
           ) : (
             <rect
-              x={squareHole.x - HOLE_MASK_BLEED_PX}
-              y={squareHole.y - HOLE_MASK_BLEED_PX}
-              width={squareHole.width + HOLE_MASK_BLEED_PX * 2}
-              height={squareHole.height + HOLE_MASK_BLEED_PX * 2}
+              x={squareHole.x - bleedPx}
+              y={squareHole.y - bleedPx}
+              width={squareHole.width + bleedPx * 2}
+              height={squareHole.height + bleedPx * 2}
               rx={squareHole.rx}
               ry={squareHole.ry}
               fill="black"
@@ -232,7 +232,7 @@ export function RecordMaskOverlay({
         )}
         {holeRect && (
           <div
-            className={`record-mask-overlay__rim${cameraReady ? " record-mask-overlay__rim--ready" : ""}`}
+            className={`record-mask-overlay__rim record-mask-overlay__rim--${shape}${cameraReady ? " record-mask-overlay__rim--ready" : ""}`}
             style={holeRectToRimStyle(holeRect)}
           />
         )}

@@ -1488,6 +1488,11 @@ html.record-native-preview-active body {
   pointer-events: none;
 }
 
+.record-mask-overlay__rim--circle.record-mask-overlay__rim--ready {
+  /* Inset white ring reads as a gap over native camera — rely on scrim bleed only. */
+  box-shadow: none;
+}
+
 .record-mask-overlay__rim--ready {
   opacity: 1;
 }
