@@ -615,7 +615,7 @@ export function WebCameraRecorder({
             <RecordShapePicker
               value={displayMaskShape}
               onChange={onDisplayMaskShapeChange}
-              disabled={disabled || isRecording || cameraStarting || clips.length > 0}
+              disabled={disabled || cameraStarting}
             />
           </div>
 

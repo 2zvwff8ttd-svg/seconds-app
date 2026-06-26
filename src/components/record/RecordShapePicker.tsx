@@ -1,11 +1,12 @@
 "use client";
 
 import {
+  DEFAULT_VIDEO_DISPLAY_MASK,
   getVideoDisplayMask,
   MASK_SHAPE_ORDER,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 
 type RecordShapePickerProps = {
   value: VideoDisplayMaskShape;
@@ -33,7 +34,7 @@ function ShapeIcon({ shape }: { shape: VideoDisplayMaskShape }) {
   if (shape === "heart") {
     return (
       <path
-        d="M 50 26 C 50 26 28 14 28 40 C 28 56 50 72 50 86 C 50 72 72 56 72 40 C 72 14 50 26 50 26 Z"
+        d="M 50 25 C 50 25 25 10 25 38 C 25 55 50 70 50 88 C 50 70 75 55 75 38 C 75 10 50 25 50 25 Z"
         fill="none"
         stroke="currentColor"
         strokeWidth="4"
@@ -67,6 +68,19 @@ function ShapeIcon({ shape }: { shape: VideoDisplayMaskShape }) {
   );
 }
 
+function scrollItemIntoViewport(
+  viewport: HTMLDivElement,
+  item: HTMLButtonElement,
+  behavior: ScrollBehavior,
+): void {
+  const targetLeft = item.offsetLeft - (viewport.clientWidth - item.offsetWidth) / 2;
+  const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+  viewport.scrollTo({
+    left: Math.min(maxScroll, Math.max(0, targetLeft)),
+    behavior,
+  });
+}
+
 export function RecordShapePicker({
   value,
   onChange,
@@ -74,25 +88,25 @@ export function RecordShapePicker({
 }: RecordShapePickerProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef(new Map<VideoDisplayMaskShape, HTMLButtonElement>());
-  const isFirstScrollRef = useRef(true);
 
   const scrollShapeIntoView = useCallback(
     (shape: VideoDisplayMaskShape, behavior: ScrollBehavior) => {
-      itemRefs.current.get(shape)?.scrollIntoView({
-        inline: "center",
-        block: "nearest",
-        behavior,
-      });
+      const viewport = viewportRef.current;
+      const item = itemRefs.current.get(shape);
+      if (!viewport || !item) return;
+
+      if (shape === DEFAULT_VIDEO_DISPLAY_MASK) {
+        viewport.scrollTo({ left: 0, behavior });
+        return;
+      }
+
+      scrollItemIntoViewport(viewport, item, behavior);
     },
     [],
   );
 
-  useEffect(() => {
-    scrollShapeIntoView(
-      value,
-      isFirstScrollRef.current ? "instant" : "smooth",
-    );
-    isFirstScrollRef.current = false;
+  useLayoutEffect(() => {
+    scrollShapeIntoView(value, "instant");
   }, [value, scrollShapeIntoView]);
 
   const setItemRef = useCallback(
@@ -104,6 +118,16 @@ export function RecordShapePicker({
       }
     },
     [],
+  );
+
+  const handleSelect = useCallback(
+    (shape: VideoDisplayMaskShape) => {
+      onChange(shape);
+      requestAnimationFrame(() => {
+        scrollShapeIntoView(shape, "smooth");
+      });
+    },
+    [onChange, scrollShapeIntoView],
   );
 
   return (
@@ -128,7 +152,7 @@ export function RecordShapePicker({
                 aria-checked={selected}
                 aria-label={def.label}
                 disabled={disabled}
-                onClick={() => onChange(shape)}
+                onClick={() => handleSelect(shape)}
                 className={`record-shape-picker__item${selected ? " record-shape-picker__item--selected" : ""}`}
               >
                 <span className="record-shape-picker__icon-wrap" aria-hidden>

@@ -95,13 +95,7 @@ export function RecordStageControls({
           <RecordShapePicker
             value={displayMaskShape}
             onChange={onDisplayMaskShapeChange}
-            disabled={
-              disabled ||
-              isRecording ||
-              cameraStarting ||
-              recordingStarting ||
-              clipsCount > 0
-            }
+            disabled={disabled || cameraStarting || recordingStarting}
           />
 
           <div className="record-stage-ui__dock-status" aria-live="polite">

@@ -4,7 +4,7 @@ import {
   DEFAULT_VIDEO_DISPLAY_MASK,
   buildRecordCircleHoleAttrs,
   buildRecordDiamondHolePolygonPoints,
-  buildRecordHeartHolePolygonPoints,
+  buildRecordHeartHolePathProps,
   buildRecordSquareHoleRect,
   buildRecordStarHolePolygonPoints,
   computeRecordHoleRect,
@@ -96,8 +96,6 @@ function buildRecordHolePolygonPoints(
   switch (shape) {
     case "star":
       return buildRecordStarHolePolygonPoints(rect);
-    case "heart":
-      return buildRecordHeartHolePolygonPoints(rect);
     case "diamond":
       return buildRecordDiamondHolePolygonPoints(rect);
     default:
@@ -121,6 +119,8 @@ function RecordSvgScrim({
 }: RecordSvgScrimProps) {
   const { width, height } = viewport;
   const squareHole = buildRecordSquareHoleRect(holeRect);
+  const heartHole =
+    shape === "heart" ? buildRecordHeartHolePathProps(holeRect) : null;
   const polygonPoints = buildRecordHolePolygonPoints(shape, holeRect);
   const bleedPolygonPoints = polygonPoints
     ? buildBleedPolygonHoleMaskPoints(holeRect, polygonPoints)
@@ -148,6 +148,12 @@ function RecordSvgScrim({
             <circle
               {...buildRecordCircleHoleAttrs(holeRect)}
               r={holeRect.width / 2 + HOLE_MASK_BLEED_PX}
+              fill="black"
+            />
+          ) : heartHole ? (
+            <path
+              d={heartHole.d}
+              transform={heartHole.transform}
               fill="black"
             />
           ) : bleedPolygonPoints ? (

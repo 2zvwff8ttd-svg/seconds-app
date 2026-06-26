@@ -74,41 +74,51 @@ const STAR_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
 
 const STAR_CLIP_PATH = `polygon(${STAR_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
 
-/**
- * Heart polygon — dense points approximating lobe curves (clip-path has no path() in our stack).
- * Clockwise from top cleft → left lobe → tip → right lobe.
- */
-const HEART_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
-  [50, 17],
-  [42, 11],
-  [34, 8],
-  [26, 10],
-  [20, 15],
-  [16, 22],
-  [13, 30],
-  [13, 39],
-  [16, 47],
-  [21, 53],
-  [28, 58],
-  [36, 62],
-  [44, 66],
-  [50, 74],
-  [50, 91],
-  [56, 66],
-  [64, 62],
-  [72, 58],
-  [79, 53],
-  [84, 47],
-  [87, 39],
-  [87, 30],
-  [84, 22],
-  [80, 15],
-  [74, 10],
-  [66, 8],
-  [58, 11],
-];
+/** Sample a parametric heart curve into percentage polygon points (scales with element). */
+function buildHeartPercentPoints(
+  segments = 64,
+  paddingPercent = 5,
+): ReadonlyArray<readonly [number, number]> {
+  const samples: [number, number][] = [];
+  for (let i = 0; i < segments; i++) {
+    const t = (i / segments) * Math.PI * 2;
+    const x = 16 * Math.sin(t) ** 3;
+    const y = -(
+      13 * Math.cos(t) -
+      5 * Math.cos(2 * t) -
+      2 * Math.cos(3 * t) -
+      Math.cos(4 * t)
+    );
+    samples.push([x, y]);
+  }
+
+  const xs = samples.map(([x]) => x);
+  const ys = samples.map(([, y]) => y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const span = Math.max(maxX - minX, maxY - minY);
+  const pad = paddingPercent;
+  const usable = 100 - pad * 2;
+
+  return samples.map(([x, y]) => {
+    const px = pad + ((x - minX) / span) * usable;
+    const py = pad + ((y - minY) / span) * usable;
+    return [Math.round(px * 100) / 100, Math.round(py * 100) / 100] as const;
+  });
+}
+
+const HEART_POLYGON_PERCENT_POINTS = buildHeartPercentPoints(64);
 
 const HEART_CLIP_PATH = `polygon(${HEART_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
+
+/**
+ * Smooth bezier heart for SVG record-hole mask (0–100 design space).
+ * CSS clip-path uses the dense polygon above; scrim uses this path for curves.
+ */
+export const HEART_RECORD_PATH_D =
+  "M 50 25 C 50 25 25 10 25 38 C 25 55 50 70 50 88 C 50 70 75 55 75 38 C 75 10 50 25 50 25 Z";
 
 /** Diamond (rhombus) — four corners inset slightly from the square viewport. */
 const DIAMOND_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
@@ -290,6 +300,24 @@ export function buildRecordHeartHolePolygonPoints(rect: RecordHoleRect): string 
   return buildRecordPolygonHolePoints(rect, HEART_POLYGON_PERCENT_POINTS);
 }
 
+/** Sub-pixel expansion so luminance-mask antialiasing does not leave scrim fringing. */
+const HOLE_MASK_BLEED_PX = 1;
+
+export function buildRecordHeartHolePathProps(rect: RecordHoleRect): {
+  d: string;
+  transform: string;
+} {
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  const bleedScale = 1 + (HOLE_MASK_BLEED_PX * 2) / rect.width;
+  const scaleX = (rect.width / 100) * bleedScale;
+  const scaleY = (rect.height / 100) * bleedScale;
+  return {
+    d: HEART_RECORD_PATH_D,
+    transform: `translate(${cx} ${cy}) scale(${scaleX} ${scaleY}) translate(-50 -50)`,
+  };
+}
+
 export function buildRecordDiamondHolePolygonPoints(rect: RecordHoleRect): string {
   return buildRecordPolygonHolePoints(rect, DIAMOND_POLYGON_PERCENT_POINTS);
 }
@@ -397,7 +425,7 @@ function buildMaskDefinitions(): Record<
       borderRadius: "0",
       recordRimClipPath: HEART_CLIP_PATH,
       pickerIconPath:
-        "M 50 26 C 50 26 28 14 28 40 C 28 56 50 72 50 86 C 50 72 72 56 72 40 C 72 14 50 26 50 26 Z",
+        "M 50 25 C 50 25 25 10 25 38 C 25 55 50 70 50 88 C 50 70 75 55 75 38 C 75 10 50 25 50 25 Z",
     },
     diamond: {
       id: "diamond",

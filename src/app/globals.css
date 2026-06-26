@@ -1697,7 +1697,8 @@ html.record-native-preview-active body {
   gap: 0.5rem;
   width: max-content;
   min-width: 100%;
-  padding-inline: max(
+  padding-left: 1rem;
+  padding-right: max(
     1rem,
     calc(50% - var(--record-shape-picker-item-size) / 2)
   );
