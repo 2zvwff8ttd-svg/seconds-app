@@ -44,25 +44,18 @@ async function fetchProfilesMap(userIds: string[]) {
   );
 }
 
-async function countUnreadForThread(
-  threadId: string,
-  userId: string,
-  lastReadAt: string | null,
-): Promise<number> {
+async function fetchUnreadCountsMap(): Promise<Map<string, number>> {
   const supabase = createClient();
-  let query = supabase
-    .from("dm_messages")
-    .select("id", { count: "exact", head: true })
-    .eq("thread_id", threadId)
-    .neq("sender_id", userId);
+  const { data, error } = await supabase.rpc("dm_thread_unread_counts");
 
-  if (lastReadAt) {
-    query = query.gt("created_at", lastReadAt);
-  }
-
-  const { count, error } = await query;
   if (error) throw new Error(error.message);
-  return count ?? 0;
+
+  return new Map(
+    (data ?? []).map((row: { thread_id: string; unread_count: number }) => [
+      row.thread_id,
+      row.unread_count ?? 0,
+    ]),
+  );
 }
 
 export async function fetchDmThreadsForUser(): Promise<{
@@ -87,36 +80,20 @@ export async function fetchDmThreadsForUser(): Promise<{
 
   const threads = (rows ?? []) as ThreadRow[];
   const otherIds = threads.map((t) => otherParticipantId(t, user.id));
-  const profileMap = await fetchProfilesMap(otherIds);
 
-  const { data: reads } = await supabase
-    .from("dm_thread_reads")
-    .select("thread_id, last_read_at")
-    .eq("user_id", user.id);
+  const [profileMap, unreadMap, blockedIds] = await Promise.all([
+    fetchProfilesMap(otherIds),
+    fetchUnreadCountsMap(),
+    fetchBlockedUserIds(),
+  ]);
 
-  const readMap = new Map(
-    (reads ?? []).map((r) => [
-      r.thread_id as string,
-      r.last_read_at as string,
-    ]),
-  );
-
-  const summaries: DmThreadSummary[] = [];
-
-  for (const row of threads) {
+  const summaries: DmThreadSummary[] = threads.map((row) => {
     const otherId = otherParticipantId(row, user.id);
     const profile = profileMap.get(otherId);
     const isInitiator = row.initiated_by === user.id;
-    const isRequest =
-      row.status === "pending" && !isInitiator;
+    const isRequest = row.status === "pending" && !isInitiator;
 
-    const unreadCount = await countUnreadForThread(
-      row.id,
-      user.id,
-      readMap.get(row.id) ?? null,
-    );
-
-    summaries.push({
+    return {
       id: row.id,
       status: row.status,
       isInitiator,
@@ -126,11 +103,9 @@ export async function fetchDmThreadsForUser(): Promise<{
       otherAvatarUrl: profile?.avatar_url ?? null,
       lastMessagePreview: row.last_message_preview,
       lastMessageAt: row.last_message_at,
-      unreadCount,
-    });
-  }
-
-  const blockedIds = await fetchBlockedUserIds();
+      unreadCount: unreadMap.get(row.id) ?? 0,
+    };
+  });
 
   return {
     inbox: filterDmThreadsByBlocked(
