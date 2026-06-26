@@ -1,6 +1,7 @@
 "use client";
 
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { UserIdentity } from "@/components/profile/UserIdentity";
 import { unblockUser } from "@/lib/blocks/actions";
 import { fetchBlockedUsers, type BlockedUserEntry } from "@/lib/blocks/list";
 import Link from "next/link";
@@ -70,9 +71,14 @@ export function BlockedUsersSection() {
                 <div className="min-w-0 flex-1">
                   <Link
                     href={`/profile/${user.userId}`}
-                    className="block truncate text-sm font-medium text-foreground hover:underline"
+                    className="block transition hover:opacity-90"
                   >
-                    @{user.username}
+                    <UserIdentity
+                      username={user.username}
+                      displayName={user.displayName}
+                      size="md"
+                      layout="stack"
+                    />
                   </Link>
                 </div>
                 <button

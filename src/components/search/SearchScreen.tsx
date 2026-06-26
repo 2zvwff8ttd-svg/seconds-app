@@ -1,6 +1,7 @@
 "use client";
 
 import { UserAvatar } from "@/components/search/UserAvatar";
+import { UserIdentity } from "@/components/profile/UserIdentity";
 import { searchUsers } from "@/lib/search/users";
 import { searchVideos } from "@/lib/search/videos";
 import type { SearchTab, SearchUserResult, SearchVideoResult } from "@/types/search";
@@ -182,9 +183,12 @@ export function SearchScreen() {
                     avatarUrl={user.avatarUrl}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      @{user.username}
-                    </p>
+                    <UserIdentity
+                      username={user.username}
+                      displayName={user.displayName}
+                      size="md"
+                      layout="stack"
+                    />
                     <p className="mt-0.5 text-xs text-muted">
                       フォロワー {formatFollowerCount(user.followerCount)}
                     </p>
@@ -232,9 +236,12 @@ export function SearchScreen() {
                     <p className="line-clamp-2 text-xs font-medium text-foreground">
                       {video.title}
                     </p>
-                    <p className="truncate text-[10px] text-violet-300/90">
-                      @{video.creatorName}
-                    </p>
+                    <UserIdentity
+                      username={video.creatorName}
+                      displayName={video.creatorDisplayName}
+                      size="sm"
+                      layout="stack"
+                    />
                   </div>
                 </button>
               </li>

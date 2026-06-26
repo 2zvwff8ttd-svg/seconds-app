@@ -234,6 +234,7 @@ export function BubbleField({ bottomInset, onCountryChange, onFeedReady }: Bubbl
       id: video.id,
       title: video.title,
       creatorName: video.creatorName,
+      creatorDisplayName: video.creatorDisplayName,
       thumbnailUrl: video.thumbnailUrl,
       clipThumbnailUrls: video.clipThumbnailUrls,
       videoUrl: video.videoUrl,

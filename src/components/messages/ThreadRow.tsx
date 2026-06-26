@@ -1,4 +1,5 @@
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { UserIdentity } from "@/components/profile/UserIdentity";
 import { formatRelativeTime } from "@/lib/utils/format-time";
 import type { DmThreadSummary } from "@/types/dm";
 import Link from "next/link";
@@ -25,9 +26,13 @@ export function ThreadRow({ thread, showPendingBadge }: ThreadRowProps) {
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate font-medium text-foreground">
-            @{thread.otherUsername}
-          </p>
+          <UserIdentity
+            username={thread.otherUsername}
+            displayName={thread.otherDisplayName}
+            size="md"
+            layout="stack"
+            className="min-w-0 flex-1"
+          />
           {timeLabel && (
             <span className="shrink-0 text-[10px] text-muted">{timeLabel}</span>
           )}

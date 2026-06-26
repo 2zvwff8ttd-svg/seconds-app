@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/client";
 export type BlockedUserEntry = {
   userId: string;
   username: string;
+  displayName: string | null;
   avatarUrl: string | null;
   blockedAt: string;
 };
@@ -44,7 +45,7 @@ export async function fetchBlockedUsers(): Promise<BlockedUserEntry[]> {
 
   const { data, error } = await supabase
     .from("user_blocks")
-    .select("blocked_id, created_at, profiles:blocked_id(username, avatar_url)")
+    .select("blocked_id, created_at, profiles:blocked_id(username, display_name, avatar_url)")
     .eq("blocker_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -59,6 +60,7 @@ export async function fetchBlockedUsers(): Promise<BlockedUserEntry[]> {
     return {
       userId: row.blocked_id as string,
       username: (profileRow?.username as string) ?? "unknown",
+      displayName: (profileRow?.display_name as string | null) ?? null,
       avatarUrl: (profileRow?.avatar_url as string | null) ?? null,
       blockedAt: row.created_at as string,
     };

@@ -129,7 +129,7 @@ export function computeNextPublishAtJst(from = new Date()): string {
 
 /** videos.user_id → profiles（video_engagements 経由の M2M と区別） */
 export const VIDEO_CREATOR_PROFILE_EMBED =
-  "profiles!user_id(username, avatar_url)";
+  "profiles!user_id(username, display_name, avatar_url)";
 
 export const BASE_VIDEO_SELECT = `
   id,

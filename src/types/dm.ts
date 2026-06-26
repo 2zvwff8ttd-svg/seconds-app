@@ -16,6 +16,7 @@ export type DmThreadSummary = {
   isRequest: boolean;
   otherUserId: string;
   otherUsername: string;
+  otherDisplayName: string | null;
   otherAvatarUrl: string | null;
   lastMessagePreview: string | null;
   lastMessageAt: string | null;

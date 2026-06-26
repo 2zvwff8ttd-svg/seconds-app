@@ -24,11 +24,16 @@ function otherParticipantId(
 
 async function fetchProfilesMap(userIds: string[]) {
   const supabase = createClient();
-  if (userIds.length === 0) return new Map<string, { username: string; avatar_url: string | null }>();
+  if (userIds.length === 0) {
+    return new Map<
+      string,
+      { username: string; display_name: string | null; avatar_url: string | null }
+    >();
+  }
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, username, avatar_url")
+    .select("id, username, display_name, avatar_url")
     .in("id", userIds);
 
   if (error) throw new Error(error.message);
@@ -38,6 +43,7 @@ async function fetchProfilesMap(userIds: string[]) {
       p.id as string,
       {
         username: p.username as string,
+        display_name: (p.display_name as string | null) ?? null,
         avatar_url: (p.avatar_url as string | null) ?? null,
       },
     ]),
@@ -100,6 +106,7 @@ export async function fetchDmThreadsForUser(): Promise<{
       isRequest,
       otherUserId: otherId,
       otherUsername: profile?.username ?? "unknown",
+      otherDisplayName: profile?.display_name ?? null,
       otherAvatarUrl: profile?.avatar_url ?? null,
       lastMessagePreview: row.last_message_preview,
       lastMessageAt: row.last_message_at,
@@ -146,6 +153,7 @@ export async function fetchDmThreadMeta(threadId: string): Promise<{
   isRequest: boolean;
   otherUserId: string;
   otherUsername: string;
+  otherDisplayName: string | null;
   otherAvatarUrl: string | null;
 } | null> {
   const supabase = createClient();
@@ -181,6 +189,7 @@ export async function fetchDmThreadMeta(threadId: string): Promise<{
     isRequest: thread.status === "pending" && !isInitiator,
     otherUserId: otherId,
     otherUsername: profile?.username ?? "unknown",
+    otherDisplayName: profile?.display_name ?? null,
     otherAvatarUrl: profile?.avatar_url ?? null,
   };
 }

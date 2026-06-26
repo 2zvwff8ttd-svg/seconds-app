@@ -11,6 +11,7 @@ export type FeedVideo = {
   title: string;
   creatorId: string;
   creatorName: string;
+  creatorDisplayName: string | null;
   creatorAvatar?: string;
   isViralTop?: boolean;
   countryCode?: string;

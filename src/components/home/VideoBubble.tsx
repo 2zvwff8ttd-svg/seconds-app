@@ -5,6 +5,7 @@ import {
   getVideoDisplayMaskCssVars,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
+import { resolveDisplayName } from "@/lib/profile/display-name";
 import { useCallback, useMemo, useRef, type CSSProperties } from "react";
 import type { BubbleOriginRect } from "@/lib/home/bubble-origin-rect";
 import { getBubbleOriginRect } from "@/lib/home/bubble-origin-rect";
@@ -18,6 +19,7 @@ export type BubbleVideoPreview = {
   id: string;
   title: string;
   creatorName: string;
+  creatorDisplayName?: string | null;
   thumbnailUrl?: string;
   clipThumbnailUrls?: string[];
   videoUrl?: string;
@@ -91,7 +93,7 @@ export function VideoBubble({
     >
       <button
         type="button"
-        aria-label={`${video.title} by ${video.creatorName}`}
+        aria-label={`${video.title} by ${resolveDisplayName(video.creatorDisplayName, video.creatorName)}`}
         onClick={handleClick}
         disabled={isHidden}
         className="group relative h-full w-full overflow-visible touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/80"

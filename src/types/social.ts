@@ -4,6 +4,7 @@ export type CommentItem = {
   createdAt: string;
   userId: string;
   username: string;
+  displayName: string | null;
   avatarUrl?: string | null;
 };
 

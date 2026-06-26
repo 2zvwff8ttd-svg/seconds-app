@@ -1,6 +1,7 @@
 export type ProfileData = {
   userId: string;
   username: string;
+  displayName: string | null;
   bio: string | null;
   avatarUrl: string | null;
   country: string;
@@ -15,6 +16,7 @@ export type FollowStats = {
 export type FollowListUser = {
   userId: string;
   username: string;
+  displayName: string | null;
   avatarUrl: string | null;
 };
 

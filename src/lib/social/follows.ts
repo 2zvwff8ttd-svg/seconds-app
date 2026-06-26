@@ -7,9 +7,17 @@ function mapFollowProfile(
 ): FollowListUser | null {
   const profile =
     Array.isArray(profiles) && profiles.length > 0
-      ? (profiles[0] as { username: string; avatar_url?: string | null })
+      ? (profiles[0] as {
+          username: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+        })
       : profiles && typeof profiles === "object" && "username" in profiles
-        ? (profiles as { username: string; avatar_url?: string | null })
+        ? (profiles as {
+            username: string;
+            display_name?: string | null;
+            avatar_url?: string | null;
+          })
         : null;
 
   if (!profile?.username) return null;
@@ -17,6 +25,7 @@ function mapFollowProfile(
   return {
     userId: profileId,
     username: profile.username,
+    displayName: profile.display_name ?? null,
     avatarUrl: profile.avatar_url ?? null,
   };
 }
@@ -25,14 +34,14 @@ export async function fetchFollowers(userId: string): Promise<FollowListUser[]> 
   const supabase = createClient();
   const { data, error } = await supabase
     .from("follows")
-    .select("follower_id, profiles!follower_id(username, avatar_url)")
+    .select("follower_id, profiles!follower_id(username, display_name, avatar_url)")
     .eq("following_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) {
     const fallback = await supabase
       .from("follows")
-      .select("follower_id, profiles!follower_id(username, avatar_url)")
+      .select("follower_id, profiles!follower_id(username, display_name, avatar_url)")
       .eq("following_id", userId)
       .order("created_at", { ascending: false });
     if (fallback.error) throw new Error(fallback.error.message);
@@ -60,14 +69,14 @@ export async function fetchFollowing(userId: string): Promise<FollowListUser[]> 
   const supabase = createClient();
   const { data, error } = await supabase
     .from("follows")
-    .select("following_id, profiles!following_id(username, avatar_url)")
+    .select("following_id, profiles!following_id(username, display_name, avatar_url)")
     .eq("follower_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) {
     const fallback = await supabase
       .from("follows")
-      .select("following_id, profiles!following_id(username, avatar_url)")
+      .select("following_id, profiles!following_id(username, display_name, avatar_url)")
       .eq("follower_id", userId)
       .order("created_at", { ascending: false });
     if (fallback.error) throw new Error(fallback.error.message);

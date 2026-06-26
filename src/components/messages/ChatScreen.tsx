@@ -2,6 +2,7 @@
 
 import { MessageComposer } from "@/components/messages/MessageComposer";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { UserIdentity } from "@/components/profile/UserIdentity";
 import {
   fetchDmMessages,
   markDmThreadRead,
@@ -24,6 +25,7 @@ type ChatScreenProps = {
   threadId?: string;
   recipientUserId?: string;
   recipientUsername?: string;
+  recipientDisplayName?: string | null;
   recipientAvatarUrl?: string | null;
 };
 
@@ -31,6 +33,7 @@ export function ChatScreen({
   threadId: initialThreadId,
   recipientUserId,
   recipientUsername,
+  recipientDisplayName,
   recipientAvatarUrl,
 }: ChatScreenProps) {
   const router = useRouter();
@@ -43,6 +46,9 @@ export function ChatScreen({
   const [isInitiator, setIsInitiator] = useState(false);
   const [otherUserId, setOtherUserId] = useState(recipientUserId ?? "");
   const [otherUsername, setOtherUsername] = useState(recipientUsername ?? "");
+  const [otherDisplayName, setOtherDisplayName] = useState<string | null>(
+    recipientDisplayName ?? null,
+  );
   const [otherAvatarUrl, setOtherAvatarUrl] = useState(recipientAvatarUrl ?? null);
   const [handlingRequest, setHandlingRequest] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -69,6 +75,7 @@ export function ChatScreen({
     setIsInitiator(meta.isInitiator);
     setOtherUserId(meta.otherUserId);
     setOtherUsername(meta.otherUsername);
+    setOtherDisplayName(meta.otherDisplayName);
     setOtherAvatarUrl(meta.otherAvatarUrl);
   }, []);
 
@@ -216,9 +223,12 @@ export function ChatScreen({
           size="sm"
         />
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold text-foreground">
-            @{otherUsername || "…"}
-          </p>
+          <UserIdentity
+            username={otherUsername || "…"}
+            displayName={otherDisplayName}
+            size="md"
+            layout="stack"
+          />
           {isRequest && (
             <p className="text-[10px] text-amber-300">メッセージリクエスト</p>
           )}

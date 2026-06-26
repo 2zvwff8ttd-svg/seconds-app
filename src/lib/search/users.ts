@@ -14,8 +14,8 @@ export async function searchUsers(query: string): Promise<SearchUserResult[]> {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, username, avatar_url")
-    .ilike("username", pattern)
+    .select("id, username, display_name, avatar_url")
+    .or(`username.ilike.${pattern},display_name.ilike.${pattern}`)
     .order("username", { ascending: true })
     .limit(SEARCH_LIMIT);
 
@@ -37,6 +37,7 @@ export async function searchUsers(query: string): Promise<SearchUserResult[]> {
   return data.map((row, index) => ({
     userId: row.id,
     username: row.username,
+    displayName: (row.display_name as string | null) ?? null,
     avatarUrl: row.avatar_url ?? null,
     followerCount: counts[index] ?? 0,
   }));

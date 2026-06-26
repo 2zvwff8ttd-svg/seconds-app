@@ -78,7 +78,7 @@ export async function fetchProfile(userId: string) {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, username, bio, avatar_url, country")
+    .select("id, username, display_name, bio, avatar_url, country")
     .eq("id", userId)
     .maybeSingle();
 
@@ -88,6 +88,7 @@ export async function fetchProfile(userId: string) {
   return {
     userId: data.id,
     username: data.username,
+    displayName: (data.display_name as string | null) ?? null,
     bio: data.bio,
     avatarUrl: data.avatar_url,
     country: data.country,

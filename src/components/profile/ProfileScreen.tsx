@@ -10,6 +10,7 @@ import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import { FollowButton } from "@/components/profile/FollowButton";
 import { FollowListModal } from "@/components/profile/FollowListModal";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { UserIdentity } from "@/components/profile/UserIdentity";
 import { ProfileStats } from "@/components/profile/ProfileStats";
 import { ProfileVideoTile } from "@/components/profile/ProfileVideoTile";
 import { FullscreenPlayer } from "@/components/home/FullscreenPlayer";
@@ -208,7 +209,12 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
                 size="lg"
               />
               <div>
-                <h2 className="text-lg font-bold text-foreground">@{profile.username}</h2>
+                <UserIdentity
+                  username={profile.username}
+                  displayName={profile.displayName}
+                  size="lg"
+                  layout="stack"
+                />
                 {profile.bio && (
                   <p className="mt-1 text-sm text-muted">{profile.bio}</p>
                 )}
@@ -368,11 +374,23 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
         <EditProfileModal
           profile={profile}
           onClose={() => setEditOpen(false)}
-          onUpdated={(avatarUrl) =>
-            setProfile((prev) =>
-              prev ? { ...prev, avatarUrl } : prev,
-            )
-          }
+          onUpdated={(updates) => {
+            setProfile((prev) => {
+              if (!prev) return prev;
+              const next = { ...prev, ...updates };
+              writeNavCache<OwnProfileCacheData>(NAV_CACHE_KEYS.OWN_PROFILE, {
+                profile: next,
+                followStats: followStats ?? {
+                  followerCount: 0,
+                  followingCount: 0,
+                  isFollowing: false,
+                },
+                userVideos,
+                likedVideos,
+              });
+              return next;
+            });
+          }}
         />
       )}
 

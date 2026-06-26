@@ -15,6 +15,7 @@ export default function NewMessagePage({ params }: PageProps) {
   const { userId } = use(params);
   const router = useRouter();
   const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export default function NewMessagePage({ params }: PageProps) {
 
         const profile = await fetchProfile(userId);
         setUsername(profile.username);
+        setDisplayName(profile.displayName);
         setAvatarUrl(profile.avatarUrl);
       } catch (err) {
         setError(err instanceof Error ? err.message : "読み込みに失敗しました");
@@ -69,6 +71,7 @@ export default function NewMessagePage({ params }: PageProps) {
       <ChatScreen
         recipientUserId={userId}
         recipientUsername={username}
+        recipientDisplayName={displayName}
         recipientAvatarUrl={avatarUrl}
       />
     </div>

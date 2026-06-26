@@ -14,3 +14,25 @@ export function validateSignupUsername(raw: string): string | null {
   }
   return null;
 }
+
+/** Profile username change: required, lowercase a-z0-9_, 2–30 chars. */
+export function validateProfileUsername(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return "ユーザー名を入力してください";
+  }
+  if (trimmed !== trimmed.toLowerCase()) {
+    return "ユーザー名は半角小文字の英数字とアンダースコアのみ使えます";
+  }
+  if (!/^[a-z0-9_]+$/.test(trimmed)) {
+    return "ユーザー名は半角英数字とアンダースコアのみ使えます";
+  }
+  if (trimmed.length < 2 || trimmed.length > 30) {
+    return "ユーザー名は2文字以上30文字以内にしてください";
+  }
+  return null;
+}
+
+export function normalizeProfileUsername(raw: string): string {
+  return sanitizeSignupUsername(raw);
+}

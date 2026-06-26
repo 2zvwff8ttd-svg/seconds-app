@@ -1,6 +1,7 @@
 "use client";
 
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { UserIdentity } from "@/components/profile/UserIdentity";
 import { fetchFollowers, fetchFollowing } from "@/lib/social/follows";
 import type { FollowListKind, FollowListUser } from "@/types/profile";
 import { useRouter } from "next/navigation";
@@ -35,8 +36,13 @@ function UserRow({
         avatarUrl={user.avatarUrl}
         size="sm"
       />
-      <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-        @{user.username}
+      <span className="min-w-0 flex-1">
+        <UserIdentity
+          username={user.username}
+          displayName={user.displayName}
+          size="md"
+          layout="stack"
+        />
       </span>
       <svg
         viewBox="0 0 24 24"

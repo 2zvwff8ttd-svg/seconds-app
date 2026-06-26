@@ -14,6 +14,7 @@ export type AppNotification = {
   createdAt: string;
   actorId: string | null;
   actorUsername: string | null;
+  actorDisplayName: string | null;
   videoId: string | null;
   commentId: string | null;
 };

@@ -2,20 +2,41 @@ import { parseVideoDisplayMaskShape } from "@/lib/video/display-mask";
 import type { FeedVideo } from "@/types/feed";
 import type { VideoRow } from "@/types/video";
 
-export function normalizeVideoRow(row: Record<string, unknown>): VideoRow {
-  const profiles = row.profiles;
+type ProfileEmbed = {
+  username: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+};
+
+function parseProfileEmbed(profiles: unknown): ProfileEmbed | null {
   const profile =
     Array.isArray(profiles) && profiles.length > 0
-      ? (profiles[0] as { username: string; avatar_url?: string | null })
+      ? (profiles[0] as ProfileEmbed)
       : profiles && typeof profiles === "object" && "username" in profiles
-        ? (profiles as { username: string; avatar_url?: string | null })
+        ? (profiles as ProfileEmbed)
         : null;
+
+  if (!profile?.username) return null;
+
+  return {
+    username: profile.username,
+    display_name: profile.display_name ?? null,
+    avatar_url: profile.avatar_url ?? null,
+  };
+}
+
+export function normalizeVideoRow(row: Record<string, unknown>): VideoRow {
+  const profile = parseProfileEmbed(row.profiles);
 
   return {
     ...(row as Omit<VideoRow, "profiles" | "display_mask_shape">),
     display_mask_shape: parseVideoDisplayMaskShape(row.display_mask_shape),
     profiles: profile
-      ? { username: profile.username, avatar_url: profile.avatar_url ?? null }
+      ? {
+          username: profile.username,
+          display_name: profile.display_name ?? null,
+          avatar_url: profile.avatar_url ?? null,
+        }
       : null,
     status: (row.status as VideoRow["status"]) ?? "published",
     publish_at: (row.publish_at as string | null) ?? null,
@@ -40,6 +61,7 @@ export function videoRowToFeedVideo(
     title: row.title || "Untitled",
     creatorId: row.user_id,
     creatorName: row.profiles?.username ?? "unknown",
+    creatorDisplayName: row.profiles?.display_name ?? null,
     creatorAvatar: row.profiles?.avatar_url ?? undefined,
     isViralTop: options?.isViralTop,
     countryCode: row.country,

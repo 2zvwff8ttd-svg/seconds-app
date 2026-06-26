@@ -17,7 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchVideoClipUrls } from "@/lib/videos/clips";
 import type { FeedVideo } from "@/types/feed";
 import type { WatchReport } from "@/types/recommendation";
-import Link from "next/link";
+import { UserIdentity } from "@/components/profile/UserIdentity";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const COMPLETE_PROGRESS_THRESHOLD = 0.92;
@@ -491,13 +491,16 @@ export function FullscreenPlayer({
           <p className="text-base font-semibold text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.65)] sm:text-lg">
             {video.title}
           </p>
-          <Link
+          <UserIdentity
+            username={video.creatorName}
+            displayName={video.creatorDisplayName}
+            size="md"
+            layout="stack"
+            tone="light"
             href={`/profile/${video.creatorId}`}
             onClick={requestClose}
-            className="mt-0.5 inline-block text-sm text-violet-200 drop-shadow-[0_1px_4px_rgba(0,0,0,0.55)] transition hover:text-white hover:underline"
-          >
-            @{video.creatorName}
-          </Link>
+            className="mt-0.5 drop-shadow-[0_1px_4px_rgba(0,0,0,0.55)] transition hover:opacity-90"
+          />
           {video.isViralTop && (
             <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gold/25 px-3 py-1 text-xs font-medium text-gold backdrop-blur-sm">
               <span aria-hidden>👑</span>

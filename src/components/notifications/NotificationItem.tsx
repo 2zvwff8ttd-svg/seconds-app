@@ -5,6 +5,7 @@ import {
   notificationTypeLabel,
 } from "@/lib/notifications/navigation";
 import { formatRelativeTime } from "@/lib/utils/format-time";
+import { UserIdentity } from "@/components/profile/UserIdentity";
 import type { AppNotification } from "@/types/notification";
 import { useRouter } from "next/navigation";
 
@@ -52,9 +53,12 @@ export function NotificationItem({
 }: NotificationItemProps) {
   const router = useRouter();
   const href = getNotificationHref(notification);
-  const sender =
+  const senderUsername =
     notification.actorUsername ??
-    (notification.type === "morning_digest" ? "システム" : "ユーザー");
+    (notification.type === "morning_digest" ? "system" : "user");
+  const senderDisplayName =
+    notification.actorDisplayName ??
+    (notification.type === "morning_digest" ? "システム" : null);
 
   const handleClick = () => {
     if (!notification.read) {
@@ -98,7 +102,19 @@ export function NotificationItem({
           {notification.title}
         </span>
         <span className="mt-0.5 block text-xs text-muted">
-          <span className="text-foreground/70">@{sender}</span>
+          {notification.type === "morning_digest" ? (
+            <span className="text-foreground/70">システム</span>
+          ) : notification.actorUsername ? (
+            <UserIdentity
+              username={senderUsername}
+              displayName={senderDisplayName}
+              size="sm"
+              layout="inline"
+              className="inline-flex"
+            />
+          ) : (
+            <span className="text-foreground/70">ユーザー</span>
+          )}
           {notification.body ? ` · ${notification.body}` : null}
         </span>
       </span>

@@ -11,16 +11,16 @@ const NOTIFICATION_SELECT = `
   actor_id,
   video_id,
   comment_id,
-  actor:profiles!actor_id (username)
+  actor:profiles!actor_id (username, display_name)
 `;
 
 function mapNotification(row: Record<string, unknown>): AppNotification {
   const actor = row.actor;
   const actorProfile =
     Array.isArray(actor) && actor.length > 0
-      ? (actor[0] as { username: string })
+      ? (actor[0] as { username: string; display_name?: string | null })
       : actor && typeof actor === "object" && "username" in actor
-        ? (actor as { username: string })
+        ? (actor as { username: string; display_name?: string | null })
         : null;
 
   return {
@@ -32,6 +32,7 @@ function mapNotification(row: Record<string, unknown>): AppNotification {
     createdAt: row.created_at as string,
     actorId: (row.actor_id as string | null) ?? null,
     actorUsername: actorProfile?.username ?? null,
+    actorDisplayName: actorProfile?.display_name ?? null,
     videoId: (row.video_id as string | null) ?? null,
     commentId: (row.comment_id as string | null) ?? null,
   };

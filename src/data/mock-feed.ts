@@ -16,6 +16,7 @@ export const MOCK_FEED: FeedVideo[] = [
     title: "朝焼けの渋谷スカイライン",
     creatorId: "00000000-0000-0000-0000-000000000001",
     creatorName: "yuki_tokyo",
+    creatorDisplayName: null,
     isViralTop: true,
     countryCode: "JP",
   },
@@ -25,6 +26,7 @@ export const MOCK_FEED: FeedVideo[] = [
     title: "Rainy window coffee ritual",
     creatorId: "00000000-0000-0000-0000-000000000002",
     creatorName: "maya_lens",
+    creatorDisplayName: null,
   },
   {
     id: "feed-3",
@@ -32,6 +34,7 @@ export const MOCK_FEED: FeedVideo[] = [
     title: "Midnight bike loop",
     creatorId: "00000000-0000-0000-0000-000000000003",
     creatorName: "kai_rides",
+    creatorDisplayName: null,
   },
   {
     id: "feed-4",
@@ -39,6 +42,7 @@ export const MOCK_FEED: FeedVideo[] = [
     title: "Studio light test",
     creatorId: "00000000-0000-0000-0000-000000000004",
     creatorName: "nova_edit",
+    creatorDisplayName: null,
   },
   {
     id: "feed-5",
@@ -46,6 +50,7 @@ export const MOCK_FEED: FeedVideo[] = [
     title: "Kitchen ASMR chop",
     creatorId: "00000000-0000-0000-0000-000000000005",
     creatorName: "chef_min",
+    creatorDisplayName: null,
   },
   {
     id: "feed-6",
@@ -53,5 +58,6 @@ export const MOCK_FEED: FeedVideo[] = [
     title: "Golden hour rooftop",
     creatorId: "00000000-0000-0000-0000-000000000006",
     creatorName: "leo_frames",
+    creatorDisplayName: null,
   },
 ];

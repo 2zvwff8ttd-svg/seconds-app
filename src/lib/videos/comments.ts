@@ -8,9 +8,17 @@ function mapComment(row: Record<string, unknown>): CommentItem {
   const profiles = row.profiles;
   const profile =
     Array.isArray(profiles) && profiles.length > 0
-      ? (profiles[0] as { username: string; avatar_url?: string | null })
+      ? (profiles[0] as {
+          username: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+        })
       : profiles && typeof profiles === "object" && "username" in profiles
-        ? (profiles as { username: string; avatar_url?: string | null })
+        ? (profiles as {
+            username: string;
+            display_name?: string | null;
+            avatar_url?: string | null;
+          })
         : null;
 
   return {
@@ -19,6 +27,7 @@ function mapComment(row: Record<string, unknown>): CommentItem {
     createdAt: row.created_at as string,
     userId: row.user_id as string,
     username: profile?.username ?? "unknown",
+    displayName: profile?.display_name ?? null,
     avatarUrl: profile?.avatar_url ?? null,
   };
 }
@@ -27,7 +36,9 @@ export async function fetchComments(videoId: string): Promise<CommentItem[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("comments")
-    .select("id, content, created_at, user_id, profiles!user_id(username, avatar_url)")
+    .select(
+      "id, content, created_at, user_id, profiles!user_id(username, display_name, avatar_url)",
+    )
     .eq("video_id", videoId)
     .order("created_at", { ascending: true });
 
@@ -65,7 +76,9 @@ export async function postComment(
       user_id: user.id,
       content: trimmed,
     })
-    .select("id, content, created_at, user_id, profiles!user_id(username, avatar_url)")
+    .select(
+      "id, content, created_at, user_id, profiles!user_id(username, display_name, avatar_url)",
+    )
     .single();
 
   if (error) throw new Error(error.message);

@@ -18,7 +18,11 @@ export type VideoRow = {
   view_count: number;
   created_at: string;
   display_mask_shape?: string | null;
-  profiles: { username: string; avatar_url?: string | null } | null;
+  profiles: {
+    username: string;
+    display_name?: string | null;
+    avatar_url?: string | null;
+  } | null;
 };
 
 export type PostUploadStage =

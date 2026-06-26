@@ -71,6 +71,7 @@ export async function searchVideos(query: string): Promise<SearchVideoResult[]> 
       thumbnailUrl: normalized.thumbnail_url ?? undefined,
       creatorId: normalized.user_id,
       creatorName: normalized.profiles?.username ?? "unknown",
+      creatorDisplayName: normalized.profiles?.display_name ?? null,
     };
   });
 }
