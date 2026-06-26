@@ -34,7 +34,7 @@ function ShapeIcon({ shape }: { shape: VideoDisplayMaskShape }) {
   if (shape === "heart") {
     return (
       <path
-        d="M 50 92 C 50 92 8 60 8 34 C 8 14 24 4 50 22 C 76 4 92 14 92 34 C 92 60 50 92 50 92 Z"
+        d={getVideoDisplayMask("heart").pickerIconPath}
         fill="none"
         stroke="currentColor"
         strokeWidth="4"

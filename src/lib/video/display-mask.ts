@@ -80,13 +80,15 @@ export const DISPLAY_MASK_HEART_CLIP_ID = "seconds-display-mask-heart";
 /**
  * Emoji-style heart (❤️): two round upper lobes, top cleft, bottom tip.
  * 0–100 design space — shared by record scrim SVG and picker icon.
+ *
+ * Tune cleft depth via HEART_CLEFT_Y (higher Y = deeper valley between lobes).
  */
-export const HEART_MASK_PATH_D =
-  "M 50 92 C 50 92 8 60 8 34 C 8 14 24 4 50 22 C 76 4 92 14 92 34 C 92 60 50 92 50 92 Z";
+const HEART_CLEFT_Y = 26;
+
+export const HEART_MASK_PATH_D = `M 50 92 C 50 92 8 60 8 34 C 8 14 24 4 50 ${HEART_CLEFT_Y} C 76 4 92 14 92 34 C 92 60 50 92 50 92 Z`;
 
 /** Same heart normalized to objectBoundingBox (0–1) for responsive clip-path. */
-export const HEART_MASK_PATH_OBJECT_BOUNDING_BOX_D =
-  "M 0.5 0.92 C 0.5 0.92 0.08 0.60 0.08 0.34 C 0.08 0.14 0.24 0.04 0.5 0.22 C 0.76 0.04 0.92 0.14 0.92 0.34 C 0.92 0.60 0.5 0.92 0.5 0.92 Z";
+export const HEART_MASK_PATH_OBJECT_BOUNDING_BOX_D = `M 0.5 0.92 C 0.5 0.92 0.08 0.60 0.08 0.34 C 0.08 0.14 0.24 0.04 0.5 ${HEART_CLEFT_Y / 100} C 0.76 0.04 0.92 0.14 0.92 0.34 C 0.92 0.60 0.5 0.92 0.5 0.92 Z`;
 
 const HEART_CLIP_PATH = `url(#${DISPLAY_MASK_HEART_CLIP_ID})`;
 
