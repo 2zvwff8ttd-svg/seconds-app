@@ -1565,26 +1565,31 @@ html.record-native-preview-active body {
   right: 0;
   bottom: var(--record-layout-dock-bottom);
   z-index: var(--z-record-dock);
-  display: grid;
-  grid-template-rows: auto var(--record-dock-status-height, 1.25rem) auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-items: center;
   gap: 0.65rem;
   padding: 0 1rem 0.25rem;
   pointer-events: none;
 }
 
 .record-stage-ui__dock > .record-shape-picker {
-  position: relative;
+  align-self: stretch;
   z-index: var(--z-record-shape-picker);
   width: calc(100% + 2rem);
   max-width: calc(100% + 2rem);
   margin-inline: -1rem;
 }
 
+.record-stage-ui__dock > .record-stage-ui__record {
+  flex-shrink: 0;
+  margin-inline: auto;
+}
+
 .record-stage-ui__dock-status {
   position: relative;
   width: 100%;
+  max-width: 100%;
   height: var(--record-dock-status-height, 1.25rem);
   flex-shrink: 0;
   pointer-events: none;
