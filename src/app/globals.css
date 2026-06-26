@@ -1237,7 +1237,8 @@ body {
     150  loading overlay
     200  time gauge
     210  flip camera
-    300  bottom dock (shape picker + record) — portal on body
+    300  bottom dock (record button + status)
+    310  shape picker carousel (above scrim, with dock)
    Native camera: fullscreen behind WebView (toBack). Scrim punches hole only.
    Tune hole/dock/scale in display-mask.ts → RECORD_LAYOUT + visualScale.
    ─────────────────────────────────────────────────────────────────────── */
@@ -1247,6 +1248,7 @@ body {
   --z-record-loading: 150;
   --z-record-gauge: 200;
   --z-record-flip: 210;
+  --z-record-shape-picker: 310;
   --z-record-dock: 300;
   --record-layout-top-reserve: 76px;
   --record-layout-bottom-nav: 88px;
@@ -1573,6 +1575,8 @@ html.record-native-preview-active body {
 }
 
 .record-stage-ui__dock > .record-shape-picker {
+  position: relative;
+  z-index: var(--z-record-shape-picker);
   width: calc(100% + 2rem);
   max-width: calc(100% + 2rem);
   margin-inline: -1rem;

@@ -20,6 +20,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { RecordStagePortal } from "@/components/record/RecordStagePortal";
 
 /** Sub-pixel expansion so luminance-mask antialiasing does not leave scrim fringing. */
 const HOLE_MASK_BLEED_PX = 1;
@@ -194,7 +195,7 @@ function holeRectToRimStyle(holeRect: RecordHoleRect): CSSProperties {
 
 /**
  * Fixed viewport scrim with a shape cutout. Native fullscreen camera shows through the hole.
- * Overlay is pinned to visualViewport so scrim holes align on iOS WKWebView / Safari.
+ * Portaled to document.body (with dock) so WKWebView respects z-index over the shape picker.
  */
 export function RecordMaskOverlay({
   shape = DEFAULT_VIDEO_DISPLAY_MASK,
@@ -213,27 +214,29 @@ export function RecordMaskOverlay({
   };
 
   return (
-    <div
-      className="record-mask-overlay"
-      style={overlayStyle}
-      aria-hidden
-    >
-      {holeRect ? (
-        <RecordSvgScrim
-          shape={shape}
-          holeRect={holeRect}
-          maskId={maskId}
-          viewport={viewport}
-        />
-      ) : (
-        <div className="record-mask-overlay__scrim record-mask-overlay__scrim--pending" />
-      )}
-      {holeRect && (
-        <div
-          className={`record-mask-overlay__rim${cameraReady ? " record-mask-overlay__rim--ready" : ""}`}
-          style={holeRectToRimStyle(holeRect)}
-        />
-      )}
-    </div>
+    <RecordStagePortal>
+      <div
+        className="record-mask-overlay"
+        style={overlayStyle}
+        aria-hidden
+      >
+        {holeRect ? (
+          <RecordSvgScrim
+            shape={shape}
+            holeRect={holeRect}
+            maskId={maskId}
+            viewport={viewport}
+          />
+        ) : (
+          <div className="record-mask-overlay__scrim record-mask-overlay__scrim--pending" />
+        )}
+        {holeRect && (
+          <div
+            className={`record-mask-overlay__rim${cameraReady ? " record-mask-overlay__rim--ready" : ""}`}
+            style={holeRectToRimStyle(holeRect)}
+          />
+        )}
+      </div>
+    </RecordStagePortal>
   );
 }

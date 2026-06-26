@@ -15,6 +15,8 @@ export const RECORD_STAGE_Z = {
   gauge: 200,
   /** Front / rear camera flip */
   flip: 210,
-  /** Bottom dock: shape picker + record button (always topmost) */
+  /** Bottom dock: record button + status (portaled to body) */
   dock: 300,
+  /** Shape picker row — above scrim, grouped with dock */
+  shapePicker: 310,
 } as const;

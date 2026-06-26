@@ -28,7 +28,7 @@ type RecordStageControlsProps = {
  * Fixed record UI on document.body (z-record-dock) — above the scrim cutout.
  *
  * Layer stack (low → high): formContent 50 → scrim 100 → loading 150 → gauge 200
- * → flip 210 → dock 300
+ * → flip 210 → dock 300 → shape picker 310 (all portaled on body for WKWebView)
  */
 export function RecordStageControls({
   assignedSeconds,
