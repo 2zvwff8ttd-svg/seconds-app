@@ -5,6 +5,40 @@ import type { SearchUserResult } from "@/types/search";
 const SEARCH_LIMIT = 20;
 const MIN_QUERY_LENGTH = 2;
 
+export type MentionSearchResult = {
+  userId: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+};
+
+/** Lightweight user search for @mention autocomplete (no follower counts). */
+export async function searchUsersForMention(
+  query: string,
+): Promise<MentionSearchResult[]> {
+  const term = query.trim();
+  if (term.length < MIN_QUERY_LENGTH) return [];
+
+  const supabase = createClient();
+  const pattern = `%${escapeIlikePattern(term)}%`;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, avatar_url")
+    .or(`username.ilike.${pattern},display_name.ilike.${pattern}`)
+    .order("username", { ascending: true })
+    .limit(SEARCH_LIMIT);
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((row) => ({
+    userId: row.id,
+    username: row.username,
+    displayName: (row.display_name as string | null) ?? null,
+    avatarUrl: row.avatar_url ?? null,
+  }));
+}
+
 export async function searchUsers(query: string): Promise<SearchUserResult[]> {
   const term = query.trim();
   if (term.length < MIN_QUERY_LENGTH) return [];

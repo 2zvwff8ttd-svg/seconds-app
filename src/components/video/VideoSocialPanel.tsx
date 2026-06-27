@@ -3,6 +3,9 @@
 import { ReportButton } from "@/components/reports/ReportButton";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { UserIdentity } from "@/components/profile/UserIdentity";
+import { CommentMentionBody } from "@/components/social/CommentMentionBody";
+import { MentionAutocompleteInput } from "@/components/social/MentionAutocompleteInput";
+import { useMentionProfileMap } from "@/hooks/useMentionProfileMap";
 import { fetchComments, postComment, subscribeCommentUpdates } from "@/lib/videos/comments";
 import { fetchLikeState, subscribeLikeUpdates, toggleLike } from "@/lib/videos/likes";
 import type { CommentItem, LikeState } from "@/types/social";
@@ -41,7 +44,9 @@ export function VideoSocialPanel({
   const [draft, setDraft] = useState("");
   const [likeLoading, setLikeLoading] = useState(false);
   const [commentLoading, setCommentLoading] = useState(false);
+  const [mentionActive, setMentionActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mentionProfileMap = useMentionProfileMap(comments);
 
   const load = useCallback(async () => {
     const [likes, list] = await Promise.all([
@@ -92,7 +97,7 @@ export function VideoSocialPanel({
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (commentLoading || !draft.trim()) return;
+    if (mentionActive || commentLoading || !draft.trim()) return;
     setCommentLoading(true);
     setError(null);
     try {
@@ -200,13 +205,14 @@ export function VideoSocialPanel({
                   />
                 )}
               </div>
-              <p
+              <CommentMentionBody
+                content={comment.content}
+                profileMap={mentionProfileMap}
+                tone={isOverlay ? "light" : "default"}
                 className={`mt-0.5 leading-relaxed ${
                   isOverlay ? "text-white/90" : "text-foreground/90"
                 }`}
-              >
-                {comment.content}
-              </p>
+              />
             </div>
           </li>
         ))}
@@ -218,14 +224,15 @@ export function VideoSocialPanel({
           isOverlay ? "border-t border-white/15" : "border-t border-border"
         }`}
       >
-        <input
-          type="text"
+        <MentionAutocompleteInput
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={setDraft}
+          onMentionActiveChange={setMentionActive}
           maxLength={500}
           placeholder="コメントを追加…"
           disabled={commentLoading}
-          className={`min-w-0 flex-1 rounded-xl border px-3 py-2.5 text-sm outline-none disabled:opacity-50 ${
+          variant={variant}
+          className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none disabled:opacity-50 ${
             isOverlay
               ? "border-white/20 bg-black/45 text-white backdrop-blur-md placeholder:text-white/45 focus:border-violet-300/50 focus:ring-1 focus:ring-violet-300/30"
               : "border-border bg-surface text-foreground placeholder:text-muted/60 focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
