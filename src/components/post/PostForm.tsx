@@ -2,6 +2,7 @@
 
 import { AiEnhancePanel } from "@/components/post/AiEnhancePanel";
 import { BonusDayCountdownNote } from "@/components/post/BonusDayCountdownNote";
+import { ThumbnailPicker } from "@/components/post/ThumbnailPicker";
 import { CameraRecorder } from "@/components/record/CameraRecorder";
 import { ClipStrip } from "@/components/record/ClipStrip";
 import { analyzeVideoFrame, generateAiMusic } from "@/lib/ai/client";
@@ -313,6 +314,12 @@ export function PostForm() {
     setTitleTouched(false);
   }, []);
 
+  const handleThumbnailSelected = useCallback((blob: Blob) => {
+    const firstClip = clips[0];
+    if (!firstClip) return;
+    clipThumbnailCacheRef.current.set(firstClip.id, blob);
+  }, [clips]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canPost) return;
@@ -474,6 +481,14 @@ export function PostForm() {
               disabled={isUploading}
               displayMaskShape={displayMaskShape}
             />
+            {clips[0] && (
+              <ThumbnailPicker
+                clip={clips[0]}
+                displayMaskShape={displayMaskShape}
+                disabled={isUploading}
+                onThumbnailSelected={handleThumbnailSelected}
+              />
+            )}
             <AiEnhancePanel
               status={aiStatus}
               aiMusicEnabled={aiMusicEnabled}

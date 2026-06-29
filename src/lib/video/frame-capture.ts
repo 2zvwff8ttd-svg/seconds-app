@@ -5,7 +5,14 @@ export type CaptureVideoFrameOptions = {
   jpegQuality?: number;
   metadataTimeoutMs?: number;
   seekTimeoutMs?: number;
+  /** Seconds into the clip; defaults to ~5% in (avoids black first frames). */
+  seekTime?: number;
 };
+
+/** Default seek for auto thumbnails — matches legacy first-frame behavior. */
+export function defaultVideoFrameSeekTime(duration: number): number {
+  return duration > 0 ? Math.min(0.05, duration * 0.05) : 0;
+}
 
 function scaleToMaxEdge(
   width: number,
@@ -58,8 +65,11 @@ export async function captureVideoFrameBlob(
       };
     });
 
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
     const seekTarget =
-      video.duration > 0 ? Math.min(0.05, video.duration * 0.05) : 0;
+      options?.seekTime !== undefined
+        ? Math.max(0, Math.min(options.seekTime, duration > 0 ? duration : options.seekTime))
+        : defaultVideoFrameSeekTime(duration);
     video.currentTime = seekTarget;
 
     await new Promise<void>((resolve, reject) => {
