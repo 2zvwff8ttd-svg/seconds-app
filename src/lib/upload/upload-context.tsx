@@ -25,6 +25,8 @@ export type StartUploadInput = {
   clips: PostClipInput[];
   thumbnailSource?: File;
   precomputedClipThumbnails?: Array<Blob | undefined>;
+  /** ホームバブル用（任意クリップの選択フレーム） */
+  bubbleThumbnailBlob?: Blob;
   bgmUrl?: string;
   title: string;
   visibility: VideoVisibility;
@@ -77,6 +79,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         clips: input.clips,
         thumbnailSource: input.thumbnailSource,
         precomputedClipThumbnails: input.precomputedClipThumbnails,
+        bubbleThumbnailBlob: input.bubbleThumbnailBlob,
         bgmUrl: input.bgmUrl,
         title: input.title,
         visibility: input.visibility,

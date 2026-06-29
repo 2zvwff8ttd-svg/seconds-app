@@ -95,6 +95,7 @@ export function PostForm() {
   const [aiError, setAiError] = useState<string | null>(null);
   const aiRunId = useRef(0);
   const clipThumbnailCacheRef = useRef<Map<string, Blob>>(new Map());
+  const bubbleThumbnailRef = useRef<Blob | null>(null);
 
   const {
     isUploading,
@@ -189,6 +190,10 @@ export function PostForm() {
   const canPost = hasContent && budgetExhausted && !isUploading && bgmReady;
   const showPostDetails = budgetExhausted && hasContent;
   const clipKey = useMemo(() => clips.map((c) => c.id).join(","), [clips]);
+
+  useEffect(() => {
+    bubbleThumbnailRef.current = null;
+  }, [clipKey]);
 
   const runMusicGeneration = useCallback(
     async (result: AiAnalyzeResult, totalSeconds: number, runId: number) => {
@@ -314,11 +319,12 @@ export function PostForm() {
     setTitleTouched(false);
   }, []);
 
-  const handleThumbnailSelected = useCallback((blob: Blob) => {
-    const firstClip = clips[0];
-    if (!firstClip) return;
-    clipThumbnailCacheRef.current.set(firstClip.id, blob);
-  }, [clips]);
+  const handleBubbleThumbnailSelected = useCallback(
+    (_clipIndex: number, blob: Blob) => {
+      bubbleThumbnailRef.current = blob;
+    },
+    [],
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -343,6 +349,7 @@ export function PostForm() {
       precomputedClipThumbnails: clips.map((clip) =>
         clipThumbnailCacheRef.current.get(clip.id),
       ),
+      bubbleThumbnailBlob: bubbleThumbnailRef.current ?? undefined,
       bgmUrl: presetBgmUrl,
       title,
       visibility,
@@ -481,12 +488,12 @@ export function PostForm() {
               disabled={isUploading}
               displayMaskShape={displayMaskShape}
             />
-            {clips[0] && (
+            {clips.length > 0 && (
               <ThumbnailPicker
-                clip={clips[0]}
+                clips={clips}
                 displayMaskShape={displayMaskShape}
                 disabled={isUploading}
-                onThumbnailSelected={handleThumbnailSelected}
+                onBubbleThumbnailSelected={handleBubbleThumbnailSelected}
               />
             )}
             <AiEnhancePanel

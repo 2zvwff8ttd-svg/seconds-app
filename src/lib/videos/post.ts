@@ -35,6 +35,8 @@ export type PostVideoInput = {
   thumbnailSource?: File;
   /** クリップ index → 事前生成済みサムネ（AI解析フレーム等） */
   precomputedClipThumbnails?: Array<Blob | undefined>;
+  /** ホームバブル用サムネ（任意クリップの選択フレーム）。未指定時は clip 0 の自動サムネ */
+  bubbleThumbnailBlob?: Blob;
   /** プリセット BGM の公開 URL（動画とは別保存・再生時に同時再生） */
   bgmUrl?: string;
   title: string;
@@ -417,7 +419,27 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   const clipThumbnailUrls = clipThumbnailPaths.map((path) =>
     getMediaPublicUrl(path),
   );
-  const thumbnailUrl = clipThumbnailUrls[0]!;
+
+  let thumbnailUrl = clipThumbnailUrls[0]!;
+
+  if (input.bubbleThumbnailBlob) {
+    const bubbleThumbPath = `${basePath}/thumb.jpg`;
+    onProgress(34, "バブルサムネイルをアップロード中…");
+    try {
+      await uploadFileWithProgress(
+        supabase,
+        bubbleThumbPath,
+        input.bubbleThumbnailBlob,
+        "image/jpeg",
+        (ratio) => {
+          onProgress(34 + ratio * 2, "バブルサムネイルをアップロード中…");
+        },
+      );
+      thumbnailUrl = getMediaPublicUrl(bubbleThumbPath);
+    } catch (err) {
+      rethrowPostStage("バブルサムネイルのアップロード", err);
+    }
+  }
 
   onStageChange("saving");
   onProgress(92, "投稿を保存中…");
