@@ -20,6 +20,10 @@ import {
   DAILY_POST_LIMIT_MESSAGE,
 } from "@/lib/posting/daily-post-limit";
 import {
+  NARRATION_REQUIRES_SINGLE_VIDEO_MESSAGE,
+} from "@/lib/videos/post";
+import { assessClipMergeEligibility } from "@/lib/video/merge-clips";
+import {
   bonusDayMessageFromStreak,
   fetchCurrentStreak,
 } from "@/lib/posting/post-streak";
@@ -191,7 +195,21 @@ export function PostForm() {
   const bgmReady =
     !aiMusicEnabled ||
     (AI_BGM_GENERATION_ENABLED ? Boolean(bgmBlob) : Boolean(selectedPreset));
-  const canPost = hasContent && budgetExhausted && !isUploading && bgmReady;
+  const narrationPostBlocked = useMemo(() => {
+    if (!CLIENT_NARRATION_MERGE_ENABLED || !narrationBlob || clips.length <= 1) {
+      return false;
+    }
+    return !assessClipMergeEligibility(
+      clips.map((clip) => clip.file),
+      usedSeconds,
+    ).eligible;
+  }, [narrationBlob, clips, usedSeconds]);
+  const canPost =
+    hasContent &&
+    budgetExhausted &&
+    !isUploading &&
+    bgmReady &&
+    !narrationPostBlocked;
   const showPostDetails = budgetExhausted && hasContent;
   const clipKey = useMemo(() => clips.map((c) => c.id).join(","), [clips]);
 
@@ -373,6 +391,20 @@ export function PostForm() {
         ? selectedPreset.publicUrl
         : undefined;
 
+    if (
+      CLIENT_NARRATION_MERGE_ENABLED &&
+      narrationBlob &&
+      presetBgmUrl
+    ) {
+      setAiError("ナレーションとBGMは同時に指定できません");
+      return;
+    }
+
+    if (narrationPostBlocked) {
+      setAiError(NARRATION_REQUIRES_SINGLE_VIDEO_MESSAGE);
+      return;
+    }
+
     startUpload({
       clips: uploadClips,
       thumbnailSource: clips[0]?.file,
@@ -381,10 +413,18 @@ export function PostForm() {
       ),
       bubbleThumbnailBlob: bubbleThumbnailRef.current ?? undefined,
       bgmUrl: presetBgmUrl,
+      narrationBlob:
+        CLIENT_NARRATION_MERGE_ENABLED && narrationBlob
+          ? narrationBlob
+          : undefined,
       title,
       visibility,
       displayMaskShape,
-      onSuccess: () => void notifyPostSuccess(),
+      onSuccess: () => {
+        setNarrationBlob(null);
+        setNarrationDurationSec(0);
+        void notifyPostSuccess();
+      },
     });
   };
 
@@ -614,6 +654,12 @@ export function PostForm() {
                   })}
                 </div>
               </section>
+
+              {narrationPostBlocked && (
+                <p className="mt-4 rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                  {NARRATION_REQUIRES_SINGLE_VIDEO_MESSAGE}
+                </p>
+              )}
 
               {uploadError && (
                 <div className="mt-4 space-y-3">

@@ -28,6 +28,8 @@ export type StartUploadInput = {
   /** ホームバブル用（任意クリップの選択フレーム） */
   bubbleThumbnailBlob?: Blob;
   bgmUrl?: string;
+  /** ナレーション音声（ffmpeg で動画に焼き込み） */
+  narrationBlob?: Blob;
   title: string;
   visibility: VideoVisibility;
   displayMaskShape?: VideoDisplayMaskShape;
@@ -81,6 +83,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         precomputedClipThumbnails: input.precomputedClipThumbnails,
         bubbleThumbnailBlob: input.bubbleThumbnailBlob,
         bgmUrl: input.bgmUrl,
+        narrationBlob: input.narrationBlob,
         title: input.title,
         visibility: input.visibility,
         displayMaskShape: input.displayMaskShape,

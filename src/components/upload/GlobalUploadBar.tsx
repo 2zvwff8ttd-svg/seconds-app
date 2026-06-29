@@ -7,6 +7,7 @@ import Link from "next/link";
 export function GlobalUploadBar() {
   const {
     isUploading,
+    stage,
     progress,
     progressLabel,
     success,
@@ -14,6 +15,13 @@ export function GlobalUploadBar() {
     dismissSuccess,
     dismissError,
   } = useUpload();
+
+  const uploadTitle =
+    stage === "merging_audio"
+      ? "ナレーションを合成中"
+      : stage === "merging_clips"
+        ? "クリップを結合中"
+        : "投稿をアップロード中";
 
   if (!isUploading && !success && !error) {
     return null;
@@ -28,7 +36,7 @@ export function GlobalUploadBar() {
     >
       {isUploading && (
         <div className="global-upload-bar__panel global-upload-bar__panel--active">
-          <p className="global-upload-bar__title">投稿をアップロード中</p>
+          <p className="global-upload-bar__title">{uploadTitle}</p>
           <p className="global-upload-bar__hint">
             他の画面に移動しても続行します。タブを閉じると中断される場合があります。
           </p>

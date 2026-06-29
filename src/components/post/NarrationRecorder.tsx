@@ -467,8 +467,7 @@ export function NarrationRecorder({
 
         {showRecordedActions && phase !== "previewing" && (
           <p className="text-center text-[10px] text-cyan-100/80">
-            録音 {formatClipDurationSeconds(recordedDurationSec || elapsedSec)}秒 — 投稿への反映は
-            Stage 3 で有効化予定（開発用）
+            録音 {formatClipDurationSeconds(recordedDurationSec || elapsedSec)}秒 — 投稿時に動画へ焼き込まれます
           </p>
         )}
 

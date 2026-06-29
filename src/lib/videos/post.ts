@@ -10,6 +10,7 @@ import {
 import { getMediaPublicUrl, uploadFileWithProgress, formatUploadSize } from "@/lib/storage/upload";
 import { totalDurationSecondsForDb } from "@/lib/recording/clip-budget";
 import { tryMergeClips } from "@/lib/video/merge-clips";
+import { mergeVideoWithNarration } from "@/lib/video/merge-audio-tracks";
 import {
   captureVideoThumbnail,
   getVideoExtension,
@@ -28,6 +29,9 @@ export type PostClipInput = {
   durationSeconds: number;
 };
 
+export const NARRATION_REQUIRES_SINGLE_VIDEO_MESSAGE =
+  "ナレーションを付けるには、クリップを1本に結合する必要があります。クリップ数を減らすか、ナレーションを削除してください。";
+
 export type PostVideoInput = {
   /** カメラで撮影したクリップ（vlog） */
   clips: PostClipInput[];
@@ -39,6 +43,8 @@ export type PostVideoInput = {
   bubbleThumbnailBlob?: Blob;
   /** プリセット BGM の公開 URL（動画とは別保存・再生時に同時再生） */
   bgmUrl?: string;
+  /** ナレーション音声（ffmpeg で動画に焼き込み） */
+  narrationBlob?: Blob;
   title: string;
   visibility: VideoVisibility;
   displayMaskShape?: VideoDisplayMaskShape;
@@ -232,6 +238,13 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   }
 
   const { title, visibility, onStageChange, onProgress } = input;
+  const hasNarration = Boolean(input.narrationBlob);
+  const bgmUrl = input.bgmUrl?.trim() || undefined;
+
+  if (hasNarration && bgmUrl) {
+    throw new Error("ナレーションとBGMは同時に指定できません");
+  }
+
   const supabase = createClient();
 
   const {
@@ -297,8 +310,56 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     ];
   }
 
+  if (hasNarration && uploadTargets.length > 1) {
+    throw new Error(NARRATION_REQUIRES_SINGLE_VIDEO_MESSAGE);
+  }
+
+  if (hasNarration && input.narrationBlob) {
+    onStageChange("merging_audio");
+    onProgress(22, "ナレーションを合成中…");
+
+    try {
+      const muxed = await mergeVideoWithNarration(
+        uploadTargets[0]!.file,
+        input.narrationBlob,
+        {
+          videoDurationSec: durationSeconds,
+          onProgress: (ratio) => {
+            onProgress(22 + ratio * 16, "ナレーションを合成中…");
+          },
+        },
+      );
+      uploadTargets = [{ file: muxed, storageName: "video.mp4" }];
+      onProgress(38, "ナレーションの合成が完了しました");
+    } catch (err) {
+      rethrowPostStage("ナレーション合成", err);
+    }
+  }
+
+  const progress = hasNarration
+    ? {
+        preparing: 38,
+        preparingRange: 6,
+        thumbUploadStart: 40,
+        thumbUploadSpan: 8,
+        bubbleThumb: 48,
+        videoUploadStart: 50,
+        videoUploadSpan: 38,
+        saving: 90,
+      }
+    : {
+        preparing: 24,
+        preparingRange: 6,
+        thumbUploadStart: 26,
+        thumbUploadSpan: 8,
+        bubbleThumb: 34,
+        videoUploadStart: 34,
+        videoUploadSpan: 58,
+        saving: 92,
+      };
+
   onStageChange("preparing");
-  onProgress(24, "サムネイルを作成中…");
+  onProgress(progress.preparing, "サムネイルを作成中…");
 
   const thumbnailSources = clips.map((clip) => clip.file);
   const precomputed = input.precomputedClipThumbnails ?? [];
@@ -314,14 +375,16 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
       if (cached) {
         clipThumbnailBlobs.push(cached);
         onProgress(
-          24 + ((i + 1) / thumbnailSources.length) * 6,
+          progress.preparing +
+            ((i + 1) / thumbnailSources.length) * progress.preparingRange,
           `サムネイル ${i + 1}/${thumbnailSources.length}（キャッシュ）`,
         );
         continue;
       }
 
       onProgress(
-        24 + (i / thumbnailSources.length) * 6,
+        progress.preparing +
+          (i / thumbnailSources.length) * progress.preparingRange,
         `サムネイル ${i + 1}/${thumbnailSources.length} を作成中…`,
       );
       try {
@@ -343,10 +406,14 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   );
 
   onStageChange("uploading_thumbnail");
-  const thumbUploadShare = 8 / clipThumbnailBlobs.length;
+  const thumbUploadShare =
+    progress.thumbUploadSpan / clipThumbnailBlobs.length;
 
   for (let i = 0; i < clipThumbnailBlobs.length; i++) {
-    onProgress(26 + thumbUploadShare * i, `サムネイル ${i + 1}/${clipThumbnailBlobs.length} をアップロード中…`);
+    onProgress(
+      progress.thumbUploadStart + thumbUploadShare * i,
+      `サムネイル ${i + 1}/${clipThumbnailBlobs.length} をアップロード中…`,
+    );
     try {
       await uploadFileWithProgress(
         supabase,
@@ -355,7 +422,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
         "image/jpeg",
         (ratio) => {
           onProgress(
-            26 + thumbUploadShare * i + thumbUploadShare * ratio,
+            progress.thumbUploadStart + thumbUploadShare * i + thumbUploadShare * ratio,
             `サムネイル ${i + 1}/${clipThumbnailBlobs.length} をアップロード中…`,
           );
         },
@@ -371,13 +438,13 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   }
 
   const clipUrls: string[] = [];
-  const uploadShare = 58 / uploadTargets.length;
+  const uploadShare = progress.videoUploadSpan / uploadTargets.length;
 
   for (let i = 0; i < uploadTargets.length; i++) {
     const { file, storageName } = uploadTargets[i];
     const clipPath = `${basePath}/${storageName}`;
     const sizeLabel = formatUploadSize(file.size);
-    const uploadBase = 34 + uploadShare * i;
+    const uploadBase = progress.videoUploadStart + uploadShare * i;
 
     onStageChange("uploading_video");
     onProgress(
@@ -424,7 +491,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
 
   if (input.bubbleThumbnailBlob) {
     const bubbleThumbPath = `${basePath}/thumb.jpg`;
-    onProgress(34, "バブルサムネイルをアップロード中…");
+    onProgress(progress.bubbleThumb, "バブルサムネイルをアップロード中…");
     try {
       await uploadFileWithProgress(
         supabase,
@@ -432,7 +499,10 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
         input.bubbleThumbnailBlob,
         "image/jpeg",
         (ratio) => {
-          onProgress(34 + ratio * 2, "バブルサムネイルをアップロード中…");
+          onProgress(
+            progress.bubbleThumb + ratio * 2,
+            "バブルサムネイルをアップロード中…",
+          );
         },
       );
       thumbnailUrl = getMediaPublicUrl(bubbleThumbPath);
@@ -442,7 +512,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   }
 
   onStageChange("saving");
-  onProgress(92, "投稿を保存中…");
+  onProgress(progress.saving, "投稿を保存中…");
 
   let inserted: { id: string; publishAt: string };
   try {
@@ -457,7 +527,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
       durationSeconds,
       visibility,
       country,
-      bgmUrl: input.bgmUrl,
+      bgmUrl: hasNarration ? undefined : bgmUrl,
       displayMaskShape: input.displayMaskShape,
     });
   } catch (err) {
