@@ -2,11 +2,12 @@
 
 import { AiEnhancePanel } from "@/components/post/AiEnhancePanel";
 import { BonusDayCountdownNote } from "@/components/post/BonusDayCountdownNote";
+import { NarrationRecorder } from "@/components/post/NarrationRecorder";
 import { ThumbnailPicker } from "@/components/post/ThumbnailPicker";
 import { CameraRecorder } from "@/components/record/CameraRecorder";
 import { ClipStrip } from "@/components/record/ClipStrip";
 import { analyzeVideoFrame, generateAiMusic } from "@/lib/ai/client";
-import { AI_BGM_GENERATION_ENABLED, PRESET_BGM_ENABLED } from "@/lib/ai/features";
+import { AI_BGM_GENERATION_ENABLED, CLIENT_NARRATION_MERGE_ENABLED, PRESET_BGM_ENABLED } from "@/lib/ai/features";
 import {
   fetchTodayAssignedSeconds,
 } from "@/lib/recording/daily-assignment";
@@ -31,6 +32,7 @@ import {
 import { blobToBase64, extractFirstFrameBlob } from "@/lib/video/extract-frame";
 import type { AiAnalyzeResult, AiEnhanceStatus } from "@/types/ai";
 import type { PresetBgmTrack } from "@/types/preset-bgm";
+import type { PostAudioMode } from "@/types/post-audio";
 import type { RecordedClip } from "@/types/recording";
 import type { VideoVisibility } from "@/types/video";
 import Link from "next/link";
@@ -93,6 +95,8 @@ export function PostForm() {
     null,
   );
   const [aiError, setAiError] = useState<string | null>(null);
+  const [narrationBlob, setNarrationBlob] = useState<Blob | null>(null);
+  const [narrationDurationSec, setNarrationDurationSec] = useState(0);
   const aiRunId = useRef(0);
   const clipThumbnailCacheRef = useRef<Map<string, Blob>>(new Map());
   const bubbleThumbnailRef = useRef<Blob | null>(null);
@@ -191,8 +195,16 @@ export function PostForm() {
   const showPostDetails = budgetExhausted && hasContent;
   const clipKey = useMemo(() => clips.map((c) => c.id).join(","), [clips]);
 
+  const postAudioMode: PostAudioMode = useMemo(() => {
+    if (narrationBlob) return "narration";
+    if (aiMusicEnabled) return "bgm";
+    return "none";
+  }, [narrationBlob, aiMusicEnabled]);
+
   useEffect(() => {
     bubbleThumbnailRef.current = null;
+    setNarrationBlob(null);
+    setNarrationDurationSec(0);
   }, [clipKey]);
 
   const runMusicGeneration = useCallback(
@@ -292,6 +304,10 @@ export function PostForm() {
   );
 
   const handleAiMusicChange = (enabled: boolean) => {
+    if (enabled && narrationBlob) {
+      setNarrationBlob(null);
+      setNarrationDurationSec(0);
+    }
     setAiMusicEnabled(enabled);
     if (!enabled) {
       setBgmBlob(null);
@@ -325,6 +341,20 @@ export function PostForm() {
     },
     [],
   );
+
+  const handleNarrationRecorded = useCallback((blob: Blob, durationSec: number) => {
+    setNarrationBlob(blob);
+    setNarrationDurationSec(durationSec);
+    setAiMusicEnabled(false);
+    setBgmBlob(null);
+    setSelectedPreset(null);
+    if (analyzeResult) setAiStatus("ready");
+  }, [analyzeResult]);
+
+  const handleNarrationClear = useCallback(() => {
+    setNarrationBlob(null);
+    setNarrationDurationSec(0);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -496,6 +526,20 @@ export function PostForm() {
                 onBubbleThumbnailSelected={handleBubbleThumbnailSelected}
               />
             )}
+            {CLIENT_NARRATION_MERGE_ENABLED && clips.length > 0 && (
+              <NarrationRecorder
+                clips={clips}
+                totalVideoSeconds={usedSeconds}
+                displayMaskShape={displayMaskShape}
+                disabled={isUploading}
+                bgmActive={postAudioMode === "bgm"}
+                hasRecording={narrationBlob !== null}
+                savedBlob={narrationBlob}
+                savedDurationSec={narrationDurationSec}
+                onRecorded={handleNarrationRecorded}
+                onClear={handleNarrationClear}
+              />
+            )}
             <AiEnhancePanel
               status={aiStatus}
               aiMusicEnabled={aiMusicEnabled}
@@ -506,6 +550,7 @@ export function PostForm() {
               disabled={isUploading}
               selectedPresetId={selectedPreset?.id ?? null}
               onPresetSelect={handlePresetSelect}
+              narrationActive={postAudioMode === "narration"}
             />
             <div className="mt-4">
               <label htmlFor="title" className="mb-1.5 flex items-baseline gap-2">

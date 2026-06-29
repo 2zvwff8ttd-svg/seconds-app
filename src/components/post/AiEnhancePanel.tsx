@@ -15,6 +15,8 @@ type AiEnhancePanelProps = {
   disabled?: boolean;
   selectedPresetId?: string | null;
   onPresetSelect?: (track: PresetBgmTrack) => void;
+  /** ナレーション録音中は BGM を無効化 */
+  narrationActive?: boolean;
 };
 
 export function AiEnhancePanel({
@@ -27,6 +29,7 @@ export function AiEnhancePanel({
   disabled = false,
   selectedPresetId = null,
   onPresetSelect,
+  narrationActive = false,
 }: AiEnhancePanelProps) {
   const busy =
     status === "extracting_frame" ||
@@ -64,13 +67,17 @@ export function AiEnhancePanel({
       <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-border bg-surface/80 px-3 py-2.5">
         <div>
           <p className="text-sm font-medium text-foreground">BGM</p>
-          <p className="text-[10px] text-muted">{bgmDescription}</p>
+          <p className="text-[10px] text-muted">
+            {narrationActive
+              ? "ナレーション使用中は BGM を付けられません"
+              : bgmDescription}
+          </p>
         </div>
         <button
           type="button"
           role="switch"
           aria-checked={aiMusicEnabled}
-          disabled={disabled || busy}
+          disabled={disabled || busy || narrationActive}
           onClick={() => onAiMusicChange(!aiMusicEnabled)}
           className={`relative h-7 w-12 shrink-0 rounded-full transition ${
             aiMusicEnabled ? "bg-violet-500" : "bg-border"

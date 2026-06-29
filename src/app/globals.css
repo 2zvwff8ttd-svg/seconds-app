@@ -1467,6 +1467,19 @@ html.record-native-preview-active body {
   cursor: pointer;
 }
 
+.narration-recorder__stage {
+  width: min(92vw, 24rem);
+  aspect-ratio: 1 / 1;
+  max-height: min(58dvh, 24rem);
+}
+
+.narration-recorder__stage video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #050508;
+}
+
 .clip-strip-thumb {
   width: 3.375rem;
   height: 3.375rem;
