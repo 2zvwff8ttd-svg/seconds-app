@@ -91,6 +91,12 @@ export function RecordStageControls({
           </svg>
         </button>
 
+        {cameraReady && !isRecording && !cameraStarting && (
+          <p className="record-stage-ui__zoom-hint" aria-hidden>
+            ピンチでズーム
+          </p>
+        )}
+
         <div className="record-stage-ui__dock">
           <RecordShapePicker
             value={displayMaskShape}

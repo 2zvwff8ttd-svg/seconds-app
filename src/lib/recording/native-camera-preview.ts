@@ -50,6 +50,8 @@ function buildPreviewOptions(
     toBack: true,
     disableAudio: false,
     rotateWhenOrientationChanged: false,
+    /** Native pinch on preview (iOS/Android); no JS rebuild — runtime option only. */
+    enableZoom: true,
   };
 }
 

@@ -1595,6 +1595,24 @@ html.record-native-preview-active body {
   background: rgb(0 0 0 / 0.75);
 }
 
+.record-stage-ui__zoom-hint {
+  position: fixed;
+  left: 50%;
+  top: var(--record-layout-flip-top);
+  transform: translateX(-50%);
+  z-index: var(--z-record-flip);
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.45);
+  color: rgb(255 255 255 / 0.82);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
 .record-stage-ui__dock {
   position: fixed;
   left: 0;
