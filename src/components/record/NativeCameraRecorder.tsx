@@ -6,6 +6,7 @@ import { RecordStageControls } from "@/components/record/RecordStageControls";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
+import { usePinchZoomMaskBleedExtra } from "@/lib/recording/pinch-zoom-mask-bleed";
 import { getMinRecordingMs } from "@/lib/recording/recorder-utils";
 import {
   flipNativeCamera,
@@ -478,6 +479,8 @@ export function NativeCameraRecorder({
     !recordingStarting &&
     !finishingRef.current;
 
+  const maskBleedExtra = usePinchZoomMaskBleedExtra(cameraReady, facingMode);
+
   return (
     <div className="record-camera-root">
       <div
@@ -488,7 +491,11 @@ export function NativeCameraRecorder({
 
       <div className="record-camera-layout-spacer" aria-hidden />
 
-      <RecordMaskOverlay cameraReady={cameraReady} shape={displayMaskShape} />
+      <RecordMaskOverlay
+        cameraReady={cameraReady}
+        shape={displayMaskShape}
+        maskBleedExtra={maskBleedExtra}
+      />
 
       <RecordStageControls
         assignedSeconds={assignedSeconds}
