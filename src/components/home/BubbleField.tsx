@@ -309,7 +309,6 @@ export function BubbleField({ bottomInset, onCountryChange, onFeedReady }: Bubbl
                   key={`${bubbleSpawnGeneration}-${index}-${video.id}`}
                   video={toBubblePreview(video)}
                   placement={placement}
-                  fieldHeight={size.height}
                   floatStyle={floatStyle}
                   isHidden={hiddenBubbleId === video.id}
                   spawnAnimate={bubbleSpawnGeneration > 0}

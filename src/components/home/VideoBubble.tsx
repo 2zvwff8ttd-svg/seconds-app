@@ -1,6 +1,5 @@
 "use client";
 
-import { getBubbleGlassStyle } from "@/lib/bubble-glass-vars";
 import {
   getVideoDisplayMask,
   getVideoDisplayMaskCssVars,
@@ -32,8 +31,6 @@ type VideoBubbleProps = {
   video: BubbleVideoPreview;
   placement: BubblePlacement;
   floatStyle: React.CSSProperties;
-  /** Field height for lighting variation (0–1 from top). */
-  fieldHeight?: number;
   isHidden?: boolean;
   spawnAnimate?: boolean;
   /** Stagger index for bubble-float--spawn delay (--spawn-index) */
@@ -46,7 +43,6 @@ export function VideoBubble({
   video,
   placement,
   floatStyle,
-  fieldHeight = 1,
   isHidden = false,
   spawnAnimate = false,
   spawnIndex = 0,
@@ -74,15 +70,6 @@ export function VideoBubble({
     [video.displayMaskShape],
   );
   const isCircle = mask.modifier === "circle";
-  const bubbleSurfaceStyle = useMemo(() => {
-    if (isCircle) return maskStyle;
-    const normalizedY =
-      fieldHeight > 0 ? placement.y / fieldHeight : 0.5;
-    return {
-      ...maskStyle,
-      ...getBubbleGlassStyle(spawnIndex, normalizedY, isViral),
-    } as CSSProperties;
-  }, [fieldHeight, isCircle, isViral, maskStyle, placement.y, spawnIndex]);
 
   const handleClick = useCallback(() => {
     if (isHidden || !wrapperRef.current) return;
@@ -118,11 +105,14 @@ export function VideoBubble({
           }`}
           style={maskStyle}
         >
+          {!isCircle ? (
+            <span className="bubble-display-outer-bloom" aria-hidden />
+          ) : null}
           <span
             className={`bubble-3d bubble-3d--${mask.modifier}${
               isViral ? " bubble-3d--viral bubble-3d--viral-hero" : ""
-            }${isCircle ? "" : " bubble-display-shimmer"}`}
-            style={bubbleSurfaceStyle}
+            }`}
+            style={maskStyle}
           >
             <span className="bubble-3d__body">
               <span className="bubble-3d__media">
@@ -144,18 +134,17 @@ export function VideoBubble({
                   </span>
                 )}
               </span>
-              <span
-                className="display-mask-feather bubble-display-feather"
-                aria-hidden
-              />
-              <span
-                className={`display-mask-membrane bubble-display-membrane${
-                  isCircle ? "" : " bubble-display-membrane--contour"
-                }`}
-                aria-hidden
-              />
-              {!isCircle ? (
-                <span className="bubble-display-glass" aria-hidden />
+              {isCircle ? (
+                <>
+                  <span
+                    className="display-mask-feather bubble-display-feather"
+                    aria-hidden
+                  />
+                  <span
+                    className="display-mask-membrane bubble-display-membrane"
+                    aria-hidden
+                  />
+                </>
               ) : null}
             </span>
           </span>
