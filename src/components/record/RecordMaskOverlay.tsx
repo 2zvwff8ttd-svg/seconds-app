@@ -26,8 +26,6 @@ import { RecordStagePortal } from "@/components/record/RecordStagePortal";
 type RecordMaskOverlayProps = {
   shape?: VideoDisplayMaskShape;
   cameraReady?: boolean;
-  /** Added after pinch-zoom to widen the scrim cutout (base bleed unchanged at 1×). */
-  maskBleedExtra?: number;
 };
 
 function buildBleedPolygonHoleMaskPoints(
@@ -110,7 +108,6 @@ type RecordSvgScrimProps = {
   holeRect: RecordHoleRect;
   maskId: string;
   viewport: ViewportMetrics;
-  maskBleedExtra: number;
 };
 
 /** Inline SVG luminance mask — all shapes (WKWebView-safe). Native camera is fullscreen behind. */
@@ -119,15 +116,12 @@ function RecordSvgScrim({
   holeRect,
   maskId,
   viewport,
-  maskBleedExtra,
 }: RecordSvgScrimProps) {
   const { width, height } = viewport;
-  const bleedPx = getRecordHoleMaskBleedPx(shape, maskBleedExtra);
+  const bleedPx = getRecordHoleMaskBleedPx(shape);
   const squareHole = buildRecordSquareHoleRect(holeRect);
   const heartHole =
-    shape === "heart"
-      ? buildRecordHeartHolePathProps(holeRect, shape, maskBleedExtra)
-      : null;
+    shape === "heart" ? buildRecordHeartHolePathProps(holeRect, shape) : null;
   const polygonPoints = buildRecordHolePolygonPoints(shape, holeRect);
   const bleedPolygonPoints = polygonPoints
     ? buildBleedPolygonHoleMaskPoints(holeRect, polygonPoints, bleedPx)
@@ -206,7 +200,6 @@ function holeRectToRimStyle(holeRect: RecordHoleRect): CSSProperties {
 export function RecordMaskOverlay({
   shape = DEFAULT_VIDEO_DISPLAY_MASK,
   cameraReady = false,
-  maskBleedExtra = 0,
 }: RecordMaskOverlayProps) {
   const layoutVars = getRecordViewportMaskCssVars(shape);
   const { viewport, holeRect } = useRecordViewportState(shape);
@@ -233,7 +226,6 @@ export function RecordMaskOverlay({
             holeRect={holeRect}
             maskId={maskId}
             viewport={viewport}
-            maskBleedExtra={maskBleedExtra}
           />
         ) : (
           <div className="record-mask-overlay__scrim record-mask-overlay__scrim--pending" />

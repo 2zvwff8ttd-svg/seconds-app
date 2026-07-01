@@ -1216,3 +1216,55 @@ if (controllerForTypoFix.includes(formatPixelCountTypoOld)) {
     "[patch-camera-preview-ios] fixed formatPixelCount call syntax",
   );
 }
+
+const handleTapGravityAnchorOld = `    @objc
+    func handleTap(_ tap: UITapGestureRecognizer) {`;
+
+const handleTapGravityAnchorNew = `    /// seconds-app: aspect-fit at 1×; aspect-fill when zoomed so letterbox never shows through scrim holes.
+    private func syncPreviewVideoGravity(forZoomFactor factor: CGFloat) {
+        guard let layer = self.previewLayer else { return }
+        let gravity: AVLayerVideoGravity = factor > 1.01 ? .resizeAspectFill : .resizeAspect
+        if layer.videoGravity != gravity {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.videoGravity = gravity
+            CATransaction.commit()
+        }
+    }
+
+    @objc
+    func handleTap(_ tap: UITapGestureRecognizer) {`;
+
+await patchFile(
+  controllerPath,
+  [[handleTapGravityAnchorOld, handleTapGravityAnchorNew]],
+  "CameraController.swift (zoom preview gravity helper)",
+);
+
+const handlePinchGravityOld = `        switch pinch.state {
+        case .began: fallthrough
+        case .changed:
+            let newScaleFactor = minMaxZoom(pinch.scale * zoomFactor)
+            update(scale: newScaleFactor)
+        case .ended:
+            zoomFactor = device.videoZoomFactor
+        default: break
+        }`;
+
+const handlePinchGravityNew = `        switch pinch.state {
+        case .began: fallthrough
+        case .changed:
+            let newScaleFactor = minMaxZoom(pinch.scale * zoomFactor)
+            update(scale: newScaleFactor)
+            syncPreviewVideoGravity(forZoomFactor: newScaleFactor)
+        case .ended:
+            zoomFactor = device.videoZoomFactor
+            syncPreviewVideoGravity(forZoomFactor: device.videoZoomFactor)
+        default: break
+        }`;
+
+await patchFile(
+  controllerPath,
+  [[handlePinchGravityOld, handlePinchGravityNew]],
+  "CameraController.swift (pinch sync preview gravity)",
+);

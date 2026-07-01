@@ -282,24 +282,22 @@ export function buildRecordStarHolePolygonPoints(rect: RecordHoleRect): string {
 /** Expand scrim cutout past the nominal hole to hide SVG mask antialiasing fringing. */
 export function getRecordHoleMaskBleedPx(
   shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
-  extraBleedPx = 0,
 ): number {
   // WKWebView circle luminance masks need extra radius vs polygon shapes.
-  const base = shape === "circle" ? 3 : 1;
-  return base + Math.max(0, extraBleedPx);
+  if (shape === "circle") return 3;
+  return 1;
 }
 
 export function buildRecordHeartHolePathProps(
   rect: RecordHoleRect,
   shape: VideoDisplayMaskShape = "heart",
-  extraBleedPx = 0,
 ): {
   d: string;
   transform: string;
 } {
   const cx = rect.x + rect.width / 2;
   const cy = rect.y + rect.height / 2;
-  const bleedPx = getRecordHoleMaskBleedPx(shape, extraBleedPx);
+  const bleedPx = getRecordHoleMaskBleedPx(shape);
   const bleedScale = 1 + (bleedPx * 2) / rect.width;
   const scaleX = (rect.width / 100) * bleedScale;
   const scaleY = (rect.height / 100) * bleedScale;

@@ -43,14 +43,24 @@ const forbiddenPatterns = [
 
 const checks = [
   {
-    label: "videoGravity uses resizeAspect",
-    ok: controller.includes("AVLayerVideoGravity.resizeAspect"),
-    fail: "AVLayerVideoGravity.resizeAspect not found",
+    label: "videoGravity uses resizeAspect at 1x startup",
+    ok: controller.includes("previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspect"),
+    fail: "AVLayerVideoGravity.resizeAspect not found in displayPreview",
   },
   {
-    label: "videoGravity does not use resizeAspectFill",
-    ok: !controller.includes("AVLayerVideoGravity.resizeAspectFill"),
-    fail: "AVLayerVideoGravity.resizeAspectFill still present",
+    label: "zoom switches preview to resizeAspectFill",
+    ok: controller.includes("factor > 1.01 ? .resizeAspectFill : .resizeAspect"),
+    fail: "syncPreviewVideoGravity must toggle aspect-fill when zoomed",
+  },
+  {
+    label: "syncPreviewVideoGravity for pinch zoom letterbox",
+    ok: controller.includes("syncPreviewVideoGravity(forZoomFactor:"),
+    fail: "syncPreviewVideoGravity helper missing",
+  },
+  {
+    label: "pinch handler syncs preview gravity",
+    ok: controller.includes("syncPreviewVideoGravity(forZoomFactor: newScaleFactor)"),
+    fail: "handlePinch must call syncPreviewVideoGravity when zooming",
   },
   {
     label: "natural preview device settings helper",
