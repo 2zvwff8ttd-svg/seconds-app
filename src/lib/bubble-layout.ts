@@ -39,7 +39,8 @@ export function getBubbleLayoutMargin(
   frameScale = 1,
 ): number {
   const floatAmp = Math.max(6, Math.round(minDim * 0.022));
-  const shadowBleed = frameScale > 1 ? 8 + (frameScale - 1) * 10 : 4;
+  // Float animation only — drop-shadow bleeds overlap visually less than body overlap.
+  const shadowBleed = frameScale > 1 ? 3 + (frameScale - 1) * 3 : 2;
   return floatAmp + shadowBleed;
 }
 
@@ -49,6 +50,15 @@ function effectiveCollisionRadius(
   layoutMargin: number,
 ): number {
   return getCollisionRadius(radius, frameScale) + layoutMargin;
+}
+
+/** Box edge + small float guard for separation pushes. */
+function layoutSeparationRadius(
+  radius: number,
+  _frameScale: number,
+  _minDim: number,
+): number {
+  return radius + 4;
 }
 
 function clampBubbleCenter(
@@ -78,12 +88,15 @@ function separateOverlappingPlacements(
   inset: number,
   gap: number,
   minDim: number,
-): void {
-  if (placed.length < 2) return;
+  pushStrength = 1,
+): boolean {
+  if (placed.length < 2) return false;
 
-  const maxIterations = 120;
+  let anyOverlap = false;
+  const maxIterations = 200;
+
   for (let iter = 0; iter < maxIterations; iter++) {
-    let anyOverlap = false;
+    let movedThisRound = false;
 
     for (let i = 0; i < placed.length; i++) {
       for (let j = i + 1; j < placed.length; j++) {
@@ -91,16 +104,8 @@ function separateOverlappingPlacements(
         const b = placed[j]!;
         const scaleA = frameScales?.[i] ?? 1;
         const scaleB = frameScales?.[j] ?? 1;
-        const rA = effectiveCollisionRadius(
-          a.radius,
-          scaleA,
-          getBubbleLayoutMargin(minDim, scaleA),
-        );
-        const rB = effectiveCollisionRadius(
-          b.radius,
-          scaleB,
-          getBubbleLayoutMargin(minDim, scaleB),
-        );
+        const rA = layoutSeparationRadius(a.radius, scaleA, minDim);
+        const rB = layoutSeparationRadius(b.radius, scaleB, minDim);
         const minDist = rA + rB + pairCollisionGap(gap, scaleA, scaleB);
 
         const dx = b.x - a.x;
@@ -121,12 +126,12 @@ function separateOverlappingPlacements(
         if (dist >= minDist) continue;
         anyOverlap = true;
 
-        const overlap = minDist - dist;
+        const overlap = (minDist - dist) * pushStrength;
         const totalR = rA + rB;
         const moveA = overlap * (rB / totalR);
         const moveB = overlap * (rA / totalR);
 
-        const nextA = clampBubbleCenter(
+        let nextA = clampBubbleCenter(
           a.x - ux * moveA,
           a.y - uy * moveA,
           rA,
@@ -134,7 +139,7 @@ function separateOverlappingPlacements(
           height,
           inset,
         );
-        const nextB = clampBubbleCenter(
+        let nextB = clampBubbleCenter(
           b.x + ux * moveB,
           b.y + uy * moveB,
           rB,
@@ -142,12 +147,118 @@ function separateOverlappingPlacements(
           height,
           inset,
         );
+
+        const aStuck = nextA.x === a.x && nextA.y === a.y;
+        const bStuck = nextB.x === b.x && nextB.y === b.y;
+
+        if (aStuck && bStuck) {
+          const perpX = -uy;
+          const perpY = ux;
+          const wiggle = overlap * 0.35;
+          nextA = clampBubbleCenter(
+            a.x + perpX * wiggle,
+            a.y + perpY * wiggle,
+            rA,
+            width,
+            height,
+            inset,
+          );
+          nextB = clampBubbleCenter(
+            b.x - perpX * wiggle,
+            b.y - perpY * wiggle,
+            rB,
+            width,
+            height,
+            inset,
+          );
+        } else if (aStuck && !bStuck) {
+          nextB = clampBubbleCenter(
+            b.x + ux * moveB * 1.85,
+            b.y + uy * moveB * 1.85,
+            rB,
+            width,
+            height,
+            inset,
+          );
+        } else if (bStuck && !aStuck) {
+          nextA = clampBubbleCenter(
+            a.x - ux * moveA * 1.85,
+            a.y - uy * moveA * 1.85,
+            rA,
+            width,
+            height,
+            inset,
+          );
+        }
+
+        const moved =
+          nextA.x !== a.x ||
+          nextA.y !== a.y ||
+          nextB.x !== b.x ||
+          nextB.y !== b.y;
+        if (!moved) continue;
+
+        movedThisRound = true;
         placed[i] = { ...a, x: nextA.x, y: nextA.y };
         placed[j] = { ...b, x: nextB.x, y: nextB.y };
       }
     }
 
-    if (!anyOverlap) break;
+    if (!movedThisRound) break;
+  }
+
+  return anyOverlap;
+}
+
+function placementsOverlap(
+  placed: BubblePlacement[],
+  frameScales: number[] | undefined,
+  minDim: number,
+  gap: number,
+): Array<{ i: number; j: number }> {
+  const pairs: Array<{ i: number; j: number }> = [];
+  for (let i = 0; i < placed.length; i++) {
+    for (let j = i + 1; j < placed.length; j++) {
+      const a = placed[i]!;
+      const b = placed[j]!;
+      const scaleA = frameScales?.[i] ?? 1;
+      const scaleB = frameScales?.[j] ?? 1;
+      const rA = layoutSeparationRadius(a.radius, scaleA, minDim);
+      const rB = layoutSeparationRadius(b.radius, scaleB, minDim);
+      const minDist = rA + rB + pairCollisionGap(gap, scaleA, scaleB);
+      const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      if (dist < minDist) pairs.push({ i, j });
+    }
+  }
+  return pairs;
+}
+
+/** Last resort: shrink only bubbles still overlapping after separation (max ~6%). */
+function minimallyShrinkRemainingOverlaps(
+  placed: BubblePlacement[],
+  originalRadii: number[],
+  frameScales: number[] | undefined,
+  minDim: number,
+  gap: number,
+): void {
+  const minScale = 0.97;
+
+  for (let round = 0; round < 24; round++) {
+    const pairs = placementsOverlap(placed, frameScales, minDim, gap);
+    if (pairs.length === 0) return;
+
+    for (const { i, j } of pairs) {
+      const shrinkIndex =
+        placed[i]!.radius >= placed[j]!.radius ? i : j;
+      const floor = Math.round(originalRadii[shrinkIndex]! * minScale);
+      placed[shrinkIndex] = {
+        ...placed[shrinkIndex]!,
+        radius: Math.max(
+          floor,
+          Math.round(placed[shrinkIndex]!.radius * 0.985),
+        ),
+      };
+    }
   }
 }
 
@@ -166,58 +277,6 @@ function sampleAnywhereInBounds(
     x: minX + random() * Math.max(0, maxX - minX),
     y: minY + random() * Math.max(0, maxY - minY),
   };
-}
-
-/**
- * Shaped bubbles (heart/star) scale past what a 2×3 grid cell can hold.
- * Cap each bubble so adjacent cell centers can fit this bubble + a neighbour.
- */
-function fitBubbleRadiiToGrid(
-  baseRadii: number[],
-  frameScales: number[] | undefined,
-  width: number,
-  height: number,
-  count: number,
-  inset: number,
-  gap: number,
-  minDim: number,
-): number[] {
-  const { cols, rows } = getGridShape(count, width, height);
-  const cellW = (width - inset * 2) / cols;
-  const cellH = (height - inset * 2) / rows;
-  const adjacentCenterDist = Math.min(cellW, cellH);
-  const maxFrameScale = Math.max(1, ...(frameScales?.length ? frameScales : [1]));
-  const globalMaxCollision =
-    maxFrameScale > 1
-      ? ((adjacentCenterDist - pairCollisionGap(gap, maxFrameScale, 1)) / 2) *
-        0.92
-      : Number.POSITIVE_INFINITY;
-
-  const collisionFor = (radius: number, frameScale: number) =>
-    effectiveCollisionRadius(
-      radius,
-      frameScale,
-      getBubbleLayoutMargin(minDim, frameScale),
-    );
-
-  return baseRadii.map((baseR, i) => {
-    const frameScale = frameScales?.[i] ?? 1;
-    if (frameScale <= 1) {
-      return Math.round(baseR);
-    }
-
-    let radius = Math.round(baseR * frameScale);
-    const collision = collisionFor(radius, frameScale);
-
-    if (collision > globalMaxCollision) {
-      radius = Math.max(
-        Math.round(radius * (globalMaxCollision / collision) * 0.92),
-        Math.round(baseR * 0.65),
-      );
-    }
-
-    return radius;
-  });
 }
 
 function pairCollisionGap(
@@ -572,42 +631,42 @@ export function computeBubbleLayout(
     random,
   );
 
-  const fittedRadii = fitBubbleRadiiToGrid(
-    baseRadii,
-    frameScales,
-    width,
-    height,
-    count,
-    inset,
-    gap,
-    minDim,
+  const layoutRadii = baseRadii.map((baseR, i) => {
+    const frameScale = frameScales?.[i] ?? 1;
+    return Math.round(baseR * frameScale);
+  });
+  const hasShapedBubbles = layoutRadii.some(
+    (_, i) => (frameScales?.[i] ?? 1) > 1,
   );
 
+  const separationInset = hasShapedBubbles ? Math.max(4, inset - 4) : inset;
   const placed: Array<BubblePlacement | null> = new Array(count).fill(null);
   const placeOrder = Array.from({ length: count }, (_, i) => i).sort(
-    (a, b) => fittedRadii[b]! - fittedRadii[a]!,
+    (a, b) => layoutRadii[b]! - layoutRadii[a]!,
   );
-  const maxAttemptsPerBubble = 120;
+  const maxAttemptsPerBubble = hasShapedBubbles ? 180 : 120;
 
   for (const i of placeOrder) {
     const frameScale = frameScales?.[i] ?? 1;
-    const radius = fittedRadii[i]!;
-    const collisionRadius = collisionRadiusFor(radius, frameScale);
+    const radius = layoutRadii[i]!;
+    const collisionRadius = hasShapedBubbles
+      ? layoutSeparationRadius(radius, frameScale, minDim)
+      : collisionRadiusFor(radius, frameScale);
     const cell = cellAssignments[i];
     let position: BubblePlacement | null = null;
 
     for (let attempt = 0; attempt < maxAttemptsPerBubble; attempt++) {
-      const offsetRatio = attempt < 80 ? 0.3 : 0.1;
-      const { x, y } =
-        attempt >= 100
-          ? sampleAnywhereInBounds(
-              collisionRadius,
-              width,
-              height,
-              inset,
-              random,
-            )
-          : sampleInCell(
+      const offsetRatio = attempt < 50 ? 0.42 : attempt < 90 ? 0.28 : 0.14;
+      const useGlobal = hasShapedBubbles || frameScale > 1 || attempt >= 90;
+      const { x, y } = useGlobal
+        ? sampleAnywhereInBounds(
+            collisionRadius,
+            width,
+            height,
+            inset,
+            random,
+          )
+        : sampleInCell(
               cell,
               cols,
               rows,
@@ -655,6 +714,8 @@ export function computeBubbleLayout(
           { dx: -gap * 2, dy: 0 },
           { dx: 0, dy: gap * 2 },
           { dx: 0, dy: -gap * 2 },
+          { dx: gap * 3, dy: -gap },
+          { dx: -gap * 3, dy: gap },
         ];
         for (const nudge of nudges) {
           const nudged = clampBubbleCenter(
@@ -685,15 +746,49 @@ export function computeBubbleLayout(
   }
 
   const resolved = placed as BubblePlacement[];
-  separateOverlappingPlacements(
-    resolved,
-    frameScales,
-    width,
-    height,
-    inset,
-    gap,
-    minDim,
-  );
+  const originalRadii = resolved.map((p) => p.radius);
+
+  for (let round = 0; round < 60; round++) {
+    const push = round < 15 ? 1.25 : round < 35 ? 1.75 : 2.8;
+      separateOverlappingPlacements(
+      resolved,
+      frameScales,
+      width,
+      height,
+      separationInset,
+      gap,
+      minDim,
+      push,
+    );
+    if (placementsOverlap(resolved, frameScales, minDim, gap).length === 0) {
+      return resolved;
+    }
+  }
+
+  if (placementsOverlap(resolved, frameScales, minDim, gap).length > 0) {
+    minimallyShrinkRemainingOverlaps(
+      resolved,
+      originalRadii,
+      frameScales,
+      minDim,
+      gap,
+    );
+    for (let round = 0; round < 30; round++) {
+      separateOverlappingPlacements(
+        resolved,
+        frameScales,
+        width,
+        height,
+        separationInset,
+        gap,
+        minDim,
+        1.6,
+      );
+      if (placementsOverlap(resolved, frameScales, minDim, gap).length === 0) {
+        break;
+      }
+    }
+  }
 
   return resolved;
 }
