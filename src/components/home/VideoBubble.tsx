@@ -132,22 +132,15 @@ export function VideoBubble({
                 )}
               </span>
               {isCircle ? (
-                <>
-                  <span
-                    className="display-mask-feather bubble-display-feather"
-                    aria-hidden
-                  />
-                  <span
-                    className="display-mask-membrane bubble-display-membrane"
-                    aria-hidden
-                  />
-                </>
-              ) : (
                 <span
-                  className="display-mask-membrane bubble-display-membrane bubble-display-membrane--contour"
+                  className="display-mask-feather bubble-display-feather"
                   aria-hidden
                 />
-              )}
+              ) : null}
+              <span
+                className="display-mask-membrane bubble-display-membrane"
+                aria-hidden
+              />
             </span>
           </span>
         </span>

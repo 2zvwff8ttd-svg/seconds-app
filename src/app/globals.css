@@ -758,32 +758,6 @@ body {
   --display-mask-membrane-line-2-color: rgba(180, 140, 80, 0.22);
 }
 
-/*
- * Polygon shapes: outer spread box-shadow follows clip-path (inset shadows stay rectangular).
- * Same thin semi-transparent membrane lines as circle — no heavy bloom.
- */
-.bubble-display-membrane--contour {
-  box-shadow: none;
-  filter: blur(var(--display-mask-membrane-filter-blur, 1.5px));
-  background: transparent;
-}
-
-.bubble-display-membrane--contour::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: var(--video-display-mask-radius, 50%);
-  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
-  pointer-events: none;
-  box-shadow:
-    0 0 0 var(--display-mask-membrane-line-1-width, 1.5px)
-      var(--display-mask-membrane-line-1-color, rgba(255, 255, 255, 0.42)),
-    0 0 0 var(--display-mask-membrane-line-2-width, 2.5px)
-      var(--display-mask-membrane-line-2-color, rgba(140, 120, 200, 0.18)),
-    0 0 var(--display-mask-membrane-outer-glow-blur, 12px)
-      var(--display-mask-membrane-outer-glow-color, rgba(120, 90, 180, 0.12));
-}
-
 /* shimmer — circle only (radial edge mask) */
 .bubble-3d.bubble-shimmer::before {
   -webkit-mask-image: radial-gradient(
