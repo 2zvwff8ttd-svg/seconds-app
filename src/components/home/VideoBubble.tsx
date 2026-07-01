@@ -130,9 +130,31 @@ export function VideoBubble({
                   </span>
                 )}
               </span>
-              <span className="display-mask-feather bubble-display-feather" aria-hidden />
-              <span className="display-mask-membrane bubble-display-membrane" aria-hidden />
+              {mask.modifier === "circle" ? (
+                <>
+                  <span
+                    className="display-mask-feather bubble-display-feather"
+                    aria-hidden
+                  />
+                  <span
+                    className="display-mask-membrane bubble-display-membrane"
+                    aria-hidden
+                  />
+                </>
+              ) : null}
             </span>
+            {mask.modifier !== "circle" ? (
+              <>
+                <span
+                  className="display-mask-feather bubble-display-feather bubble-display-feather--dissolve"
+                  aria-hidden
+                />
+                <span
+                  className="display-mask-membrane bubble-display-membrane bubble-display-membrane--contour"
+                  aria-hidden
+                />
+              </>
+            ) : null}
           </span>
         </span>
 
