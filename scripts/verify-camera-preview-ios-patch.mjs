@@ -116,10 +116,36 @@ const checks = [
   },
   {
     label: "builtInWideAngleCamera default device",
-    ok: controller.includes(
-      "AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position:",
-    ),
-    fail: "builtInWideAngleCamera default selection missing",
+    ok:
+      controller.includes(
+        "AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position:",
+      ) && controller.includes("func selectRearCameraDevice()"),
+    fail: "front wide or selectRearCameraDevice helper missing",
+  },
+  {
+    label: "setFocusAtNormalizedPoint helper",
+    ok: controller.includes("func setFocusAtNormalizedPoint"),
+    fail: "setFocusAtNormalizedPoint missing",
+  },
+  {
+    label: "getAvailableLenses helper",
+    ok: controller.includes("func getAvailableLenses()"),
+    fail: "getAvailableLenses missing",
+  },
+  {
+    label: "native tap gesture disabled for web focus",
+    ok: !controller.includes("setupTapGesture(target: target, selector: #selector(handleTap"),
+    fail: "native tap gesture should be removed (web setFocusPoint)",
+  },
+  {
+    label: "setFocusPoint plugin method",
+    ok: plugin.includes('CAPPluginMethod(name: "setFocusPoint"'),
+    fail: "setFocusPoint not registered on CameraPreview plugin",
+  },
+  {
+    label: "setZoom plugin method",
+    ok: plugin.includes('CAPPluginMethod(name: "setZoom"'),
+    fail: "setZoom not registered on CameraPreview plugin",
   },
   {
     label: "syncPreviewLayerFrame helper",

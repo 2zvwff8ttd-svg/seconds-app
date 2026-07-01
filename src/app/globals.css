@@ -1245,8 +1245,10 @@ body {
 :root {
   --z-record-scrim: 100;
   --z-record-rim: 101;
+  --z-record-focus-ring: 120;
   --z-record-loading: 150;
   --z-record-gauge: 200;
+  --z-record-lens-picker: 205;
   --z-record-flip: 210;
   --z-record-shape-picker: 310;
   --z-record-dock: 300;
@@ -1611,6 +1613,75 @@ html.record-native-preview-active body {
   letter-spacing: 0.02em;
   pointer-events: none;
   backdrop-filter: blur(8px);
+}
+
+.record-focus-ring {
+  position: fixed;
+  z-index: var(--z-record-focus-ring);
+  width: 4.5rem;
+  height: 4.5rem;
+  margin-left: -2.25rem;
+  margin-top: -2.25rem;
+  border-radius: 9999px;
+  border: 2px solid rgb(255 255 255 / 0.92);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+  animation: record-focus-ring-pulse 1.4s ease-out forwards;
+}
+
+@keyframes record-focus-ring-pulse {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.82);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
+.record-lens-picker {
+  position: fixed;
+  left: 1rem;
+  top: var(--record-layout-flip-top);
+  z-index: var(--z-record-lens-picker);
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.2rem;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.5);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+
+.record-lens-picker__btn {
+  min-width: 2.5rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 9999px;
+  border: none;
+  background: transparent;
+  color: rgb(255 255 255 / 0.78);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.record-lens-picker__btn--active {
+  background: rgb(255 255 255 / 0.22);
+  color: white;
+}
+
+.record-lens-picker__btn:disabled {
+  opacity: 0.45;
+}
+
+.record-lens-picker__btn:not(:disabled):hover {
+  background: rgb(255 255 255 / 0.12);
 }
 
 .record-stage-ui__dock {

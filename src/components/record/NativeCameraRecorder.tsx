@@ -2,6 +2,8 @@
 
 import type { CameraRecorderProps } from "@/components/record/camera-recorder-types";
 import { RecordMaskOverlay } from "@/components/record/RecordMaskOverlay";
+import { RecordFocusTapLayer } from "@/components/record/RecordFocusTapLayer";
+import { RecordLensPicker } from "@/components/record/RecordLensPicker";
 import { RecordStageControls } from "@/components/record/RecordStageControls";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
@@ -489,6 +491,19 @@ export function NativeCameraRecorder({
       <div className="record-camera-layout-spacer" aria-hidden />
 
       <RecordMaskOverlay cameraReady={cameraReady} shape={displayMaskShape} />
+
+      <RecordFocusTapLayer
+        shape={displayMaskShape}
+        cameraReady={cameraReady}
+        disabled={disabled || cameraStarting}
+      />
+
+      <RecordLensPicker
+        cameraReady={cameraReady}
+        facingMode={facingMode}
+        disabled={disabled || cameraStarting}
+        isRecording={isRecording}
+      />
 
       <RecordStageControls
         assignedSeconds={assignedSeconds}

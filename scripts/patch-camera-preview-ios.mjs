@@ -1221,7 +1221,7 @@ const handleTapGravityAnchorOld = `    @objc
     func handleTap(_ tap: UITapGestureRecognizer) {`;
 
 const handleTapGravityAnchorNew = `    /// seconds-app: aspect-fit at 1×; aspect-fill when zoomed so letterbox never shows through scrim holes.
-    private func syncPreviewVideoGravity(forZoomFactor factor: CGFloat) {
+    func syncPreviewVideoGravity(forZoomFactor factor: CGFloat) {
         guard let layer = self.previewLayer else { return }
         let gravity: AVLayerVideoGravity = factor > 1.01 ? .resizeAspectFill : .resizeAspect
         if layer.videoGravity != gravity {
@@ -1235,11 +1235,18 @@ const handleTapGravityAnchorNew = `    /// seconds-app: aspect-fit at 1×; aspec
     @objc
     func handleTap(_ tap: UITapGestureRecognizer) {`;
 
-await patchFile(
-  controllerPath,
-  [[handleTapGravityAnchorOld, handleTapGravityAnchorNew]],
-  "CameraController.swift (zoom preview gravity helper)",
-);
+let controllerBeforeGravity = await readFile(controllerPath, "utf8");
+if (!controllerBeforeGravity.includes("func syncPreviewVideoGravity(forZoomFactor")) {
+  await patchFile(
+    controllerPath,
+    [[handleTapGravityAnchorOld, handleTapGravityAnchorNew]],
+    "CameraController.swift (zoom preview gravity helper)",
+  );
+} else {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (zoom preview gravity helper) already patched",
+  );
+}
 
 const handlePinchGravityOld = `        switch pinch.state {
         case .began: fallthrough
@@ -1268,3 +1275,123 @@ await patchFile(
   [[handlePinchGravityOld, handlePinchGravityNew]],
   "CameraController.swift (pinch sync preview gravity)",
 );
+
+const {
+  FOCUS_LENS_CONTROLLER_EXTENSION,
+  FOCUS_LENS_CONTROLLER_PATCHES,
+  FOCUS_LENS_PLUGIN_HANDLERS,
+  FOCUS_LENS_PLUGIN_INSERT_BEFORE,
+  FOCUS_LENS_PLUGIN_METHODS_NEW,
+  FOCUS_LENS_PLUGIN_METHODS_OLD,
+} = await import("./camera-preview-ios-focus-lens.mjs");
+
+await patchFile(
+  controllerPath,
+  FOCUS_LENS_CONTROLLER_PATCHES,
+  "CameraController.swift (focus + lens patches)",
+);
+
+const gestureDelegateExtensionAnchor = `extension CameraController: UIGestureRecognizerDelegate {`;
+let controllerForFocusLens = await readFile(controllerPath, "utf8");
+if (
+  !controllerForFocusLens.includes("func setFocusAtNormalizedPoint") &&
+  controllerForFocusLens.includes(gestureDelegateExtensionAnchor)
+) {
+  controllerForFocusLens = controllerForFocusLens.replace(
+    gestureDelegateExtensionAnchor,
+    `${FOCUS_LENS_CONTROLLER_EXTENSION}\n${gestureDelegateExtensionAnchor}`,
+  );
+  await writeFile(controllerPath, controllerForFocusLens, "utf8");
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (focus + lens extension)",
+  );
+} else if (controllerForFocusLens.includes("func setFocusAtNormalizedPoint")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (focus + lens extension) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip focus + lens extension: anchor not found",
+  );
+}
+
+let pluginForFocusLens = await readFile(pluginPath, "utf8");
+if (!pluginForFocusLens.includes('CAPPluginMethod(name: "setFocusPoint"')) {
+  if (pluginForFocusLens.includes(FOCUS_LENS_PLUGIN_METHODS_OLD)) {
+    pluginForFocusLens = pluginForFocusLens.replace(
+      FOCUS_LENS_PLUGIN_METHODS_OLD,
+      FOCUS_LENS_PLUGIN_METHODS_NEW,
+    );
+  }
+  if (
+    pluginForFocusLens.includes(FOCUS_LENS_PLUGIN_INSERT_BEFORE) &&
+    !pluginForFocusLens.includes("@objc func setFocusPoint")
+  ) {
+    pluginForFocusLens = pluginForFocusLens.replace(
+      FOCUS_LENS_PLUGIN_INSERT_BEFORE,
+      `${FOCUS_LENS_PLUGIN_HANDLERS}\n    ${FOCUS_LENS_PLUGIN_INSERT_BEFORE}`,
+    );
+  }
+  await writeFile(pluginPath, pluginForFocusLens, "utf8");
+  console.log("[patch-camera-preview-ios] CameraPreviewPlugin.swift (focus + lens API)");
+} else {
+  console.log(
+    "[patch-camera-preview-ios] CameraPreviewPlugin.swift (focus + lens API) already patched",
+  );
+}
+
+const duplicatePrivateGravityOld = `    /// seconds-app: aspect-fit at 1×; aspect-fill when zoomed so letterbox never shows through scrim holes.
+    private func syncPreviewVideoGravity(forZoomFactor factor: CGFloat) {
+        guard let layer = self.previewLayer else { return }
+        let gravity: AVLayerVideoGravity = factor > 1.01 ? .resizeAspectFill : .resizeAspect
+        if layer.videoGravity != gravity {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.videoGravity = gravity
+            CATransaction.commit()
+        }
+    }
+
+`;
+
+const duplicatePublicGravityOld = `    /// seconds-app: aspect-fit at 1×; aspect-fill when zoomed so letterbox never shows through scrim holes.
+    func syncPreviewVideoGravity(forZoomFactor factor: CGFloat) {
+        guard let layer = self.previewLayer else { return }
+        let gravity: AVLayerVideoGravity = factor > 1.01 ? .resizeAspectFill : .resizeAspect
+        if layer.videoGravity != gravity {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.videoGravity = gravity
+            CATransaction.commit()
+        }
+    }
+
+`;
+
+let controllerDedup = await readFile(controllerPath, "utf8");
+let dedupChanged = false;
+if (controllerDedup.includes(duplicatePrivateGravityOld)) {
+  controllerDedup = controllerDedup.replace(duplicatePrivateGravityOld, "");
+  dedupChanged = true;
+  console.log(
+    "[patch-camera-preview-ios] removed duplicate private syncPreviewVideoGravity",
+  );
+}
+while (controllerDedup.split(duplicatePublicGravityOld).length > 2) {
+  const first = controllerDedup.indexOf(duplicatePublicGravityOld);
+  const second = controllerDedup.indexOf(
+    duplicatePublicGravityOld,
+    first + duplicatePublicGravityOld.length,
+  );
+  if (second < 0) break;
+  controllerDedup =
+    controllerDedup.slice(0, second) +
+    controllerDedup.slice(second + duplicatePublicGravityOld.length);
+  dedupChanged = true;
+  console.log(
+    "[patch-camera-preview-ios] removed duplicate public syncPreviewVideoGravity",
+  );
+}
+if (dedupChanged) {
+  await writeFile(controllerPath, controllerDedup, "utf8");
+}
