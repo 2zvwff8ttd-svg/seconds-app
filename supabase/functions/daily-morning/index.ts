@@ -24,6 +24,7 @@ const JST = "Asia/Tokyo";
  * シークレット（自動注入）: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  * 任意: CRON_SECRET（手動呼び出し時に x-cron-secret ヘッダ）
  * プッシュ: APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY, APNS_BUNDLE_ID, APNS_ENVIRONMENT
+ * デバッグ: APNS_DEBUG_JWT=true（既定）で [apns-jwt-debug] を Logs に出力。終了後 false
  */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
