@@ -10,9 +10,8 @@ const JST = "Asia/Tokyo";
  * 処理内容（DB: public.run_daily_morning_job）:
  * 1. pending 動画を published に変更
  * 2. 全ユーザーに 5〜30 秒の撮影時間を daily_assignments に登録
- * 3. 当日公開があったユーザーへ「昨日の動画が公開されました！今日の撮影時間は〇秒です。」
- * 4. それ以外へ「今日の撮影時間は〇秒です。」
- * 5. （Phase 1 push）enabled な iOS トークンへ morning_digest APNs 送信
+ * 3. 全ユーザーへ morning_digest 通知（title: ?Seconds / body: 固定コピー、秒数は出さない）
+ * 4. enabled な iOS トークンへ morning_digest APNs 送信（notifications の title/body をそのまま使用）
  *
  * スケジュール（7:00 JST = 22:00 UTC）:
  *   Dashboard → Edge Functions → daily-morning → Schedules

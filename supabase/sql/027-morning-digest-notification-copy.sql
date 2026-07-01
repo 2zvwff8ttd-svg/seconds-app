@@ -1,7 +1,6 @@
 -- =============================================================================
--- 毎朝 7:00 JST 日次ジョブ RPC（SQL Editor で実行）
--- 018_post_streak 適用後: ストリークに応じた秒数割当（10の倍数日は5〜60秒）
--- 027: morning_digest 通知は固定コピー（秒数は通知に出さない）
+-- Morning digest notification copy (SQL Editor 用)
+-- Same as supabase/migrations/027_morning_digest_notification_copy.sql
 -- =============================================================================
 
 create or replace function public.run_daily_morning_job()
