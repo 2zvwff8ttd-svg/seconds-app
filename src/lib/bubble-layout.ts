@@ -7,6 +7,9 @@ export type BubblePlacement = {
 /** Relative sizes for 6 bubbles (viral is index 0 when viralFirst). */
 const SIZE_VARIANTS = [1, 0.9, 0.95, 0.88, 0.93, 0.86] as const;
 
+/** Uniform lift for all shapes; per-shape bubbleFrameScale ratios stay unchanged. */
+const BUBBLE_RADIUS_SCALE = 1.08;
+
 type GridCell = { row: number; col: number };
 
 function createSeededRandom(seed: number) {
@@ -545,15 +548,15 @@ export function getBubbleRadii(
   const usableW = width - inset * 2;
   const usableH = height - inset * 2;
   const cellMin = Math.min(usableW / cols, usableH / rows);
-  const maxBaseRadius = cellMin * 0.41;
-  const maxViralRadius = cellMin * 0.48;
+  const maxBaseRadius = cellMin * 0.41 * BUBBLE_RADIUS_SCALE;
+  const maxViralRadius = cellMin * 0.48 * BUBBLE_RADIUS_SCALE;
 
   const baseRadius = Math.min(
-    minDim * (isCompact ? 0.19 : 0.15),
+    minDim * (isCompact ? 0.19 : 0.15) * BUBBLE_RADIUS_SCALE,
     maxBaseRadius,
   );
   const viralRadius = Math.min(
-    minDim * (isCompact ? 0.29 : 0.22),
+    minDim * (isCompact ? 0.29 : 0.22) * BUBBLE_RADIUS_SCALE,
     maxViralRadius,
   );
 
