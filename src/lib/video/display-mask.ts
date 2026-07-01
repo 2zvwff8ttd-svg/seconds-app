@@ -105,11 +105,14 @@ const DIAMOND_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> =
 
 const DIAMOND_CLIP_PATH = `polygon(${DIAMOND_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
 
-const SQUARE_CLIP_PATH = "inset(4%)";
-const SQUARE_BORDER_RADIUS = "14%";
-
 export const RECORD_SCRIM_SQUARE_INSET_RATIO = 0.04;
 export const RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO = 0.14;
+
+const SQUARE_INSET_PERCENT = RECORD_SCRIM_SQUARE_INSET_RATIO * 100;
+const SQUARE_CORNER_RADIUS_PERCENT =
+  RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO * 100;
+const SQUARE_CLIP_PATH = `inset(${SQUARE_INSET_PERCENT}% round ${SQUARE_CORNER_RADIUS_PERCENT}%)`;
+const SQUARE_BORDER_RADIUS = `${SQUARE_CORNER_RADIUS_PERCENT}%`;
 
 /**
  * Shape-agnostic feather + membrane tokens.
