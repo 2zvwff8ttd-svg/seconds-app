@@ -181,9 +181,17 @@ export type VideoDisplayMaskDefinition = {
   id: VideoDisplayMaskShape;
   label: string;
   modifier: VideoDisplayMaskShape;
-  /** Perceived-size multiplier (star < circle fill → scale up record hole). */
+  /**
+   * Record / fullscreen hole only — enlarges the capture viewport so the clipped
+   * shape feels similar to a circle. Not applied on home bubbles (no CSS transform).
+   */
   visualScale: number;
-  /** Home bubble outer frame scale (star needs a larger square viewport). */
+  /**
+   * Clip-path fill vs circle in a unit square (circle = 1). Shapes that fill less
+   * of the bbox need a larger home frame: frameScale ≈ sqrt(1 / bubbleVisualFillRatio).
+   */
+  bubbleVisualFillRatio?: number;
+  /** Home bubble layout frame scale (tuned; overrides sqrt formula when set). */
   bubbleFrameScale?: number;
   clipPath: string;
   borderRadius: string;
@@ -369,6 +377,7 @@ function buildMaskDefinitions(): Record<
       label: "丸",
       modifier: "circle",
       visualScale: 1,
+      bubbleVisualFillRatio: 1,
       clipPath: "circle(50% at 50% 50%)",
       borderRadius: "50%",
       recordRimClipPath: "circle(50% at 50% 50%)",
@@ -379,6 +388,7 @@ function buildMaskDefinitions(): Record<
       label: "星",
       modifier: "star",
       visualScale: 1.55,
+      bubbleVisualFillRatio: 0.334,
       bubbleFrameScale: 1.55,
       clipPath: STAR_CLIP_PATH,
       borderRadius: "0",
@@ -391,6 +401,7 @@ function buildMaskDefinitions(): Record<
       label: "角丸",
       modifier: "square",
       visualScale: 1,
+      bubbleVisualFillRatio: 1.077,
       clipPath: SQUARE_CLIP_PATH,
       borderRadius: SQUARE_BORDER_RADIUS,
       recordRimClipPath: SQUARE_CLIP_PATH,
@@ -401,7 +412,9 @@ function buildMaskDefinitions(): Record<
       label: "ハート",
       modifier: "heart",
       visualScale: 1.5,
-      bubbleFrameScale: 1.58,
+      // Heart nearly fills its bbox — frame scale must stay ~1.1, not ~1.5 record visualScale.
+      bubbleVisualFillRatio: 0.813,
+      bubbleFrameScale: 1.12,
       clipPath: HEART_CLIP_PATH,
       borderRadius: "0",
       recordRimClipPath: HEART_CLIP_PATH,
@@ -412,6 +425,7 @@ function buildMaskDefinitions(): Record<
       label: "菱形",
       modifier: "diamond",
       visualScale: 1.4,
+      bubbleVisualFillRatio: 0.515,
       bubbleFrameScale: 1.4,
       clipPath: DIAMOND_CLIP_PATH,
       borderRadius: "0",
@@ -454,12 +468,17 @@ export function getVideoDisplayMaskCssVars(
   };
 }
 
-/** Multiplier for home bubble width/height (placement.radius). Star > 1 enlarges the frame. */
+/**
+ * Home layout frame scale — enlarges the square clip viewport so every shape
+ * matches circle perceived size. Independent from visualScale (record/fullscreen).
+ */
 export function getBubbleFrameScale(
   shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): number {
   const mask = getVideoDisplayMask(shape);
-  return mask.bubbleFrameScale ?? 1;
+  if (mask.bubbleFrameScale != null) return mask.bubbleFrameScale;
+  const fill = mask.bubbleVisualFillRatio ?? 1;
+  return Math.round(Math.sqrt(1 / fill) * 100) / 100;
 }
 
 export function getRecordViewportMaskCssVars(
