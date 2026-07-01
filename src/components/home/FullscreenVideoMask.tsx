@@ -6,6 +6,7 @@ import {
   getVideoDisplayMaskCssVars,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
+import { BubbleDisplayMembraneRing } from "@/components/video/BubbleDisplayMembraneRing";
 import type { CSSProperties, ReactNode } from "react";
 
 type FullscreenVideoMaskProps = {
@@ -26,6 +27,7 @@ export function FullscreenVideoMask({
 }: FullscreenVideoMaskProps) {
   const mask = getVideoDisplayMask(shape);
   const maskStyle = getVideoDisplayMaskCssVars(shape);
+  const isCircle = shape === "circle";
 
   return (
     <div
@@ -47,10 +49,17 @@ export function FullscreenVideoMask({
             className="display-mask-feather fullscreen-video-mask__feather"
             aria-hidden
           />
-          <div
-            className="display-mask-membrane fullscreen-video-mask__membrane"
-            aria-hidden
-          />
+          {isCircle ? (
+            <div
+              className="display-mask-membrane fullscreen-video-mask__membrane"
+              aria-hidden
+            />
+          ) : (
+            <BubbleDisplayMembraneRing
+              shape={shape}
+              className="display-mask-membrane-ring fullscreen-video-mask__membrane-ring"
+            />
+          )}
         </div>
       </div>
     </div>

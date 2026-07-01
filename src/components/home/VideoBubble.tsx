@@ -12,6 +12,7 @@ import { getBubbleOriginRect } from "@/lib/home/bubble-origin-rect";
 import type { BubblePlacement } from "@/lib/bubble-layout";
 import { resolveBubbleDisplayUrls } from "@/lib/videos/bubble-thumbnail";
 import { BubbleThumbnailSlideshow } from "./BubbleThumbnailSlideshow";
+import { BubbleDisplayMembraneRing } from "@/components/video/BubbleDisplayMembraneRing";
 import { CrownIcon } from "./CrownIcon";
 
 /** シャボン玉表示用（動画 URL は含めない） */
@@ -137,10 +138,17 @@ export function VideoBubble({
                   aria-hidden
                 />
               ) : null}
-              <span
-                className="display-mask-membrane bubble-display-membrane"
-                aria-hidden
-              />
+              {isCircle ? (
+                <span
+                  className="display-mask-membrane bubble-display-membrane"
+                  aria-hidden
+                />
+              ) : (
+                <BubbleDisplayMembraneRing
+                  shape={mask.modifier}
+                  className="display-mask-membrane-ring bubble-display-membrane-ring"
+                />
+              )}
             </span>
           </span>
         </span>

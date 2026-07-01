@@ -459,6 +459,53 @@ export function getVideoDisplayMask(
   return getMaskDefinitions()[shape];
 }
 
+export type DisplayMaskMembraneSvgOutline =
+  | { type: "polygon"; points: string }
+  | { type: "path"; d: string }
+  | {
+      type: "rect";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rx: number;
+      ry: number;
+    };
+
+function formatPolygonPercentPoints(
+  percentPoints: ReadonlyArray<readonly [number, number]>,
+): string {
+  return percentPoints.map(([x, y]) => `${x},${y}`).join(" ");
+}
+
+/** SVG stroke outline matching clip-path geometry — null for circle (CSS membrane). */
+export function getDisplayMaskMembraneSvgOutline(
+  shape: VideoDisplayMaskShape,
+): DisplayMaskMembraneSvgOutline | null {
+  switch (shape) {
+    case "circle":
+      return null;
+    case "star":
+      return {
+        type: "polygon",
+        points: formatPolygonPercentPoints(STAR_POLYGON_PERCENT_POINTS),
+      };
+    case "diamond":
+      return {
+        type: "polygon",
+        points: formatPolygonPercentPoints(DIAMOND_POLYGON_PERCENT_POINTS),
+      };
+    case "heart":
+      return { type: "path", d: HEART_MASK_PATH_D };
+    case "square": {
+      const inset = RECORD_SCRIM_SQUARE_INSET_RATIO * 100;
+      const size = 100 - inset * 2;
+      const rx = RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO * 100;
+      return { type: "rect", x: inset, y: inset, width: size, height: size, rx, ry: rx };
+    }
+  }
+}
+
 export function getVideoDisplayMaskCssVars(
   shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): Record<string, string> {
