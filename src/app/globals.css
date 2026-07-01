@@ -757,26 +757,74 @@ body {
   --display-mask-membrane-line-2-color: rgba(180, 140, 80, 0.22);
 }
 
-/* Non-circle: feather/membrane sit outside overflow:hidden body so blur can dissolve into bg */
-.bubble-display-feather--dissolve {
-  inset: var(--display-mask-feather-inset-expand, -4%);
-  transform: scale(1.05);
-  transform-origin: center;
-  filter: blur(8px);
-  opacity: 0.58;
+/* ── Non rounded shapes: soap-bubble glass depth (specular + edge glow + inner shade) ── */
+.bubble-display-glass {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  border-radius: var(--video-display-mask-radius, 50%);
+  clip-path: var(--video-display-mask-clip, circle(50% at 50% 50%));
 }
 
-.bubble-3d--square .bubble-display-feather--dissolve {
-  transform: scale(1.035);
-  filter: blur(7px);
-  opacity: 0.56;
+.bubble-display-glass::before {
+  content: "";
+  position: absolute;
+  top: var(--bubble-hl-top, 0%);
+  left: var(--bubble-hl-left, 4%);
+  width: var(--bubble-hl-width, 50%);
+  height: var(--bubble-hl-height, 36%);
+  transform: rotate(var(--bubble-hl-rotate, -28deg));
+  background: radial-gradient(
+    ellipse 90% 80% at 28% 22%,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.34) 38%,
+    rgba(196, 181, 253, 0.14) 62%,
+    transparent 78%
+  );
+  opacity: var(--bubble-hl-opacity, 0.45);
+  mix-blend-mode: screen;
+  filter: blur(0.5px);
 }
 
-.bubble-3d:not(.bubble-3d--circle) .bubble-3d__thumb {
-  transform: scale(1.025);
-  transform-origin: center;
+.bubble-display-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  clip-path: inherit;
+  background:
+    radial-gradient(
+      circle at var(--bubble-spec-left, 14%) var(--bubble-spec-top, 18%),
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0.24) 7%,
+      transparent 15%
+    ),
+    linear-gradient(
+      158deg,
+      rgba(255, 255, 255, 0.16) 0%,
+      transparent 40%,
+      transparent 56%,
+      rgba(12, 8, 28, 0.58) 100%
+    );
+  opacity: var(--bubble-refraction-opacity, 0.55);
+  mix-blend-mode: soft-light;
+  box-shadow:
+    0 0 calc(22px * var(--bubble-edge-glow, 0.28))
+      rgba(139, 92, 246, calc(var(--bubble-edge-glow, 0.28) * 0.55)),
+    0 0 calc(40px * var(--bubble-edge-glow, 0.28))
+      rgba(88, 55, 140, calc(var(--bubble-edge-glow, 0.28) * 0.32)),
+    inset 0 -14px 28px
+      rgba(15, 10, 35, calc(var(--bubble-atmo-opacity, 0.3) * 0.9));
 }
 
+.bubble-3d:not(.bubble-3d--circle) .bubble-3d__body {
+  box-shadow:
+    inset 0 -12px 26px rgba(15, 10, 35, 0.38),
+    inset 0 10px 20px rgba(255, 255, 255, 0.05);
+}
+
+/* Membrane ring that follows clip-path silhouette (inset box-shadow is rectangular). */
 .bubble-display-membrane--contour {
   box-shadow: none;
   filter: none;
@@ -784,7 +832,6 @@ body {
   overflow: visible;
 }
 
-/* Outer spread shadows follow clip-path silhouette (inset shadows do not on star/heart). */
 .bubble-display-membrane--contour::before {
   content: "";
   position: absolute;
@@ -817,7 +864,7 @@ body {
       var(--display-mask-membrane-bottom-shade-blur, 18px) 0
       var(--display-mask-membrane-bottom-shade-color, rgba(15, 10, 35, 0.32));
   filter: blur(1px);
-  opacity: 0.85;
+  opacity: 0.88;
 }
 
 .bubble-3d-shadow:has(.bubble-3d--star),
@@ -825,9 +872,9 @@ body {
 .bubble-3d-shadow:has(.bubble-3d--diamond),
 .bubble-3d-shadow:has(.bubble-3d--square) {
   filter: var(--display-mask-feather-bloom-filter)
-    drop-shadow(0 0 10px rgba(100, 80, 150, 0.22))
-    drop-shadow(0 10px 22px rgba(6, 4, 22, 0.42))
-    drop-shadow(0 18px 36px rgba(18, 10, 42, 0.22));
+    drop-shadow(0 0 14px rgba(100, 80, 150, 0.28))
+    drop-shadow(0 12px 28px rgba(6, 4, 22, 0.48))
+    drop-shadow(0 22px 44px rgba(18, 10, 42, 0.28));
 }
 
 .bubble-3d-shadow--viral:has(.bubble-3d--star),
@@ -835,9 +882,9 @@ body {
 .bubble-3d-shadow--viral:has(.bubble-3d--diamond),
 .bubble-3d-shadow--viral:has(.bubble-3d--square) {
   filter: var(--display-mask-feather-bloom-filter)
-    drop-shadow(0 0 10px rgba(100, 80, 150, 0.22))
-    drop-shadow(0 12px 26px rgba(8, 5, 28, 0.45))
-    drop-shadow(0 20px 40px rgba(30, 18, 55, 0.28))
+    drop-shadow(0 0 14px rgba(100, 80, 150, 0.28))
+    drop-shadow(0 14px 30px rgba(8, 5, 28, 0.5))
+    drop-shadow(0 24px 46px rgba(30, 18, 55, 0.32))
     drop-shadow(0 0 28px rgba(251, 191, 36, 0.35));
 }
 
@@ -846,14 +893,14 @@ body {
 .bubble-3d-shadow--viral-hero:has(.bubble-3d--diamond),
 .bubble-3d-shadow--viral-hero:has(.bubble-3d--square) {
   filter: var(--display-mask-feather-bloom-filter)
-    drop-shadow(0 0 10px rgba(100, 80, 150, 0.22))
-    drop-shadow(0 14px 30px rgba(8, 5, 28, 0.48))
-    drop-shadow(0 24px 48px rgba(35, 20, 60, 0.3))
+    drop-shadow(0 0 14px rgba(100, 80, 150, 0.28))
+    drop-shadow(0 16px 34px rgba(8, 5, 28, 0.52))
+    drop-shadow(0 28px 52px rgba(35, 20, 60, 0.34))
     drop-shadow(0 0 36px rgba(251, 191, 36, 0.5))
     drop-shadow(0 0 56px rgba(251, 191, 36, 0.22));
 }
 
-/* shimmer は大玉の縁だけ（中央サムネにかからない） */
+/* shimmer — circle uses radial edge mask; other shapes use parent clip-path */
 .bubble-3d.bubble-shimmer::before {
   -webkit-mask-image: radial-gradient(
     circle at 50% 50%,
@@ -888,6 +935,24 @@ body {
     transparent 66%
   );
   opacity: 0.55;
+  animation: bubble-shimmer 3.5s ease-in-out infinite;
+}
+
+.bubble-3d.bubble-display-shimmer::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 11;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    108deg,
+    transparent 34%,
+    rgba(255, 255, 255, 0.72) 48%,
+    rgba(255, 255, 255, 0.32) 52%,
+    transparent 66%
+  );
+  opacity: 0.42;
   animation: bubble-shimmer 3.5s ease-in-out infinite;
 }
 
