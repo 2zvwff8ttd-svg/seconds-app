@@ -401,7 +401,7 @@ function buildMaskDefinitions(): Record<
       label: "ハート",
       modifier: "heart",
       visualScale: 1.5,
-      bubbleFrameScale: 1.5,
+      bubbleFrameScale: 1.58,
       clipPath: HEART_CLIP_PATH,
       borderRadius: "0",
       recordRimClipPath: HEART_CLIP_PATH,

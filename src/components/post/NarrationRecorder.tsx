@@ -10,7 +10,6 @@ import {
   getPreferredNarrationMimeType,
   openNarrationMicrophone,
 } from "@/lib/recording/narration-recorder";
-import { mergeVideoWithNarration } from "@/lib/video/merge-audio-tracks";
 import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
 import type { RecordedClip } from "@/types/recording";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -67,9 +66,6 @@ export function NarrationRecorder({
   const [recordedDurationSec, setRecordedDurationSec] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
-  const [mergeProgress, setMergeProgress] = useState<number | null>(null);
-  const [mergeBusy, setMergeBusy] = useState(false);
-  const [mergeError, setMergeError] = useState<string | null>(null);
 
   const busy = phase === "recording" || phase === "previewing";
   const blockedByBgm = bgmActive;
@@ -325,40 +321,6 @@ export function NarrationRecorder({
     setElapsedSec(0);
     setPhase("idle");
     setError(null);
-    setMergeError(null);
-    setMergeProgress(null);
-  };
-
-  const handleDevMergeTest = async () => {
-    const videoFile = clips[0]?.file;
-    const narration = savedBlob;
-    if (!videoFile || !narration || mergeBusy) return;
-
-    setMergeBusy(true);
-    setMergeError(null);
-    setMergeProgress(0);
-
-    try {
-      const merged = await mergeVideoWithNarration(videoFile, narration, {
-        videoDurationSec: totalVideoSeconds,
-        onProgress: (ratio) => setMergeProgress(ratio),
-      });
-
-      const url = URL.createObjectURL(merged);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = merged.name;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 0);
-      setMergeProgress(1);
-    } catch (err) {
-      setMergeError(
-        err instanceof Error ? err.message : "MP4合成テストに失敗しました",
-      );
-      setMergeProgress(null);
-    } finally {
-      setMergeBusy(false);
-    }
   };
 
   const showRecordedActions = phase === "recorded" || (hasRecording && phase !== "recording");
@@ -469,33 +431,6 @@ export function NarrationRecorder({
           <p className="text-center text-[10px] text-cyan-100/80">
             録音 {formatClipDurationSeconds(recordedDurationSec || elapsedSec)}秒 — 投稿時に動画へ焼き込まれます
           </p>
-        )}
-
-        {showRecordedActions && phase !== "previewing" && savedBlob && clips[0] && (
-          <div className="w-full rounded-xl border border-dashed border-cyan-400/30 bg-black/20 px-3 py-3">
-            <p className="text-[10px] font-medium text-cyan-100/90">
-              開発用: MP4 合成テスト（Stage 2）
-            </p>
-            <p className="mt-1 text-[10px] leading-relaxed text-muted">
-              クリップ1の動画 + ナレーションを ffmpeg で1本の MP4 に合成してダウンロードします。
-              {clips.length > 1 && " 複数クリップ時は結合前のクリップ1のみを使用します。"}
-            </p>
-            <button
-              type="button"
-              onClick={() => void handleDevMergeTest()}
-              disabled={disabled || mergeBusy || busy}
-              className="mt-3 w-full rounded-xl border border-cyan-400/40 bg-cyan-500/10 px-3 py-2.5 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-500/20 disabled:opacity-40"
-            >
-              {mergeBusy
-                ? `MP4合成中… ${mergeProgress !== null ? `${Math.round(mergeProgress * 100)}%` : ""}`
-                : "MP4に合成してダウンロード（開発）"}
-            </button>
-            {mergeError && (
-              <p className="mt-2 text-[10px] text-red-400" role="alert">
-                {mergeError}
-              </p>
-            )}
-          </div>
         )}
 
         {error && (

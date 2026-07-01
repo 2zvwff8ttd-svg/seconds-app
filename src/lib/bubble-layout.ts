@@ -27,9 +27,10 @@ function shuffle<T>(items: T[], random: () => number): T[] {
 }
 
 export function getCollisionRadius(radius: number, frameScale = 1): number {
-  // Star frames need a little extra separation beyond the square bbox.
-  const padding = frameScale > 1 ? radius * 0.06 : 0;
-  return radius + padding;
+  if (frameScale <= 1) return radius;
+  // Star/heart/diamond masks fill the square bbox (wider than an inscribed circle).
+  const excess = frameScale - 1;
+  return radius * (1 + 0.08 + excess * 0.12);
 }
 
 function pairCollisionGap(
