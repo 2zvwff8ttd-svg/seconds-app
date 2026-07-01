@@ -105,9 +105,6 @@ export function VideoBubble({
           }`}
           style={maskStyle}
         >
-          {!isCircle ? (
-            <span className="bubble-display-outer-bloom" aria-hidden />
-          ) : null}
           <span
             className={`bubble-3d bubble-3d--${mask.modifier}${
               isViral ? " bubble-3d--viral bubble-3d--viral-hero" : ""
@@ -145,7 +142,12 @@ export function VideoBubble({
                     aria-hidden
                   />
                 </>
-              ) : null}
+              ) : (
+                <span
+                  className="display-mask-membrane bubble-display-membrane bubble-display-membrane--contour"
+                  aria-hidden
+                />
+              )}
             </span>
           </span>
         </span>
