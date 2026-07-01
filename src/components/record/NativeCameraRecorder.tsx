@@ -20,6 +20,7 @@ import {
   type NativeRecordingResult,
 } from "@/lib/recording/native-camera-preview";
 import { debounceAsync } from "@/lib/recording/native-preview-scheduler";
+import { useNativePreviewZoomed } from "@/lib/recording/use-native-preview-zoomed";
 import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
 import { nativeVideoSourceToFile } from "@/lib/recording/native-recording-file";
 import {
@@ -76,6 +77,8 @@ export function NativeCameraRecorder({
   const [error, setError] = useState<string | null>(null);
   const [pendingRecordedSeconds, setPendingRecordedSeconds] = useState(0);
   const [failedClipPending, setFailedClipPending] = useState(false);
+
+  const previewZoomed = useNativePreviewZoomed(cameraReady && !cameraStarting);
 
   const usedClipSeconds = useMemo(() => sumRecordedClipSeconds(clips), [clips]);
 
@@ -490,7 +493,11 @@ export function NativeCameraRecorder({
 
       <div className="record-camera-layout-spacer" aria-hidden />
 
-      <RecordMaskOverlay cameraReady={cameraReady} shape={displayMaskShape} />
+      <RecordMaskOverlay
+        cameraReady={cameraReady}
+        shape={displayMaskShape}
+        previewZoomed={previewZoomed}
+      />
 
       <RecordFocusTapLayer
         shape={displayMaskShape}

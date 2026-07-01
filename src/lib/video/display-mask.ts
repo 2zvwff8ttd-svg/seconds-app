@@ -288,6 +288,9 @@ export function getRecordHoleMaskBleedPx(
   return 1;
 }
 
+/** Shrink scrim hole inward while preview is zoomed — hides preview letterbox at the edge. */
+export const RECORD_HOLE_ZOOM_MASK_INSET_PX = 3;
+
 export function buildRecordHeartHolePathProps(
   rect: RecordHoleRect,
   shape: VideoDisplayMaskShape = "heart",
