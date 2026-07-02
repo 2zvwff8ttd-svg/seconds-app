@@ -19,16 +19,35 @@ export function HomeScreen() {
   const [immersive, setImmersive] = useState(false);
   const [backgroundHidden, setBackgroundHidden] = useState(false);
 
-  // Free the starfield only *after* the fullscreen enter settles, so its
-  // teardown never competes with the first video frame (kept the iPhone 13
-  // OOM win: it's still unmounted during steady playback). Restore instantly.
+  // Free the starfield only when the main thread is idle after the fullscreen
+  // enter settles, so its teardown never competes with the first video frame
+  // (keeps the iPhone 13 OOM win: still unmounted during steady playback).
+  // Restore instantly on close.
   useEffect(() => {
     if (!immersive) {
       setBackgroundHidden(false);
       return;
     }
-    const timer = window.setTimeout(() => setBackgroundHidden(true), 500);
-    return () => window.clearTimeout(timer);
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    let idleId: number | undefined;
+    const timer = window.setTimeout(() => {
+      if (typeof win.requestIdleCallback === "function") {
+        idleId = win.requestIdleCallback(() => setBackgroundHidden(true), {
+          timeout: 1500,
+        });
+      } else {
+        setBackgroundHidden(true);
+      }
+    }, 1200);
+    return () => {
+      window.clearTimeout(timer);
+      if (idleId !== undefined && typeof win.cancelIdleCallback === "function") {
+        win.cancelIdleCallback(idleId);
+      }
+    };
   }, [immersive]);
 
   useEffect(() => {

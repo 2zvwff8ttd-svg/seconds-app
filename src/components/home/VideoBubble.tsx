@@ -13,6 +13,7 @@ import type { BubblePlacement } from "@/lib/bubble-layout";
 import { resolveBubbleDisplayUrls } from "@/lib/videos/bubble-thumbnail";
 import { BubbleThumbnailSlideshow } from "./BubbleThumbnailSlideshow";
 import { BubbleDisplayMembraneRing } from "@/components/video/BubbleDisplayMembraneRing";
+import { warmVideoUrl } from "@/lib/videos/preload-video";
 import { CrownIcon } from "./CrownIcon";
 
 /** シャボン玉表示用（動画 URL は含めない） */
@@ -77,6 +78,13 @@ export function VideoBubble({
     onSelect(getBubbleOriginRect(wrapperRef.current));
   }, [isHidden, onSelect]);
 
+  // Start fetching the video the moment the finger touches down (before click),
+  // so the fullscreen player finds the bytes already warming in the HTTP cache.
+  const handlePreload = useCallback(() => {
+    if (isHidden) return;
+    warmVideoUrl(video.videoUrl);
+  }, [isHidden, video.videoUrl]);
+
   return (
     <div
       ref={wrapperRef}
@@ -97,6 +105,7 @@ export function VideoBubble({
         type="button"
         aria-label={`${video.title} by ${resolveDisplayName(video.creatorDisplayName, video.creatorName)}`}
         onClick={handleClick}
+        onPointerDown={handlePreload}
         disabled={isHidden}
         className="group relative h-full w-full overflow-visible touch-manipulation focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/80"
       >
