@@ -34,9 +34,16 @@ type BubbleFieldProps = {
   onCountryChange?: (countryCode: string) => void;
   /** Called once home feed fetch finishes (success or failure). */
   onFeedReady?: () => void;
+  /** Fires when fullscreen playback opens/closes so the home shell can free background work. */
+  onFullscreenChange?: (open: boolean) => void;
 };
 
-export function BubbleField({ bottomInset, onCountryChange, onFeedReady }: BubbleFieldProps) {
+export function BubbleField({
+  bottomInset,
+  onCountryChange,
+  onFeedReady,
+  onFullscreenChange,
+}: BubbleFieldProps) {
   const pathname = usePathname();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -161,10 +168,14 @@ export function BubbleField({ bottomInset, onCountryChange, onFeedReady }: Bubbl
     [size.width, size.height],
   );
 
-  const handleSelect = useCallback((video: FeedVideo, origin: BubbleOriginRect) => {
-    setHiddenBubbleId(null);
-    setSelection({ video, origin });
-  }, []);
+  const handleSelect = useCallback(
+    (video: FeedVideo, origin: BubbleOriginRect) => {
+      setHiddenBubbleId(null);
+      setSelection({ video, origin });
+      onFullscreenChange?.(true);
+    },
+    [onFullscreenChange],
+  );
 
   const replaceAllBubbles = useCallback(
     (excludeIds: ReadonlySet<string>) => {
@@ -184,6 +195,7 @@ export function BubbleField({ bottomInset, onCountryChange, onFeedReady }: Bubbl
       const watched = selection?.video;
       setSelection(null);
       setHiddenBubbleId(null);
+      onFullscreenChange?.(false);
       if (!watched) return;
 
       sessionWatchedIdsRef.current.add(watched.id);
@@ -203,7 +215,7 @@ export function BubbleField({ bottomInset, onCountryChange, onFeedReady }: Bubbl
       replaceAllBubbles(excludeIds);
       setBubbleSpawnGeneration((g) => g + 1);
     },
-    [selection, activeBubbles, replaceAllBubbles],
+    [selection, activeBubbles, replaceAllBubbles, onFullscreenChange],
   );
 
   const handleLikeEngagement = useCallback(() => {
@@ -225,7 +237,8 @@ export function BubbleField({ bottomInset, onCountryChange, onFeedReady }: Bubbl
     setActiveBubbles((prev) => removeBlocked(prev));
     setSelection(null);
     setHiddenBubbleId(null);
-  }, []);
+    onFullscreenChange?.(false);
+  }, [onFullscreenChange]);
 
   const slotCount = Math.min(BUBBLE_SLOT_COUNT, placements.length);
 
@@ -247,9 +260,10 @@ export function BubbleField({ bottomInset, onCountryChange, onFeedReady }: Bubbl
   return (
     <>
       <div
-        className="z-bubble-field relative min-h-0 flex-1"
+        className={`z-bubble-field relative min-h-0 flex-1${selection ? " hidden" : ""}`}
         style={{ paddingBottom: bottomInset }}
         aria-label="Video bubbles"
+        aria-hidden={selection ? true : undefined}
       >
         <div
           ref={canvasRef}

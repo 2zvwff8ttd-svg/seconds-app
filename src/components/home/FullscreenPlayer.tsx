@@ -130,18 +130,27 @@ export function FullscreenPlayer({
   const prepareSources = useCallback(() => {
     const slot0 = slotARef.current;
     const slot1 = slotBRef.current;
-    if (!slot0 || !slot1 || clipUrls.length === 0) return;
+    if (!slot0 || clipUrls.length === 0) return;
 
     const firstUrl = clipUrls[0] ?? video.videoUrl;
-    const preloadIdx = nextClipIndex(0, clipUrls.length);
 
     setVideoSource(slot0, firstUrl);
-    setVideoSource(slot1, clipUrls[preloadIdx] ?? firstUrl);
-
     slot0.currentTime = 0;
-    slot1.currentTime = 0;
     slot0.muted = Boolean(video.bgmUrl);
-    slot1.muted = true;
+
+    // Single-clip videos loop in place on slot0 — never spin up a 2nd decoder
+    // (iPhone 13 OOM: two <video> elements decoding the same source).
+    if (!slot1) return;
+    if (clipUrls.length > 1) {
+      const preloadIdx = nextClipIndex(0, clipUrls.length);
+      setVideoSource(slot1, clipUrls[preloadIdx] ?? firstUrl);
+      slot1.currentTime = 0;
+      slot1.muted = true;
+    } else if (slot1.dataset.clipSrc) {
+      slot1.removeAttribute("src");
+      delete slot1.dataset.clipSrc;
+      slot1.load();
+    }
   }, [clipUrls, video.bgmUrl, video.videoUrl]);
 
   const startPlayback = useCallback(() => {
@@ -287,6 +296,19 @@ export function FullscreenPlayer({
       if (endedSlot !== activeSlotRef.current || clipUrls.length === 0) return;
 
       const total = clipUrls.length;
+
+      // Single clip: loop on the same slot, no crossfade swap (avoids a 2nd decoder).
+      if (total <= 1) {
+        allClipsCompletedRef.current = true;
+        maxProgressRef.current = 1;
+        const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
+        if (el) {
+          el.currentTime = 0;
+          void el.play().catch(() => {});
+        }
+        return;
+      }
+
       const current = clipIndexRef.current;
       const next = nextClipIndex(current, total);
 
