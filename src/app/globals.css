@@ -1053,7 +1053,12 @@ body {
 .fullscreen-video-mask__media > img {
   transform: scale(var(--fs-mask-visual-scale, 1));
   transform-origin: center center;
-  opacity: var(--display-mask-feather-thumb-opacity, 0.94);
+  /* NOTE: do NOT set opacity here. This selector (0,0,1,1) outranks the
+     Tailwind opacity-0 / opacity-100 utilities the player uses to hide the
+     thumbnail and crossfade the video, so forcing 0.94 left the thumbnail
+     stuck at 94% under a 94%-opaque video (a hazy film over playback).
+     Opacity is owned by the element classes; the soft look comes from the
+     feather/membrane overlays instead. */
 }
 
 .fullscreen-player--entering .fullscreen-video-mask__ground-blend {
