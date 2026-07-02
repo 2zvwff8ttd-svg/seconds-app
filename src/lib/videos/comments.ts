@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchBlockedUserIds } from "@/lib/blocks/list";
 import { filterCommentsByBlocked } from "@/lib/blocks/filter";
 import type { CommentItem } from "@/types/social";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 function mapComment(row: Record<string, unknown>): CommentItem {
   const profiles = row.profiles;
@@ -88,7 +87,7 @@ export async function postComment(
 export function subscribeCommentUpdates(
   videoId: string,
   onUpdate: (comments: CommentItem[]) => void,
-): RealtimeChannel {
+): () => void {
   const supabase = createClient();
 
   const refresh = () => {
@@ -109,5 +108,10 @@ export function subscribeCommentUpdates(
     )
     .subscribe();
 
-  return channel;
+  // removeChannel (not just unsubscribe) so the channel is dropped from the
+  // client's internal list — otherwise channels pile up on every fullscreen
+  // open and never get GC'd (memory creep on iPhone 13).
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }

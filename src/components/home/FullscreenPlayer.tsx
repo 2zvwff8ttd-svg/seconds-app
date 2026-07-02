@@ -2,7 +2,6 @@
 
 import { BurstEffect } from "@/components/home/BurstEffect";
 import { FullscreenVideoMask } from "@/components/home/FullscreenVideoMask";
-import { HomeStarfieldBackground } from "@/components/home/HomeStarfieldBackground";
 import { useFullscreenMaskFlip } from "@/components/home/useFullscreenMaskFlip";
 import { ReportButton } from "@/components/reports/ReportButton";
 import { BlockUserButton } from "@/components/blocks/BlockUserButton";
@@ -104,6 +103,7 @@ export function FullscreenPlayer({
   const allClipsCompletedRef = useRef(false);
   const clipSwappingRef = useRef(false);
   const exitStartedRef = useRef(false);
+  const hasStartedRef = useRef(false);
 
   const flipOrigin = originRect ?? getDefaultFullscreenOrigin();
   const { maskRef, enterDone, flipVisible } = useFullscreenMaskFlip({
@@ -144,9 +144,12 @@ export function FullscreenPlayer({
   }, []);
 
   useEffect(() => {
-    // The player now owns the fetch — drop the pointerdown preload link so its
-    // buffered bytes don't sit in memory alongside the live <video>.
-    releaseVideoUrl(video.videoUrl);
+    // NOTE: keep the pointerdown preload <link> alive here — the <video> reuses
+    // its cached bytes for an instant start. It's released only *after* playback
+    // actually begins (see startPlayback), and auto-expires as a backstop, so it
+    // never accumulates. (Releasing it on mount aborted the in-flight fetch and
+    // made playback start unstable — the e815c50 regression.)
+    hasStartedRef.current = false;
     setClipUrls([video.videoUrl]);
     setClipIndex(0);
     setActiveSlot(0);
@@ -216,9 +219,15 @@ export function FullscreenPlayer({
     prepareSources();
     void slot0
       .play()
-      .then(() => setShowVideoSurface(true))
+      .then(() => {
+        hasStartedRef.current = true;
+        setShowVideoSurface(true);
+        // Playback is live and the bytes are now owned by the <video>; drop the
+        // duplicate preload buffer.
+        releaseVideoUrl(video.videoUrl);
+      })
       .catch(() => {});
-  }, [clipUrls.length, prepareSources]);
+  }, [clipUrls.length, prepareSources, video.videoUrl]);
 
   useEffect(() => {
     prepareSources();
@@ -228,6 +237,39 @@ export function FullscreenPlayer({
     if (!flipVisible) return;
     startPlayback();
   }, [flipVisible, startPlayback]);
+
+  // Resilient autoplay: the single play() in startPlayback can be dropped if the
+  // first bytes arrive late or iOS defers autoplay past the tap. Retry the
+  // moment data is ready — until the first "playing" — so the user never has to
+  // press play to get it started.
+  useEffect(() => {
+    if (!flipVisible) return;
+    const el = slotARef.current;
+    if (!el) return;
+
+    const markStarted = () => {
+      hasStartedRef.current = true;
+    };
+    const retry = () => {
+      if (hasStartedRef.current || exitStartedRef.current || !el.paused) return;
+      void el
+        .play()
+        .then(() => {
+          hasStartedRef.current = true;
+          setShowVideoSurface(true);
+          releaseVideoUrl(video.videoUrl);
+        })
+        .catch(() => {});
+    };
+
+    el.addEventListener("playing", markStarted);
+    const events = ["loadeddata", "canplay", "canplaythrough"];
+    for (const name of events) el.addEventListener(name, retry);
+    return () => {
+      el.removeEventListener("playing", markStarted);
+      for (const name of events) el.removeEventListener(name, retry);
+    };
+  }, [flipVisible, clipUrls, video.videoUrl]);
 
   useEffect(() => {
     const el = slotARef.current;
@@ -444,8 +486,10 @@ export function FullscreenPlayer({
       aria-modal
       aria-label={video.title}
     >
+      {/* No starfield here: it duplicated the home one (double-render) and kept
+          ~200 animated SVG circles compositing behind the video for the whole
+          watch — a steady GPU drain on iPhone 13. Glow + vignette are enough. */}
       <div className="fullscreen-player__backdrop fullscreen-player__chrome-layer pointer-events-none absolute inset-0">
-        <HomeStarfieldBackground />
         <div className="fullscreen-player__backdrop-glow" aria-hidden />
         <div className="fullscreen-player__backdrop-vignette" aria-hidden />
       </div>

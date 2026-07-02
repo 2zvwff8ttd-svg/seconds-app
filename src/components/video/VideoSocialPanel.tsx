@@ -65,11 +65,11 @@ export function VideoSocialPanel({
   }, [load]);
 
   useEffect(() => {
-    const likeChannel = subscribeLikeUpdates(videoId, setLikeState);
-    const commentChannel = subscribeCommentUpdates(videoId, setComments);
+    const disposeLikes = subscribeLikeUpdates(videoId, setLikeState);
+    const disposeComments = subscribeCommentUpdates(videoId, setComments);
     return () => {
-      likeChannel.unsubscribe();
-      commentChannel.unsubscribe();
+      disposeLikes();
+      disposeComments();
     };
   }, [videoId]);
 

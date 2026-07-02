@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
 import type { LikeState } from "@/types/social";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export async function fetchLikeState(videoId: string): Promise<LikeState> {
   const supabase = createClient();
@@ -68,7 +67,7 @@ export async function toggleLike(
 export function subscribeLikeUpdates(
   videoId: string,
   onUpdate: (state: LikeState) => void,
-): RealtimeChannel {
+): () => void {
   const supabase = createClient();
 
   const refresh = () => {
@@ -89,5 +88,10 @@ export function subscribeLikeUpdates(
     )
     .subscribe();
 
-  return channel;
+  // removeChannel (not just unsubscribe) so the channel is dropped from the
+  // client's internal list — otherwise channels pile up on every fullscreen
+  // open and never get GC'd (memory creep on iPhone 13).
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }
