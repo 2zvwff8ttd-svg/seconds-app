@@ -163,7 +163,10 @@ export function FullscreenPlayer({
     setClipIndex(0);
 
     prepareSources();
-    void slot0.play().catch(() => {});
+    void slot0
+      .play()
+      .then(() => setShowVideoSurface(true))
+      .catch(() => {});
   }, [clipUrls.length, prepareSources]);
 
   useEffect(() => {
@@ -186,11 +189,16 @@ export function FullscreenPlayer({
       return;
     }
 
-    el.addEventListener("loadeddata", markReady, { once: true });
-    el.addEventListener("playing", markReady, { once: true });
+    // Reveal the video surface as soon as any decode milestone lands, so we
+    // don't linger on the thumbnail waiting only for loadeddata/playing.
+    const events = ["loadedmetadata", "loadeddata", "canplay", "playing"];
+    for (const name of events) {
+      el.addEventListener(name, markReady, { once: true });
+    }
     return () => {
-      el.removeEventListener("loadeddata", markReady);
-      el.removeEventListener("playing", markReady);
+      for (const name of events) {
+        el.removeEventListener(name, markReady);
+      }
     };
   }, [video.id, clipUrls, flipVisible]);
 

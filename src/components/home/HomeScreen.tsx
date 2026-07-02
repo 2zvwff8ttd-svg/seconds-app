@@ -17,6 +17,19 @@ export function HomeScreen() {
   const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
   const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [immersive, setImmersive] = useState(false);
+  const [backgroundHidden, setBackgroundHidden] = useState(false);
+
+  // Free the starfield only *after* the fullscreen enter settles, so its
+  // teardown never competes with the first video frame (kept the iPhone 13
+  // OOM win: it's still unmounted during steady playback). Restore instantly.
+  useEffect(() => {
+    if (!immersive) {
+      setBackgroundHidden(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setBackgroundHidden(true), 500);
+    return () => window.clearTimeout(timer);
+  }, [immersive]);
 
   useEffect(() => {
     fetchTodayAssignedSeconds()
@@ -37,7 +50,7 @@ export function HomeScreen() {
 
   return (
     <div className="app-page relative flex flex-col overflow-hidden bg-[#020208]">
-      {!immersive && <HomeStarfieldBackground />}
+      {!backgroundHidden && <HomeStarfieldBackground />}
       <header className="z-header relative flex shrink-0 items-center justify-between gap-2 px-4 pb-1 pt-[max(0.5rem,env(safe-area-inset-top))] sm:px-5 sm:pb-2 sm:pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-lg font-bold tracking-tight text-foreground sm:text-xl">
