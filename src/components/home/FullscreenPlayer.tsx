@@ -15,6 +15,10 @@ import {
 import { FULLSCREEN_EXIT_MS } from "@/lib/home/fullscreen-transition";
 import { createClient } from "@/lib/supabase/client";
 import { fetchVideoClipUrls } from "@/lib/videos/clips";
+import {
+  getPreloadLinkCount,
+  releaseVideoUrl,
+} from "@/lib/videos/preload-video";
 import type { FeedVideo } from "@/types/feed";
 import type { WatchReport } from "@/types/recommendation";
 import { UserIdentity } from "@/components/profile/UserIdentity";
@@ -44,6 +48,26 @@ function setVideoSource(el: HTMLVideoElement, url: string) {
   el.dataset.clipSrc = url;
   el.src = url;
   el.load();
+}
+
+/**
+ * Fully release a <video>'s media resource so iOS/WebView drops its decoder and
+ * buffers. Removing the DOM node alone is NOT enough on Safari — the element
+ * keeps the source until pause + src removal + load() (empty) forces a teardown.
+ */
+function releaseVideoElement(el: HTMLVideoElement | null): boolean {
+  if (!el) return false;
+  try {
+    el.pause();
+    el.removeAttribute("src");
+    delete el.dataset.clipSrc;
+    // load() with no src makes the element abort the current fetch/decoder and
+    // reset to HAVE_NOTHING, releasing buffered media memory.
+    el.load();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function getSlotRef(
@@ -101,7 +125,28 @@ export function FullscreenPlayer({
       .catch(() => setCurrentUserId(null));
   }, []);
 
+  const releaseSlots = useCallback((reason: string) => {
+    const released =
+      Number(releaseVideoElement(slotARef.current)) +
+      Number(releaseVideoElement(slotBRef.current));
+    // Log after the DOM settles so the count reflects reality post-unmount.
+    // Watch this in Safari Web Inspector: with no player open it must return to
+    // 0, and it must NOT grow across repeated open/close cycles.
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        const videoCount = document.querySelectorAll("video").length;
+        console.log(
+          `[fullscreen-player] released ${released} decoder(s) on ${reason} · ` +
+            `<video> in DOM: ${videoCount} · preload links: ${getPreloadLinkCount()}`,
+        );
+      }, 0);
+    }
+  }, []);
+
   useEffect(() => {
+    // The player now owns the fetch — drop the pointerdown preload link so its
+    // buffered bytes don't sit in memory alongside the live <video>.
+    releaseVideoUrl(video.videoUrl);
     setClipUrls([video.videoUrl]);
     setClipIndex(0);
     setActiveSlot(0);
@@ -117,6 +162,12 @@ export function FullscreenPlayer({
       })
       .catch(() => {});
   }, [video.id, video.videoUrl]);
+
+  // Belt-and-suspenders: whenever this player instance unmounts, tear down both
+  // <video> decoders so nothing lingers between open/close cycles (iPhone 13).
+  useEffect(() => {
+    return () => releaseSlots("unmount");
+  }, [releaseSlots]);
 
   const preloadClipOnSlot = useCallback(
     (slot: VideoSlot, clipIdx: number, urls: string[]) => {
@@ -271,10 +322,14 @@ export function FullscreenPlayer({
   useEffect(() => {
     if (!isExiting) return;
     const timer = window.setTimeout(() => {
+      // Release decoders while the elements are still mounted, then hand back to
+      // the parent (which unmounts this player). The unmount effect above is a
+      // second safety net in case close happens via another path.
+      releaseSlots("close");
       onClose(buildReport());
     }, FULLSCREEN_EXIT_MS);
     return () => window.clearTimeout(timer);
-  }, [isExiting, onClose, buildReport]);
+  }, [isExiting, onClose, buildReport, releaseSlots]);
 
   useEffect(() => {
     const el = maskRef.current;

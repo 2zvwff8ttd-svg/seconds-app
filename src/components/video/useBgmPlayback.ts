@@ -35,7 +35,9 @@ export function useBgmPlayback({
 
     return () => {
       audio.pause();
-      audio.src = "";
+      audio.removeAttribute("src");
+      // Force the element to drop the decoded audio buffer (iOS retention).
+      audio.load();
       audioRef.current = null;
     };
   }, [bgmUrl, sessionKey, active]);
