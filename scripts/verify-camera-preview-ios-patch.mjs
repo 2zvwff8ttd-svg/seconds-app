@@ -48,9 +48,9 @@ const checks = [
     fail: "AVLayerVideoGravity.resizeAspect not found in displayPreview",
   },
   {
-    label: "zoom switches preview to resizeAspectFill",
-    ok: controller.includes("factor > 1.01 ? .resizeAspectFill : .resizeAspect"),
-    fail: "syncPreviewVideoGravity must toggle aspect-fill when zoomed",
+    label: "zoom switches preview to resizeAspectFill when display > 1x",
+    ok: controller.includes("displayZoom > 1.01 ? .resizeAspectFill : .resizeAspect"),
+    fail: "syncPreviewVideoGravity must toggle aspect-fill when display zoom > 1x",
   },
   {
     label: "syncPreviewVideoGravity for pinch zoom letterbox",
@@ -131,6 +131,21 @@ const checks = [
     label: "getAvailableLenses helper",
     ok: controller.includes("func getAvailableLenses()"),
     fail: "getAvailableLenses missing",
+  },
+  {
+    label: "display zoom mapping (wideBaseRawZoom)",
+    ok: controller.includes("func wideBaseRawZoom(for device: AVCaptureDevice)"),
+    fail: "wideBaseRawZoom helper missing (display 1x mapping)",
+  },
+  {
+    label: "rear camera diagnostic log",
+    ok: controller.includes("func logRearCameraDiagnostics(context:"),
+    fail: "logRearCameraDiagnostics missing",
+  },
+  {
+    label: "starts at wide 1x display zoom",
+    ok: controller.includes("device.videoZoomFactor = defaultWideRawZoom(for: device)"),
+    fail: "applyNaturalPreviewDeviceSettings must set defaultWideRawZoom (1x wide)",
   },
   {
     label: "native tap gesture disabled for web focus",

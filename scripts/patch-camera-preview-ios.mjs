@@ -1278,6 +1278,7 @@ await patchFile(
 
 const {
   FOCUS_LENS_CONTROLLER_EXTENSION,
+  FOCUS_LENS_CONTROLLER_EXTENSION_V1,
   FOCUS_LENS_CONTROLLER_PATCHES,
   FOCUS_LENS_PLUGIN_HANDLERS,
   FOCUS_LENS_PLUGIN_INSERT_BEFORE,
@@ -1293,6 +1294,21 @@ await patchFile(
 
 const gestureDelegateExtensionAnchor = `extension CameraController: UIGestureRecognizerDelegate {`;
 let controllerForFocusLens = await readFile(controllerPath, "utf8");
+if (
+  controllerForFocusLens.includes("func setFocusAtNormalizedPoint") &&
+  !controllerForFocusLens.includes("func logRearCameraDiagnostics") &&
+  controllerForFocusLens.includes(FOCUS_LENS_CONTROLLER_EXTENSION_V1.trim())
+) {
+  controllerForFocusLens = controllerForFocusLens.replace(
+    FOCUS_LENS_CONTROLLER_EXTENSION_V1,
+    FOCUS_LENS_CONTROLLER_EXTENSION,
+  );
+  await writeFile(controllerPath, controllerForFocusLens, "utf8");
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (focus+lens v1→v2 display zoom)",
+  );
+  controllerForFocusLens = await readFile(controllerPath, "utf8");
+}
 if (
   !controllerForFocusLens.includes("func setFocusAtNormalizedPoint") &&
   controllerForFocusLens.includes(gestureDelegateExtensionAnchor)
