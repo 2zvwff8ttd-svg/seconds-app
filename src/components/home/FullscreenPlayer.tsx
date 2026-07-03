@@ -13,7 +13,6 @@ import {
 } from "@/lib/home/bubble-origin-rect";
 import { FULLSCREEN_EXIT_MS } from "@/lib/home/fullscreen-transition";
 import { createClient } from "@/lib/supabase/client";
-import { fetchVideoClipUrls } from "@/lib/videos/clips";
 import {
   getPreloadLinkCount,
   releaseVideoUrl,
@@ -37,10 +36,6 @@ type FullscreenPlayerProps = {
   onCommentEngagement?: () => void;
   onUserBlocked?: (userId: string) => void;
 };
-
-function nextClipIndex(current: number, total: number): number {
-  return (current + 1) % total;
-}
 
 function setVideoSource(el: HTMLVideoElement, url: string) {
   if (el.dataset.clipSrc === url) return;
@@ -89,15 +84,13 @@ export function FullscreenPlayer({
 }: FullscreenPlayerProps) {
   const slotARef = useRef<HTMLVideoElement>(null);
   const slotBRef = useRef<HTMLVideoElement>(null);
-  const [clipUrls, setClipUrls] = useState<string[]>([video.videoUrl]);
-  const [clipIndex, setClipIndex] = useState(0);
-  const [activeSlot, setActiveSlot] = useState<VideoSlot>(0);
+  const playbackUrl = video.videoUrl;
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [maskDiameter, setMaskDiameter] = useState(0);
   const [showVideoSurface, setShowVideoSurface] = useState(false);
-  const clipIndexRef = useRef(0);
+  const activeSlot: VideoSlot = 0;
   const activeSlotRef = useRef<VideoSlot>(0);
   const maxProgressRef = useRef(0);
   const allClipsCompletedRef = useRef(false);
@@ -150,21 +143,11 @@ export function FullscreenPlayer({
     // never accumulates. (Releasing it on mount aborted the in-flight fetch and
     // made playback start unstable — the e815c50 regression.)
     hasStartedRef.current = false;
-    setClipUrls([video.videoUrl]);
-    setClipIndex(0);
-    setActiveSlot(0);
-    clipIndexRef.current = 0;
-    activeSlotRef.current = 0;
     maxProgressRef.current = 0;
     allClipsCompletedRef.current = false;
     setIsPaused(false);
     setShowVideoSurface(false);
-    fetchVideoClipUrls(video.id)
-      .then((urls) => {
-        if (urls.length > 0) setClipUrls(urls);
-      })
-      .catch(() => {});
-  }, [video.id, video.videoUrl]);
+  }, [video.id, playbackUrl]);
 
   // Belt-and-suspenders: whenever this player instance unmounts, tear down both
   // <video> decoders so nothing lingers between open/close cycles (iPhone 13).
@@ -175,34 +158,25 @@ export function FullscreenPlayer({
   const prepareSources = useCallback(() => {
     const slot0 = slotARef.current;
     const slot1 = slotBRef.current;
-    if (!slot0 || clipUrls.length === 0) return;
+    if (!slot0 || !playbackUrl) return;
 
-    const firstUrl = clipUrls[0] ?? video.videoUrl;
-
-    setVideoSource(slot0, firstUrl);
+    setVideoSource(slot0, playbackUrl);
     slot0.currentTime = 0;
     slot0.muted = Boolean(video.bgmUrl);
 
-    // ALL playback (single- and multi-clip) runs on slot0 only. We never load
-    // slot1, so two <video> elements never decode at once. That fixes the
-    // clip-boundary freeze (video stalls while audio/BGM keeps playing, caused
-    // by preloading the next clip's decoder mid-playback) and keeps the iPhone
-    // 13 budget at a single decoder.
+    // Single <video> decoder only — slot1 stays empty (iPhone 13 OOM budget).
     if (slot1 && slot1.dataset.clipSrc) {
       slot1.removeAttribute("src");
       delete slot1.dataset.clipSrc;
       slot1.load();
     }
-  }, [clipUrls, video.bgmUrl, video.videoUrl]);
+  }, [playbackUrl, video.bgmUrl]);
 
   const startPlayback = useCallback(() => {
     const slot0 = slotARef.current;
-    if (!slot0 || clipUrls.length === 0) return;
+    if (!slot0 || !playbackUrl) return;
 
     activeSlotRef.current = 0;
-    clipIndexRef.current = 0;
-    setActiveSlot(0);
-    setClipIndex(0);
 
     prepareSources();
     void slot0
@@ -210,12 +184,10 @@ export function FullscreenPlayer({
       .then(() => {
         hasStartedRef.current = true;
         setShowVideoSurface(true);
-        // Playback is live and the bytes are now owned by the <video>; drop the
-        // duplicate preload buffer.
-        releaseVideoUrl(video.videoUrl);
+        releaseVideoUrl(playbackUrl);
       })
       .catch(() => {});
-  }, [clipUrls.length, prepareSources, video.videoUrl]);
+  }, [playbackUrl, prepareSources]);
 
   useEffect(() => {
     prepareSources();
@@ -245,7 +217,7 @@ export function FullscreenPlayer({
         .then(() => {
           hasStartedRef.current = true;
           setShowVideoSurface(true);
-          releaseVideoUrl(video.videoUrl);
+          releaseVideoUrl(playbackUrl);
         })
         .catch(() => {});
     };
@@ -257,7 +229,7 @@ export function FullscreenPlayer({
       el.removeEventListener("playing", markStarted);
       for (const name of events) el.removeEventListener(name, retry);
     };
-  }, [flipVisible, clipUrls, video.videoUrl]);
+  }, [flipVisible, playbackUrl]);
 
   useEffect(() => {
     const el = slotARef.current;
@@ -281,7 +253,7 @@ export function FullscreenPlayer({
         el.removeEventListener(name, markReady);
       }
     };
-  }, [video.id, clipUrls, flipVisible]);
+  }, [video.id, playbackUrl, flipVisible]);
 
   useEffect(() => {
     const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
@@ -316,15 +288,11 @@ export function FullscreenPlayer({
   }, [video.bgmUrl, playBgm, pauseBgm]);
 
   const updateProgress = useCallback(() => {
-    const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
-    const totalClips = Math.max(1, clipUrls.length);
+    const el = slotARef.current;
     if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return;
-
-    const idx = clipIndexRef.current;
-    const clipProgress = Math.min(1, el.currentTime / el.duration);
-    const overall = Math.min(1, (idx + clipProgress) / totalClips);
-    maxProgressRef.current = Math.max(maxProgressRef.current, overall);
-  }, [clipUrls.length]);
+    const progress = Math.min(1, el.currentTime / el.duration);
+    maxProgressRef.current = Math.max(maxProgressRef.current, progress);
+  }, []);
 
   const buildReport = useCallback((): WatchReport => {
     const completed =
@@ -385,58 +353,16 @@ export function FullscreenPlayer({
   }, [requestClose]);
 
   const handleEnded = useCallback(
-    (endedSlot: VideoSlot) => {
-      if (endedSlot !== activeSlotRef.current || clipUrls.length === 0) return;
-
-      const total = clipUrls.length;
-      const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
+    (_endedSlot: VideoSlot) => {
+      const el = slotARef.current;
       if (!el) return;
 
-      // Single clip: loop on the same slot.
-      if (total <= 1) {
-        allClipsCompletedRef.current = true;
-        maxProgressRef.current = 1;
-        el.currentTime = 0;
-        void el.play().catch(() => {});
-        return;
-      }
-
-      const current = clipIndexRef.current;
-      const next = nextClipIndex(current, total);
-
-      if (current === total - 1) {
-        allClipsCompletedRef.current = true;
-        maxProgressRef.current = 1;
-      }
-
-      clipIndexRef.current = next;
-      setClipIndex(next);
-
-      // Advance the SAME <video> to the next clip: one decoder, so video and
-      // audio always stay in sync (no clip-boundary freeze). Wait for the next
-      // clip to be decodable before playing to avoid a rejected play().
-      clipSwappingRef.current = true;
-      const nextUrl = clipUrls[next] ?? clipUrls[0] ?? video.videoUrl;
-      setVideoSource(el, nextUrl);
+      allClipsCompletedRef.current = true;
+      maxProgressRef.current = 1;
       el.currentTime = 0;
-      el.muted = Boolean(video.bgmUrl);
-
-      const playNext = () => {
-        el.removeEventListener("loadeddata", playNext);
-        el.removeEventListener("canplay", playNext);
-        void el.play().catch(() => {});
-        setIsPaused(false);
-        clipSwappingRef.current = false;
-      };
-
-      if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        playNext();
-      } else {
-        el.addEventListener("loadeddata", playNext, { once: true });
-        el.addEventListener("canplay", playNext, { once: true });
-      }
+      void el.play().catch(() => {});
     },
-    [clipUrls, video.bgmUrl, video.videoUrl],
+    [],
   );
 
   const slotClassName = (slot: VideoSlot) =>
@@ -499,7 +425,7 @@ export function FullscreenPlayer({
             controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
             disablePictureInPicture
             disableRemotePlayback
-            onTimeUpdate={activeSlot === 0 ? updateProgress : undefined}
+            onTimeUpdate={updateProgress}
             onEnded={() => handleEnded(0)}
           />
           <video
@@ -507,13 +433,11 @@ export function FullscreenPlayer({
             poster={video.thumbnailUrl}
             className={slotClassName(1)}
             playsInline
-            preload="auto"
+            preload="none"
             controls={false}
             controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
             disablePictureInPicture
             disableRemotePlayback
-            onTimeUpdate={activeSlot === 1 ? updateProgress : undefined}
-            onEnded={() => handleEnded(1)}
           />
 
           <button

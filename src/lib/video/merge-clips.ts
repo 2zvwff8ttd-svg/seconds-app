@@ -5,16 +5,12 @@ import {
   writeFileFromBlob,
 } from "@/lib/video/ffmpeg-client";
 
-/** concat -c copy 時のメモリ超過を防ぐ上限 */
+/** concat 時のメモリ超過を防ぐ上限 */
 export const MERGE_MAX_CLIP_COUNT = 10;
 export const MERGE_MAX_TOTAL_SECONDS = 90;
-/** WASM ヒープ向けの保守的合計サイズ（再エンコードなし） */
+/** WASM ヒープ向けの保守的合計サイズ */
 export const MERGE_MAX_TOTAL_BYTES = 56 * 1024 * 1024;
 export const MERGE_MAX_SINGLE_CLIP_BYTES = 28 * 1024 * 1024;
-
-export type MergeClipsOutcome =
-  | { merged: true; file: File }
-  | { merged: false; files: File[]; warning?: string };
 
 type ClipContainer = "mp4" | "webm";
 
@@ -63,7 +59,7 @@ export function assessClipMergeEligibility(
     if (file.size > MERGE_MAX_SINGLE_CLIP_BYTES) {
       return {
         eligible: false,
-        reason: "1本のクリップが大きすぎるため結合をスキップします",
+        reason: "1本のクリップが大きすぎるため結合できません",
       };
     }
     totalBytes += file.size;
@@ -72,7 +68,7 @@ export function assessClipMergeEligibility(
   if (totalBytes > MERGE_MAX_TOTAL_BYTES) {
     return {
       eligible: false,
-      reason: "合計ファイルサイズが大きすぎるため結合をスキップします",
+      reason: "合計ファイルサイズが大きすぎるため結合できません",
     };
   }
 
@@ -80,7 +76,7 @@ export function assessClipMergeEligibility(
   if (containers.some((c) => c === null)) {
     return {
       eligible: false,
-      reason: "対応していない動画形式のため結合をスキップします",
+      reason: "対応していない動画形式のため結合できません",
     };
   }
 
@@ -88,7 +84,7 @@ export function assessClipMergeEligibility(
   if (!containers.every((c) => c === first)) {
     return {
       eligible: false,
-      reason: "クリップの形式が混在しているため結合をスキップします",
+      reason: "クリップの形式が混在しているため結合できません",
     };
   }
 
@@ -97,6 +93,26 @@ export function assessClipMergeEligibility(
 
 function buildConcatListContent(virtualNames: string[]): string {
   return virtualNames.map((name) => `file '${name}'`).join("\n");
+}
+
+async function execFfmpegWithLogs(
+  ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
+  args: string[],
+): Promise<void> {
+  const logs: string[] = [];
+  const onLog = ({ message }: { message: string }) => {
+    logs.push(message);
+  };
+  ffmpeg.on("log", onLog);
+  try {
+    const code = await ffmpeg.exec(args);
+    if (code !== 0) {
+      const tail = logs.filter((l) => l.trim()).slice(-4).join(" ").trim();
+      throw new Error(tail || `ffmpeg exit ${code}`);
+    }
+  } finally {
+    ffmpeg.off("log", onLog);
+  }
 }
 
 async function execConcatCopy(
@@ -122,127 +138,192 @@ async function execConcatCopy(
         ]
       : ["-f", "concat", "-safe", "0", "-i", listName, "-c", "copy", outName];
 
-  const logs: string[] = [];
-  const onLog = ({ message }: { message: string }) => {
-    logs.push(message);
-  };
-  ffmpeg.on("log", onLog);
+  await execFfmpegWithLogs(ffmpeg, args);
+}
 
-  try {
-    const code = await ffmpeg.exec(args);
-    if (code !== 0) {
-      const tail = logs.filter((l) => l.trim()).slice(-4).join(" ").trim();
-      throw new Error(tail || `ffmpeg exit ${code}`);
-    }
-  } finally {
-    ffmpeg.off("log", onLog);
+/** Re-encode concat — same quality tier as narration mux (libx264 ultrafast crf 28). */
+async function execConcatEncode(
+  ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
+  listName: string,
+  outName: string,
+): Promise<void> {
+  await execFfmpegWithLogs(ffmpeg, [
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    listName,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-crf",
+    "28",
+    "-pix_fmt",
+    "yuv420p",
+    "-c:a",
+    "aac",
+    "-movflags",
+    "+faststart",
+    outName,
+  ]);
+}
+
+async function readMergedOutput(
+  ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
+  outName: string,
+  mime: string,
+  fileName: string,
+): Promise<File> {
+  const data = await ffmpeg.readFile(outName);
+  const bytes =
+    data instanceof Uint8Array
+      ? new Uint8Array(data)
+      : new TextEncoder().encode(String(data));
+
+  if (bytes.byteLength < 1024) {
+    throw new Error("結合結果が小さすぎます");
+  }
+
+  return new File([bytes], fileName, { type: mime });
+}
+
+type MergeRunContext = {
+  ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>;
+  runId: string;
+  virtualNames: string[];
+  listName: string;
+  inputExt: string;
+};
+
+async function prepareMergeRun(
+  files: File[],
+  inputExt: string,
+  onProgress?: (ratio: number, label: string) => void,
+): Promise<MergeRunContext> {
+  onProgress?.(0.02, "動画エンジンを読み込み中…");
+
+  const ffmpeg = await getFfmpeg();
+  const runId = crypto.randomUUID().slice(0, 8);
+  const virtualNames: string[] = [];
+  const listName = `concat_${runId}.txt`;
+
+  onProgress?.(0.08, "クリップを結合中…");
+
+  for (let i = 0; i < files.length; i++) {
+    const virtualName = `clip_${runId}_${i}.${inputExt}`;
+    virtualNames.push(virtualName);
+    onProgress?.(
+      0.1 + (i / files.length) * 0.2,
+      `クリップ ${i + 1}/${files.length} を準備中…`,
+    );
+    await writeFileFromBlob(ffmpeg, virtualName, files[i]);
+  }
+
+  const listContent = buildConcatListContent(virtualNames);
+  await ffmpeg.writeFile(listName, new TextEncoder().encode(listContent));
+
+  return { ffmpeg, runId, virtualNames, listName, inputExt };
+}
+
+async function cleanupMergeRun(ctx: MergeRunContext, outName?: string): Promise<void> {
+  await safeDeleteFile(ctx.ffmpeg, ctx.listName);
+  if (outName) await safeDeleteFile(ctx.ffmpeg, outName);
+  for (const name of ctx.virtualNames) {
+    await safeDeleteFile(ctx.ffmpeg, name);
   }
 }
 
 /**
- * 複数クリップを再エンコードなし（concat demuxer + -c copy）で1本に結合する。
- * 失敗・非対応時は元の files を返し、投稿は継続できる。
+ * Merge multiple clips into one File for upload. Tries concat copy first, then
+ * libx264+aac re-encode. Throws on failure — callers must not fall back to
+ * separate clip files (broken multi-clip playback).
  */
-export async function tryMergeClips(
+export async function mergeClipsForPost(
   files: File[],
   totalDurationSeconds: number,
   onProgress?: (ratio: number, label: string) => void,
-): Promise<MergeClipsOutcome> {
+): Promise<File> {
   if (files.length <= 1) {
-    return { merged: false, files };
+    if (files.length === 0) {
+      throw new Error("投稿するクリップがありません");
+    }
+    return files[0]!;
   }
 
   const assessment = assessClipMergeEligibility(files, totalDurationSeconds);
   if (!assessment.eligible || !assessment.container) {
-    return {
-      merged: false,
-      files,
-      warning:
-        assessment.reason === "single_clip"
-          ? undefined
-          : assessment.reason ?? "結合条件を満たさないため個別クリップで投稿します",
-    };
+    throw new Error(
+      assessment.reason === "single_clip"
+        ? "クリップを結合できません"
+        : assessment.reason ?? "クリップを結合できません",
+    );
   }
 
   const container = assessment.container;
-  const runId = crypto.randomUUID().slice(0, 8);
-  const virtualNames: string[] = [];
-  const ext = outputExtension(container);
-  const listName = `concat_${runId}.txt`;
-  const outName = `merged_${runId}.${ext}`;
+  const inputExt = outputExtension(container);
+  const copyOutName = `merged_copy_${crypto.randomUUID().slice(0, 8)}.${inputExt}`;
+  const encodeOutName = `merged_enc_${crypto.randomUUID().slice(0, 8)}.mp4`;
 
-  onProgress?.(0.02, "動画エンジンを読み込み中…");
-
-  let ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>;
-  try {
-    ffmpeg = await getFfmpeg();
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    return {
-      merged: false,
-      files,
-      warning: `${detail}（個別クリップで投稿します）`,
-    };
-  }
-
-  onProgress?.(0.08, "クリップを結合中…");
-
+  let ctx: MergeRunContext | undefined;
   const onFfmpegProgress = ({ progress }: { progress: number }) => {
     if (typeof progress === "number") {
-      onProgress?.(
-        0.1 + Math.min(0.82, progress * 0.82),
-        "クリップを結合中…",
-      );
+      onProgress?.(0.35 + Math.min(0.5, progress * 0.5), "クリップを結合中…");
     }
   };
-  ffmpeg.on("progress", onFfmpegProgress);
 
   try {
-    for (let i = 0; i < files.length; i++) {
-      const virtualName = `clip_${runId}_${i}.${ext}`;
-      virtualNames.push(virtualName);
-      onProgress?.(
-        0.1 + (i / files.length) * 0.25,
-        `クリップ ${i + 1}/${files.length} を準備中…`,
+    ctx = await prepareMergeRun(files, inputExt, onProgress);
+    ctx.ffmpeg.on("progress", onFfmpegProgress);
+
+    onProgress?.(0.32, "クリップを連結中…（再エンコードなし）");
+    try {
+      await execConcatCopy(ctx.ffmpeg, ctx.listName, copyOutName, container);
+      onProgress?.(0.88, "結合ファイルを読み込み中…");
+      const merged = await readMergedOutput(
+        ctx.ffmpeg,
+        copyOutName,
+        outputMime(container),
+        `merged.${inputExt}`,
       );
-      await writeFileFromBlob(ffmpeg, virtualName, files[i]);
+      onProgress?.(1, "クリップの結合が完了しました");
+      return merged;
+    } catch (copyErr) {
+      const copyDetail =
+        copyErr instanceof Error ? copyErr.message : String(copyErr);
+      onProgress?.(0.35, "クリップを再エンコードしながら結合中…");
+      try {
+        await execConcatEncode(ctx.ffmpeg, ctx.listName, encodeOutName);
+        onProgress?.(0.92, "結合ファイルを読み込み中…");
+        const merged = await readMergedOutput(
+          ctx.ffmpeg,
+          encodeOutName,
+          "video/mp4",
+          "merged.mp4",
+        );
+        onProgress?.(1, "クリップの結合が完了しました");
+        return merged;
+      } catch (encodeErr) {
+        const encodeDetail =
+          encodeErr instanceof Error ? encodeErr.message : String(encodeErr);
+        throw new Error(
+          `クリップの結合に失敗しました（${encodeDetail}）。` +
+            `高速結合のエラー: ${copyDetail}`,
+        );
+      }
     }
-
-    const listContent = buildConcatListContent(virtualNames);
-    await ffmpeg.writeFile(listName, new TextEncoder().encode(listContent));
-
-    onProgress?.(0.4, "クリップを連結中…（再エンコードなし）");
-    await execConcatCopy(ffmpeg, listName, outName, container);
-
-    onProgress?.(0.9, "結合ファイルを読み込み中…");
-    const data = await ffmpeg.readFile(outName);
-    const bytes =
-      data instanceof Uint8Array
-        ? new Uint8Array(data)
-        : new TextEncoder().encode(String(data));
-
-    if (bytes.byteLength < 1024) {
-      throw new Error("結合結果が小さすぎます");
-    }
-
-    const mime = outputMime(container);
-    const mergedFile = new File([bytes], `merged.${ext}`, { type: mime });
-
-    onProgress?.(1, "クリップの結合が完了しました");
-    return { merged: true, file: mergedFile };
   } catch (err) {
+    if (err instanceof Error && err.message.includes("クリップの結合に失敗")) {
+      throw err;
+    }
     const detail = err instanceof Error ? err.message : String(err);
-    return {
-      merged: false,
-      files,
-      warning: `クリップ結合に失敗しました（${detail}）。個別クリップで投稿します`,
-    };
+    throw new Error(`クリップの結合に失敗しました（${detail}）`);
   } finally {
-    ffmpeg.off("progress", onFfmpegProgress);
-    await safeDeleteFile(ffmpeg, listName);
-    await safeDeleteFile(ffmpeg, outName);
-    for (const name of virtualNames) {
-      await safeDeleteFile(ffmpeg, name);
+    if (ctx) {
+      ctx.ffmpeg.off("progress", onFfmpegProgress);
+      await cleanupMergeRun(ctx, copyOutName);
+      await safeDeleteFile(ctx.ffmpeg, encodeOutName);
     }
   }
 }

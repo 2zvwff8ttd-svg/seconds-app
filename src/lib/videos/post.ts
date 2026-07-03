@@ -9,7 +9,7 @@ import {
 } from "@/lib/supabase/video-schema";
 import { getMediaPublicUrl, uploadFileWithProgress, formatUploadSize } from "@/lib/storage/upload";
 import { totalDurationSecondsForDb } from "@/lib/recording/clip-budget";
-import { tryMergeClips } from "@/lib/video/merge-clips";
+import { mergeClipsForPost } from "@/lib/video/merge-clips";
 import { mergeVideoWithNarration } from "@/lib/video/merge-audio-tracks";
 import {
   captureVideoThumbnail,
@@ -277,28 +277,21 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     onStageChange("merging_clips");
     onProgress(8, "クリップを結合中…");
 
-    const mergeOutcome = await tryMergeClips(
-      clipFiles,
-      durationSeconds,
-      (ratio, label) => {
-        onProgress(8 + ratio * 12, label);
-      },
-    );
-
-    if (mergeOutcome.merged) {
-      const ext = getVideoExtension(mergeOutcome.file);
+    try {
+      const mergedFile = await mergeClipsForPost(
+        clipFiles,
+        durationSeconds,
+        (ratio, label) => {
+          onProgress(8 + ratio * 12, label);
+        },
+      );
+      const ext = getVideoExtension(mergedFile);
       uploadTargets = [
-        { file: mergeOutcome.file, storageName: `video.${ext}` },
+        { file: mergedFile, storageName: `video.${ext}` },
       ];
       onProgress(22, "クリップの結合が完了しました");
-    } else {
-      uploadTargets = clipFiles.map((file, i) => ({
-        file,
-        storageName: `clip-${i}.${clipExtension(file)}`,
-      }));
-      if (mergeOutcome.warning) {
-        onProgress(20, mergeOutcome.warning);
-      }
+    } catch (err) {
+      rethrowPostStage("クリップ結合", err);
     }
   } else {
     const file = clipFiles[0];
