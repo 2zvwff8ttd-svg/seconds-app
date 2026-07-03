@@ -15,6 +15,7 @@
     "functions:deploy-daily-morning": "npx --yes supabase functions deploy daily-morning --no-verify-jwt",
     "functions:deploy-delete-account": "npx --yes supabase functions deploy delete-account",
     "functions:invoke-daily-morning": "node scripts/invoke-daily-morning.mjs",
+    "backfill:merge-multi-clip": "node scripts/backfill-merge-multi-clip-videos.mjs",
     "icons:generate": "node scripts/generate-pwa-icons.mjs",
     "icons:ios": "node scripts/sync-ios-app-icon.mjs",
     "cap:sync": "npx cap sync android && node scripts/fix-android-strings.mjs && node scripts/patch-camera-preview-android.mjs",

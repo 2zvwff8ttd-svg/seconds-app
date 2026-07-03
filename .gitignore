@@ -41,6 +41,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# one-off backfill manifests (rollback data — do not commit)
+scripts/backfill-manifest-*.json
+
 # vercel
 .vercel
 
