@@ -172,15 +172,6 @@ export function FullscreenPlayer({
     return () => releaseSlots("unmount");
   }, [releaseSlots]);
 
-  const preloadClipOnSlot = useCallback(
-    (slot: VideoSlot, clipIdx: number, urls: string[]) => {
-      const el = getSlotRef(slot, slotARef, slotBRef).current;
-      if (!el || urls.length === 0) return;
-      setVideoSource(el, urls[clipIdx % urls.length] ?? video.videoUrl);
-    },
-    [video.videoUrl],
-  );
-
   const prepareSources = useCallback(() => {
     const slot0 = slotARef.current;
     const slot1 = slotBRef.current;
@@ -192,15 +183,12 @@ export function FullscreenPlayer({
     slot0.currentTime = 0;
     slot0.muted = Boolean(video.bgmUrl);
 
-    // Single-clip videos loop in place on slot0 — never spin up a 2nd decoder
-    // (iPhone 13 OOM: two <video> elements decoding the same source).
-    if (!slot1) return;
-    if (clipUrls.length > 1) {
-      const preloadIdx = nextClipIndex(0, clipUrls.length);
-      setVideoSource(slot1, clipUrls[preloadIdx] ?? firstUrl);
-      slot1.currentTime = 0;
-      slot1.muted = true;
-    } else if (slot1.dataset.clipSrc) {
+    // ALL playback (single- and multi-clip) runs on slot0 only. We never load
+    // slot1, so two <video> elements never decode at once. That fixes the
+    // clip-boundary freeze (video stalls while audio/BGM keeps playing, caused
+    // by preloading the next clip's decoder mid-playback) and keeps the iPhone
+    // 13 budget at a single decoder.
+    if (slot1 && slot1.dataset.clipSrc) {
       slot1.removeAttribute("src");
       delete slot1.dataset.clipSrc;
       slot1.load();
@@ -401,16 +389,15 @@ export function FullscreenPlayer({
       if (endedSlot !== activeSlotRef.current || clipUrls.length === 0) return;
 
       const total = clipUrls.length;
+      const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
+      if (!el) return;
 
-      // Single clip: loop on the same slot, no crossfade swap (avoids a 2nd decoder).
+      // Single clip: loop on the same slot.
       if (total <= 1) {
         allClipsCompletedRef.current = true;
         maxProgressRef.current = 1;
-        const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
-        if (el) {
-          el.currentTime = 0;
-          void el.play().catch(() => {});
-        }
+        el.currentTime = 0;
+        void el.play().catch(() => {});
         return;
       }
 
@@ -422,44 +409,34 @@ export function FullscreenPlayer({
         maxProgressRef.current = 1;
       }
 
-      const newActiveSlot: VideoSlot = endedSlot === 0 ? 1 : 0;
-      const newActive = getSlotRef(newActiveSlot, slotARef, slotBRef).current;
-      const oldActive = getSlotRef(endedSlot, slotARef, slotBRef).current;
-      if (!newActive || !oldActive) return;
+      clipIndexRef.current = next;
+      setClipIndex(next);
 
-      const afterNext = nextClipIndex(next, total);
+      // Advance the SAME <video> to the next clip: one decoder, so video and
+      // audio always stay in sync (no clip-boundary freeze). Wait for the next
+      // clip to be decodable before playing to avoid a rejected play().
+      clipSwappingRef.current = true;
+      const nextUrl = clipUrls[next] ?? clipUrls[0] ?? video.videoUrl;
+      setVideoSource(el, nextUrl);
+      el.currentTime = 0;
+      el.muted = Boolean(video.bgmUrl);
 
-      const swapToPreloaded = () => {
-        clipSwappingRef.current = true;
-        oldActive.pause();
-
-        activeSlotRef.current = newActiveSlot;
-        clipIndexRef.current = next;
-
-        newActive.currentTime = 0;
-        newActive.muted = Boolean(video.bgmUrl);
-        void newActive.play().catch(() => {});
-
-        setActiveSlot(newActiveSlot);
-        setClipIndex(next);
+      const playNext = () => {
+        el.removeEventListener("loadeddata", playNext);
+        el.removeEventListener("canplay", playNext);
+        void el.play().catch(() => {});
         setIsPaused(false);
-
-        preloadClipOnSlot(endedSlot, afterNext, clipUrls);
         clipSwappingRef.current = false;
       };
 
-      if (newActive.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-        swapToPreloaded();
-        return;
+      if (el.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        playNext();
+      } else {
+        el.addEventListener("loadeddata", playNext, { once: true });
+        el.addEventListener("canplay", playNext, { once: true });
       }
-
-      const onReady = () => {
-        newActive.removeEventListener("canplay", onReady);
-        swapToPreloaded();
-      };
-      newActive.addEventListener("canplay", onReady);
     },
-    [clipUrls, preloadClipOnSlot, video.bgmUrl],
+    [clipUrls, video.bgmUrl, video.videoUrl],
   );
 
   const slotClassName = (slot: VideoSlot) =>
