@@ -12,6 +12,8 @@
  *   - auto-expired after PRELOAD_TTL_MS,
  *   - and can be released explicitly once the real <video> has taken over.
  */
+import { normalizeMediaPublicUrl } from "@/lib/videos/normalize-media-url";
+
 const PRELOAD_TTL_MS = 15_000;
 
 type PreloadEntry = {
@@ -30,20 +32,21 @@ function removeEntry(url: string): void {
 }
 
 export function warmVideoUrl(url?: string | null): void {
-  if (!url || typeof document === "undefined") return;
+  const normalized = normalizeMediaPublicUrl(url);
+  if (!normalized || typeof document === "undefined") return;
 
   // Already warming — just refresh the expiry so it survives until the tap.
-  const existing = preloads.get(url);
+  const existing = preloads.get(normalized);
   if (existing) {
     window.clearTimeout(existing.timer);
-    existing.timer = window.setTimeout(() => removeEntry(url), PRELOAD_TTL_MS);
+    existing.timer = window.setTimeout(() => removeEntry(normalized), PRELOAD_TTL_MS);
     return;
   }
 
   const link = document.createElement("link");
   link.rel = "preload";
   link.as = "video";
-  link.href = url;
+  link.href = normalized;
   // Do NOT set crossOrigin here — the fullscreen <video> loads the same URL
   // without crossOrigin, and a CORS-mode preload is a separate cache entry on
   // iOS Safari. Mismatch has been linked to stalled video layers (audio only).
@@ -55,8 +58,8 @@ export function warmVideoUrl(url?: string | null): void {
   }
   document.head.appendChild(link);
 
-  const timer = window.setTimeout(() => removeEntry(url), PRELOAD_TTL_MS);
-  preloads.set(url, { link, timer });
+  const timer = window.setTimeout(() => removeEntry(normalized), PRELOAD_TTL_MS);
+  preloads.set(normalized, { link, timer });
 }
 
 /**
@@ -65,8 +68,9 @@ export function warmVideoUrl(url?: string | null): void {
  * preload buffer instead of holding it forever.
  */
 export function releaseVideoUrl(url?: string | null): void {
-  if (!url || typeof document === "undefined") return;
-  removeEntry(url);
+  const normalized = normalizeMediaPublicUrl(url);
+  if (!normalized || typeof document === "undefined") return;
+  removeEntry(normalized);
 }
 
 /** Diagnostics: how many preload links are currently held in memory. */

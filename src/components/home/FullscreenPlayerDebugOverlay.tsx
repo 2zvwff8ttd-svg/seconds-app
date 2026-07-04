@@ -152,6 +152,8 @@ type FullscreenPlayerDebugOverlayProps = {
   showVideoSurface: boolean;
   flipVisible: boolean;
   videoId: string;
+  playbackUrl: string | null;
+  playbackUrlError: string | null;
 };
 
 export function FullscreenPlayerDebugOverlay({
@@ -159,6 +161,8 @@ export function FullscreenPlayerDebugOverlay({
   showVideoSurface,
   flipVisible,
   videoId,
+  playbackUrl,
+  playbackUrlError,
 }: FullscreenPlayerDebugOverlayProps) {
   const [enabled, setEnabled] = useState(false);
   const [snapshot, setSnapshot] = useState<VideoDebugSnapshot | null>(null);
@@ -288,6 +292,12 @@ export function FullscreenPlayerDebugOverlay({
         muted: {String(snapshot.muted)}
       </div>
       <div>src: {snapshot.srcFile}</div>
+      <div className="break-all">
+        playbackUrl: {playbackUrl ? basenameFromSrc(playbackUrl) : "(null)"}
+      </div>
+      {playbackUrlError ? (
+        <div className="text-red-300">urlError: {playbackUrlError}</div>
+      ) : null}
       <div>
         error:{" "}
         {snapshot.errorCode != null

@@ -14,6 +14,8 @@ import {
 } from "@/lib/home/bubble-origin-rect";
 import { FULLSCREEN_EXIT_MS } from "@/lib/home/fullscreen-transition";
 import { createClient } from "@/lib/supabase/client";
+import { fetchVideoById } from "@/lib/videos/fetch-video";
+import { normalizeMediaPublicUrl } from "@/lib/videos/normalize-media-url";
 import {
   getPreloadLinkCount,
   releaseVideoUrl,
@@ -38,11 +40,17 @@ type FullscreenPlayerProps = {
   onUserBlocked?: (userId: string) => void;
 };
 
-function setVideoSource(el: HTMLVideoElement, url: string) {
-  if (el.dataset.clipSrc === url) return;
-  el.dataset.clipSrc = url;
-  el.src = url;
+function setVideoSource(el: HTMLVideoElement, url: string): boolean {
+  const normalized = normalizeMediaPublicUrl(url);
+  if (!normalized) {
+    console.warn("[fullscreen-player] refused empty/invalid video src");
+    return false;
+  }
+  if (el.dataset.clipSrc === normalized) return true;
+  el.dataset.clipSrc = normalized;
+  el.src = normalized;
   el.load();
+  return true;
 }
 
 /**
@@ -118,7 +126,10 @@ export function FullscreenPlayer({
 }: FullscreenPlayerProps) {
   const slotARef = useRef<HTMLVideoElement>(null);
   const slotBRef = useRef<HTMLVideoElement>(null);
-  const playbackUrl = video.videoUrl;
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(() =>
+    normalizeMediaPublicUrl(video.videoUrl),
+  );
+  const [playbackUrlError, setPlaybackUrlError] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
@@ -152,6 +163,37 @@ export function FullscreenPlayer({
       .then(({ data: { user } }) => setCurrentUserId(user?.id ?? null))
       .catch(() => setCurrentUserId(null));
   }, []);
+
+  // Always resolve a single canonical video_url from props, then refresh from DB
+  // so stale feed cache / backfill updates never point at missing clip files.
+  useEffect(() => {
+    let cancelled = false;
+
+    const fromProps = normalizeMediaPublicUrl(video.videoUrl);
+    setPlaybackUrl(fromProps);
+    setPlaybackUrlError(
+      fromProps ? null : "動画URLが空または無効です（video_url）",
+    );
+
+    void fetchVideoById(video.id)
+      .then((row) => {
+        if (cancelled || !row) return;
+        const fresh = normalizeMediaPublicUrl(row.videoUrl);
+        if (!fresh) {
+          setPlaybackUrlError("動画URLが空または無効です（DB）");
+          return;
+        }
+        setPlaybackUrl(fresh);
+        setPlaybackUrlError(null);
+      })
+      .catch(() => {
+        /* keep feed URL */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [video.id, video.videoUrl]);
 
   const releaseSlots = useCallback((reason: string) => {
     const released =
@@ -196,15 +238,19 @@ export function FullscreenPlayer({
 
   const prepareSources = useCallback(() => {
     const slot0 = slotARef.current;
-    if (!slot0 || !playbackUrl) return;
+    if (!slot0 || !playbackUrl) return false;
 
-    setVideoSource(slot0, playbackUrl);
+    const applied = setVideoSource(slot0, playbackUrl);
+    if (!applied) return false;
+
     slot0.currentTime = 0;
     slot0.muted = Boolean(video.bgmUrl);
+    return true;
   }, [playbackUrl, video.bgmUrl]);
 
   const beginPreloadRelease = useCallback(
     (el: HTMLVideoElement) => {
+      if (!playbackUrl) return;
       preloadReleaseCleanupRef.current?.();
       preloadReleaseCleanupRef.current = releasePreloadAfterFirstFrame(
         el,
@@ -220,7 +266,8 @@ export function FullscreenPlayer({
 
     activeSlotRef.current = 0;
 
-    prepareSources();
+    if (!prepareSources()) return;
+
     void slot0
       .play()
       .then(() => {
@@ -392,18 +439,13 @@ export function FullscreenPlayer({
     return () => window.removeEventListener("keydown", onKey);
   }, [requestClose]);
 
-  const handleEnded = useCallback(
-    (_endedSlot: VideoSlot) => {
-      const el = slotARef.current;
-      if (!el) return;
-
-      allClipsCompletedRef.current = true;
-      maxProgressRef.current = 1;
-      el.currentTime = 0;
-      void el.play().catch(() => {});
-    },
-    [],
-  );
+  const handleEnded = useCallback(() => {
+    // Single merged file: native `loop` replays. Do not reset currentTime/src —
+    // manual seek+play after `ended` left iOS with empty src + error=4 while BGM
+    // kept playing.
+    allClipsCompletedRef.current = true;
+    maxProgressRef.current = 1;
+  }, []);
 
   const slotClassName = (slot: VideoSlot) =>
     [
@@ -464,13 +506,14 @@ export function FullscreenPlayer({
             poster={video.thumbnailUrl}
             className={slotClassName(0)}
             playsInline
+            loop
             preload="auto"
             controls={false}
             controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
             disablePictureInPicture
             disableRemotePlayback
             onTimeUpdate={updateProgress}
-            onEnded={() => handleEnded(0)}
+            onEnded={handleEnded}
           />
           <video
             ref={slotBRef}
@@ -514,6 +557,8 @@ export function FullscreenPlayer({
             showVideoSurface={showVideoSurface}
             flipVisible={flipVisible}
             videoId={video.id}
+            playbackUrl={playbackUrl}
+            playbackUrlError={playbackUrlError}
           />
 
           {isExiting && maskDiameter > 0 && (

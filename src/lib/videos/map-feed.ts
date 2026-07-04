@@ -1,4 +1,5 @@
 import { parseVideoDisplayMaskShape } from "@/lib/video/display-mask";
+import { normalizeMediaPublicUrl } from "@/lib/videos/normalize-media-url";
 import type { FeedVideo } from "@/types/feed";
 import type { VideoRow } from "@/types/video";
 
@@ -50,7 +51,7 @@ export function videoRowToFeedVideo(
 ): FeedVideo {
   return {
     id: row.id,
-    videoUrl: row.video_url,
+    videoUrl: normalizeMediaPublicUrl(row.video_url) ?? "",
     bgmUrl: row.bgm_url?.trim() || undefined,
     thumbnailUrl: row.thumbnail_url ?? undefined,
     clipThumbnailUrls: Array.isArray(row.clip_thumbnail_urls)
