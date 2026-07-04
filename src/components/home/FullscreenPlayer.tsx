@@ -1,5 +1,6 @@
 "use client";
 
+import { BurstEffect } from "@/components/home/BurstEffect";
 import { FullscreenPlayerDebugOverlay } from "@/components/home/FullscreenPlayerDebugOverlay";
 import { FullscreenVideoMask } from "@/components/home/FullscreenVideoMask";
 import { useFullscreenMaskFlip } from "@/components/home/useFullscreenMaskFlip";
