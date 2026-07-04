@@ -6,6 +6,7 @@
  *   SUPABASE_SERVICE_ROLE_KEY
  *
  * 前提: システムに ffmpeg が PATH にあること（winget install Gyan.FFmpeg など）
+ * 出力: 常に H.264+AAC の video-merged.mp4（webm 入力も再エンコードで mp4 化）
  *
  * Usage:
  *   node scripts/backfill-merge-multi-clip-videos.mjs --dry-run
@@ -114,12 +115,28 @@ function getMediaPublicUrl(supabaseUrl, storagePath) {
   return `${supabaseUrl}/storage/v1/object/public/${MEDIA_BUCKET}/${storagePath}`;
 }
 
-function detectContainerFromPath(storagePath) {
-  const ext = storagePath.split(".").pop()?.toLowerCase() ?? "";
+function getClipExtensionFromStoragePath(storagePath) {
+  const filename = storagePath.split("/").pop() ?? storagePath;
+  const dot = filename.lastIndexOf(".");
+  if (dot === -1) return null;
+  const ext = filename.slice(dot + 1).toLowerCase();
   if (ext === "mp4" || ext === "mov") return "mp4";
   if (ext === "webm") return "webm";
   return null;
 }
+
+const FFMPEG_ENCODE_VIDEO = [
+  "-c:v",
+  "libx264",
+  "-preset",
+  "ultrafast",
+  "-crf",
+  "28",
+  "-pix_fmt",
+  "yuv420p",
+];
+const FFMPEG_ENCODE_AUDIO = ["-c:a", "aac", "-b:a", "128k"];
+const FFMPEG_MP4_FLAGS = ["-movflags", "+faststart"];
 
 function runProcess(cmd, cmdArgs, options = {}) {
   return new Promise((resolve, reject) => {
@@ -281,133 +298,97 @@ function buildConcatListContent(relativeNames) {
   return relativeNames.map((name) => `file '${name.replace(/'/g, "'\\''")}'`).join("\n");
 }
 
-async function mergeClipsWithFfmpeg(clipPaths, workDir) {
-  const containers = clipPaths.map((p) => detectContainerFromPath(p));
-  if (containers.some((c) => !c)) {
-    throw new Error("対応していないクリップ形式があります");
-  }
-  const first = containers[0];
-  if (!containers.every((c) => c === first)) {
-    throw new Error("クリップの形式が混在しています");
-  }
+async function transcodeClipToMp4Segment(inputFile, outputFile, workDir) {
+  await runProcess(
+    "ffmpeg",
+    ["-y", "-i", inputFile, ...FFMPEG_ENCODE_VIDEO, ...FFMPEG_ENCODE_AUDIO, ...FFMPEG_MP4_FLAGS, outputFile],
+    { cwd: workDir },
+  );
+}
 
-  const inputExt = first === "mp4" ? "mp4" : "webm";
-  const virtualNames = [];
-  for (let i = 0; i < clipPaths.length; i++) {
-    const name = `clip_${i}.${inputExt}`;
-    virtualNames.push(name);
-    await writeFile(join(workDir, name), await readFile(clipPaths[i]));
-  }
-
-  const listPath = join(workDir, "concat.txt");
-  await writeFile(listPath, buildConcatListContent(virtualNames), "utf8");
-
-  const copyOut = join(workDir, `merged_copy.${inputExt}`);
-  const encodeOut = join(workDir, MERGED_STORAGE_NAME);
-
-  const copyArgs =
-    first === "mp4"
-      ? [
-          "-y",
-          "-f",
-          "concat",
-          "-safe",
-          "0",
-          "-i",
-          "concat.txt",
-          "-c",
-          "copy",
-          "-movflags",
-          "+faststart",
-          `merged_copy.${inputExt}`,
-        ]
-      : [
-          "-y",
-          "-f",
-          "concat",
-          "-safe",
-          "0",
-          "-i",
-          "concat.txt",
-          "-c",
-          "copy",
-          `merged_copy.${inputExt}`,
-        ];
-
-  try {
-    await runProcess("ffmpeg", copyArgs, { cwd: workDir });
-    const copyStat = await stat(copyOut);
-    if (copyStat.size < MIN_MERGED_BYTES) {
-      throw new Error("copy 結合結果が小さすぎます");
-    }
-    if (first === "mp4") {
-      return { outputPath: copyOut, contentType: "video/mp4" };
-    }
-    await runProcess(
-      "ffmpeg",
-      [
-        "-y",
-        "-i",
-        `merged_copy.${inputExt}`,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "ultrafast",
-        "-crf",
-        "28",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-movflags",
-        "+faststart",
-        MERGED_STORAGE_NAME,
-      ],
-      { cwd: workDir },
-    );
-    return { outputPath: encodeOut, contentType: "video/mp4" };
-  } catch (copyErr) {
-    const copyDetail = copyErr instanceof Error ? copyErr.message : String(copyErr);
+/**
+ * concat demuxer で結合し、常に H.264+AAC の mp4 を出力する。
+ * copyFirst=true のときは同一 mp4 セグメント向けに copy を試し、失敗時は再エンコードへ。
+ */
+async function concatDemuxerToMp4(listFile, outputFile, workDir, { copyFirst = false } = {}) {
+  if (copyFirst) {
     try {
       await runProcess(
         "ffmpeg",
-        [
-          "-y",
-          "-f",
-          "concat",
-          "-safe",
-          "0",
-          "-i",
-          "concat.txt",
-          "-c:v",
-          "libx264",
-          "-preset",
-          "ultrafast",
-          "-crf",
-          "28",
-          "-pix_fmt",
-          "yuv420p",
-          "-c:a",
-          "aac",
-          "-movflags",
-          "+faststart",
-          MERGED_STORAGE_NAME,
-        ],
+        ["-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", ...FFMPEG_MP4_FLAGS, outputFile],
         { cwd: workDir },
       );
-      const encStat = await stat(encodeOut);
-      if (encStat.size < MIN_MERGED_BYTES) {
-        throw new Error("再エンコード結合結果が小さすぎます");
-      }
-      return { outputPath: encodeOut, contentType: "video/mp4" };
-    } catch (encodeErr) {
-      const encodeDetail =
-        encodeErr instanceof Error ? encodeErr.message : String(encodeErr);
-      throw new Error(
-        `結合失敗（再エンコード: ${encodeDetail} / copy: ${copyDetail}）`,
-      );
+      const outPath = join(workDir, outputFile);
+      const st = await stat(outPath);
+      if (st.size >= MIN_MERGED_BYTES) return;
+    } catch {
+      // copy 結合失敗 → 再エンコードへ
     }
   }
+
+  await runProcess(
+    "ffmpeg",
+    [
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      listFile,
+      ...FFMPEG_ENCODE_VIDEO,
+      ...FFMPEG_ENCODE_AUDIO,
+      ...FFMPEG_MP4_FLAGS,
+      outputFile,
+    ],
+    { cwd: workDir },
+  );
+}
+
+/**
+ * Storage 上のクリップ（clip_N.webm / clip_N.mp4）を 1 本の video-merged.mp4 に結合。
+ * 形式判定は Storage パス（拡張子）を使う。ローカルは download 時に拡張子付きで保存済み。
+ */
+async function mergeClipsWithFfmpeg(clipStoragePaths, workDir) {
+  const extensions = clipStoragePaths.map(getClipExtensionFromStoragePath);
+  const unknown = clipStoragePaths.filter((_, i) => !extensions[i]);
+  if (unknown.length > 0) {
+    throw new Error(
+      `対応していないクリップ形式があります: ${unknown.join(", ")}`,
+    );
+  }
+
+  const encodeOut = join(workDir, MERGED_STORAGE_NAME);
+  const uniqueExts = new Set(extensions);
+
+  if (uniqueExts.size === 1) {
+    const ext = extensions[0];
+    const virtualNames = clipStoragePaths.map((_, i) => `clip_${i}.${ext}`);
+    await writeFile(join(workDir, "concat.txt"), buildConcatListContent(virtualNames), "utf8");
+    console.log(`  concat demuxer (${ext}) → ${MERGED_STORAGE_NAME}`);
+    await concatDemuxerToMp4("concat.txt", MERGED_STORAGE_NAME, workDir, {
+      copyFirst: ext === "mp4",
+    });
+  } else {
+    const segmentNames = [];
+    for (let i = 0; i < clipStoragePaths.length; i++) {
+      const ext = extensions[i];
+      const inputName = `clip_${i}.${ext}`;
+      const segmentName = `segment_${i}.mp4`;
+      console.log(`  transcode ${inputName} → ${segmentName}`);
+      await transcodeClipToMp4Segment(inputName, segmentName, workDir);
+      segmentNames.push(segmentName);
+    }
+    await writeFile(join(workDir, "concat.txt"), buildConcatListContent(segmentNames), "utf8");
+    console.log(`  concat demuxer (mixed → mp4 segments) → ${MERGED_STORAGE_NAME}`);
+    await concatDemuxerToMp4("concat.txt", MERGED_STORAGE_NAME, workDir, { copyFirst: true });
+  }
+
+  const encStat = await stat(encodeOut);
+  if (encStat.size < MIN_MERGED_BYTES) {
+    throw new Error("結合結果が小さすぎます");
+  }
+  return { outputPath: encodeOut, contentType: "video/mp4" };
 }
 
 async function uploadMergedVideo(supabase, storagePath, localPath, contentType) {
@@ -519,17 +500,21 @@ async function runApply(supabase, supabaseUrl, targets) {
     try {
       console.log(`\n[apply] video_id=${target.videoId} (${target.clips.length} clips)`);
 
-      const localClipPaths = [];
       for (let i = 0; i < clipStoragePaths.length; i++) {
-        const localPath = join(workDir, `download_${i}`);
+        const ext = getClipExtensionFromStoragePath(clipStoragePaths[i]);
+        if (!ext) {
+          throw new Error(
+            `Storage パスの拡張子を判定できません: ${clipStoragePaths[i]}`,
+          );
+        }
+        const localPath = join(workDir, `clip_${i}.${ext}`);
         console.log(`  download ${clipStoragePaths[i]}`);
         await downloadStorageFile(supabase, clipStoragePaths[i], localPath);
-        localClipPaths.push(localPath);
       }
 
       console.log("  ffmpeg merge…");
       const { outputPath, contentType } = await mergeClipsWithFfmpeg(
-        localClipPaths,
+        clipStoragePaths,
         workDir,
       );
 
