@@ -115,33 +115,6 @@ async function execFfmpegWithLogs(
   }
 }
 
-async function execConcatCopy(
-  ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
-  listName: string,
-  outName: string,
-  container: ClipContainer,
-): Promise<void> {
-  const args =
-    container === "mp4"
-      ? [
-          "-f",
-          "concat",
-          "-safe",
-          "0",
-          "-i",
-          listName,
-          "-c",
-          "copy",
-          "-movflags",
-          "+faststart",
-          outName,
-        ]
-      : ["-f", "concat", "-safe", "0", "-i", listName, "-c", "copy", outName];
-
-  await execFfmpegWithLogs(ffmpeg, args);
-}
-
-/** Re-encode concat — same quality tier as narration mux (libx264 ultrafast crf 28). */
 async function execConcatEncode(
   ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
   listName: string,
@@ -236,9 +209,9 @@ async function cleanupMergeRun(ctx: MergeRunContext, outName?: string): Promise<
 }
 
 /**
- * Merge multiple clips into one File for upload. Tries concat copy first, then
- * libx264+aac re-encode. Throws on failure — callers must not fall back to
- * separate clip files (broken multi-clip playback).
+ * Merge multiple clips into one File for upload via libx264+aac re-encode only.
+ * Copy-concat is avoided — iOS stalls at segment boundaries when keyframes do not
+ * align across pasted segments.
  */
 export async function mergeClipsForPost(
   files: File[],
@@ -261,15 +234,13 @@ export async function mergeClipsForPost(
     );
   }
 
-  const container = assessment.container;
-  const inputExt = outputExtension(container);
-  const copyOutName = `merged_copy_${crypto.randomUUID().slice(0, 8)}.${inputExt}`;
+  const inputExt = outputExtension(assessment.container);
   const encodeOutName = `merged_enc_${crypto.randomUUID().slice(0, 8)}.mp4`;
 
   let ctx: MergeRunContext | undefined;
   const onFfmpegProgress = ({ progress }: { progress: number }) => {
     if (typeof progress === "number") {
-      onProgress?.(0.35 + Math.min(0.5, progress * 0.5), "クリップを結合中…");
+      onProgress?.(0.35 + Math.min(0.55, progress * 0.55), "クリップを結合中…");
     }
   };
 
@@ -277,53 +248,24 @@ export async function mergeClipsForPost(
     ctx = await prepareMergeRun(files, inputExt, onProgress);
     ctx.ffmpeg.on("progress", onFfmpegProgress);
 
-    onProgress?.(0.32, "クリップを連結中…（再エンコードなし）");
-    try {
-      await execConcatCopy(ctx.ffmpeg, ctx.listName, copyOutName, container);
-      onProgress?.(0.88, "結合ファイルを読み込み中…");
-      const merged = await readMergedOutput(
-        ctx.ffmpeg,
-        copyOutName,
-        outputMime(container),
-        `merged.${inputExt}`,
-      );
-      onProgress?.(1, "クリップの結合が完了しました");
-      return merged;
-    } catch (copyErr) {
-      const copyDetail =
-        copyErr instanceof Error ? copyErr.message : String(copyErr);
-      onProgress?.(0.35, "クリップを再エンコードしながら結合中…");
-      try {
-        await execConcatEncode(ctx.ffmpeg, ctx.listName, encodeOutName);
-        onProgress?.(0.92, "結合ファイルを読み込み中…");
-        const merged = await readMergedOutput(
-          ctx.ffmpeg,
-          encodeOutName,
-          "video/mp4",
-          "merged.mp4",
-        );
-        onProgress?.(1, "クリップの結合が完了しました");
-        return merged;
-      } catch (encodeErr) {
-        const encodeDetail =
-          encodeErr instanceof Error ? encodeErr.message : String(encodeErr);
-        throw new Error(
-          `クリップの結合に失敗しました（${encodeDetail}）。` +
-            `高速結合のエラー: ${copyDetail}`,
-        );
-      }
-    }
+    onProgress?.(0.32, "クリップを再エンコードしながら結合中…");
+    await execConcatEncode(ctx.ffmpeg, ctx.listName, encodeOutName);
+    onProgress?.(0.92, "結合ファイルを読み込み中…");
+    const merged = await readMergedOutput(
+      ctx.ffmpeg,
+      encodeOutName,
+      "video/mp4",
+      "merged.mp4",
+    );
+    onProgress?.(1, "クリップの結合が完了しました");
+    return merged;
   } catch (err) {
-    if (err instanceof Error && err.message.includes("クリップの結合に失敗")) {
-      throw err;
-    }
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`クリップの結合に失敗しました（${detail}）`);
   } finally {
     if (ctx) {
       ctx.ffmpeg.off("progress", onFfmpegProgress);
-      await cleanupMergeRun(ctx, copyOutName);
-      await safeDeleteFile(ctx.ffmpeg, encodeOutName);
+      await cleanupMergeRun(ctx, encodeOutName);
     }
   }
 }

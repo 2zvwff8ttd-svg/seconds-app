@@ -43,6 +43,7 @@ yarn-error.log*
 
 # one-off backfill manifests (rollback data — do not commit)
 scripts/backfill-manifest-*.json
+scripts/backfill-reencode-manifest-*.json
 
 # vercel
 .vercel
