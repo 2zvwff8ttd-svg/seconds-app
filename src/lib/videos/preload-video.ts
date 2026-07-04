@@ -44,7 +44,9 @@ export function warmVideoUrl(url?: string | null): void {
   link.rel = "preload";
   link.as = "video";
   link.href = url;
-  link.crossOrigin = "anonymous";
+  // Do NOT set crossOrigin here — the fullscreen <video> loads the same URL
+  // without crossOrigin, and a CORS-mode preload is a separate cache entry on
+  // iOS Safari. Mismatch has been linked to stalled video layers (audio only).
   try {
     (link as HTMLLinkElement & { fetchPriority?: string }).fetchPriority =
       "high";

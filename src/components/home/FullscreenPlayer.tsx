@@ -72,6 +72,39 @@ function getSlotRef(
   return slot === 0 ? slotA : slotB;
 }
 
+/**
+ * Drop the pointerdown preload link only after the <video> has advanced past the
+ * first frame. Releasing on play() alone (e815c50/535a0e5) can destabilise iOS
+ * video-layer compositing while audio keeps playing.
+ */
+function releasePreloadAfterFirstFrame(
+  el: HTMLVideoElement,
+  url: string,
+): () => void {
+  let released = false;
+  let fallbackTimer: number | undefined;
+
+  const release = () => {
+    if (released) return;
+    released = true;
+    releaseVideoUrl(url);
+    el.removeEventListener("timeupdate", onTimeUpdate);
+    if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
+  };
+
+  const onTimeUpdate = () => {
+    if (el.currentTime > 0.034) release();
+  };
+
+  el.addEventListener("timeupdate", onTimeUpdate);
+  fallbackTimer = window.setTimeout(release, 8000);
+
+  return () => {
+    el.removeEventListener("timeupdate", onTimeUpdate);
+    if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
+  };
+}
+
 export function FullscreenPlayer({
   video,
   originRect,
@@ -97,6 +130,7 @@ export function FullscreenPlayer({
   const clipSwappingRef = useRef(false);
   const exitStartedRef = useRef(false);
   const hasStartedRef = useRef(false);
+  const preloadReleaseCleanupRef = useRef<(() => void) | null>(null);
 
   const flipOrigin = originRect ?? getDefaultFullscreenOrigin();
   const { maskRef, enterDone, flipVisible } = useFullscreenMaskFlip({
@@ -152,25 +186,32 @@ export function FullscreenPlayer({
   // Belt-and-suspenders: whenever this player instance unmounts, tear down both
   // <video> decoders so nothing lingers between open/close cycles (iPhone 13).
   useEffect(() => {
-    return () => releaseSlots("unmount");
+    return () => {
+      preloadReleaseCleanupRef.current?.();
+      preloadReleaseCleanupRef.current = null;
+      releaseSlots("unmount");
+    };
   }, [releaseSlots]);
 
   const prepareSources = useCallback(() => {
     const slot0 = slotARef.current;
-    const slot1 = slotBRef.current;
     if (!slot0 || !playbackUrl) return;
 
     setVideoSource(slot0, playbackUrl);
     slot0.currentTime = 0;
     slot0.muted = Boolean(video.bgmUrl);
-
-    // Single <video> decoder only — slot1 stays empty (iPhone 13 OOM budget).
-    if (slot1 && slot1.dataset.clipSrc) {
-      slot1.removeAttribute("src");
-      delete slot1.dataset.clipSrc;
-      slot1.load();
-    }
   }, [playbackUrl, video.bgmUrl]);
+
+  const beginPreloadRelease = useCallback(
+    (el: HTMLVideoElement) => {
+      preloadReleaseCleanupRef.current?.();
+      preloadReleaseCleanupRef.current = releasePreloadAfterFirstFrame(
+        el,
+        playbackUrl,
+      );
+    },
+    [playbackUrl],
+  );
 
   const startPlayback = useCallback(() => {
     const slot0 = slotARef.current;
@@ -184,14 +225,10 @@ export function FullscreenPlayer({
       .then(() => {
         hasStartedRef.current = true;
         setShowVideoSurface(true);
-        releaseVideoUrl(playbackUrl);
+        beginPreloadRelease(slot0);
       })
       .catch(() => {});
-  }, [playbackUrl, prepareSources]);
-
-  useEffect(() => {
-    prepareSources();
-  }, [prepareSources, video.id]);
+  }, [playbackUrl, prepareSources, beginPreloadRelease]);
 
   useEffect(() => {
     if (!flipVisible) return;
@@ -217,7 +254,7 @@ export function FullscreenPlayer({
         .then(() => {
           hasStartedRef.current = true;
           setShowVideoSurface(true);
-          releaseVideoUrl(playbackUrl);
+          beginPreloadRelease(el);
         })
         .catch(() => {});
     };
@@ -229,7 +266,7 @@ export function FullscreenPlayer({
       el.removeEventListener("playing", markStarted);
       for (const name of events) el.removeEventListener(name, retry);
     };
-  }, [flipVisible, playbackUrl]);
+  }, [flipVisible, playbackUrl, beginPreloadRelease]);
 
   useEffect(() => {
     const el = slotARef.current;
@@ -320,6 +357,8 @@ export function FullscreenPlayer({
   useEffect(() => {
     if (!isExiting) return;
     const timer = window.setTimeout(() => {
+      preloadReleaseCleanupRef.current?.();
+      preloadReleaseCleanupRef.current = null;
       // Release decoders while the elements are still mounted, then hand back to
       // the parent (which unmounts this player). The unmount effect above is a
       // second safety net in case close happens via another path.
@@ -367,8 +406,12 @@ export function FullscreenPlayer({
 
   const slotClassName = (slot: VideoSlot) =>
     [
-      "fullscreen-player__video absolute inset-0 h-full w-full object-cover transition-opacity duration-300",
-      activeSlot === slot && showVideoSurface
+      // Keep the active <video> at full opacity while decoding. Hiding it with
+      // opacity-0 until showVideoSurface (535a0e5) can leave iOS with audio-only
+      // playback — the compositor never attaches the video layer. The expand
+      // thumbnail (higher z-index) covers the bubble until the first frame.
+      "fullscreen-player__video absolute inset-0 h-full w-full object-cover",
+      activeSlot === slot
         ? "z-10 opacity-100"
         : "pointer-events-none z-0 opacity-0",
     ].join(" ");
@@ -411,7 +454,7 @@ export function FullscreenPlayer({
             <img
               src={expandThumbnailUrl}
               alt=""
-              className={`fullscreen-player__expand-thumb absolute inset-0 z-[8] h-full w-full object-cover transition-opacity duration-300${showVideoSurface ? " opacity-0" : " opacity-100"}`}
+              className={`fullscreen-player__expand-thumb absolute inset-0 z-[12] h-full w-full object-cover transition-opacity duration-300${showVideoSurface ? " pointer-events-none opacity-0" : " opacity-100"}`}
               draggable={false}
             />
           )}
