@@ -50,6 +50,10 @@ function setVideoSource(el: HTMLVideoElement, url: string): boolean {
   el.dataset.clipSrc = normalized;
   el.src = normalized;
   el.load();
+  // Drop the pointerdown preload link immediately so iOS does not hold two
+  // full video buffers (link + <video>) while decoding — HTTP cache still
+  // serves the element's fetch.
+  releaseVideoUrl(normalized);
   return true;
 }
 
@@ -81,39 +85,6 @@ function getSlotRef(
   return slot === 0 ? slotA : slotB;
 }
 
-/**
- * Drop the pointerdown preload link only after the <video> has advanced past the
- * first frame. Releasing on play() alone (e815c50/535a0e5) can destabilise iOS
- * video-layer compositing while audio keeps playing.
- */
-function releasePreloadAfterFirstFrame(
-  el: HTMLVideoElement,
-  url: string,
-): () => void {
-  let released = false;
-  let fallbackTimer: number | undefined;
-
-  const release = () => {
-    if (released) return;
-    released = true;
-    releaseVideoUrl(url);
-    el.removeEventListener("timeupdate", onTimeUpdate);
-    if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
-  };
-
-  const onTimeUpdate = () => {
-    if (el.currentTime > 0.034) release();
-  };
-
-  el.addEventListener("timeupdate", onTimeUpdate);
-  fallbackTimer = window.setTimeout(release, 8000);
-
-  return () => {
-    el.removeEventListener("timeupdate", onTimeUpdate);
-    if (fallbackTimer !== undefined) window.clearTimeout(fallbackTimer);
-  };
-}
-
 export function FullscreenPlayer({
   video,
   originRect,
@@ -142,7 +113,6 @@ export function FullscreenPlayer({
   const clipSwappingRef = useRef(false);
   const exitStartedRef = useRef(false);
   const hasStartedRef = useRef(false);
-  const preloadReleaseCleanupRef = useRef<(() => void) | null>(null);
 
   const flipOrigin = originRect ?? getDefaultFullscreenOrigin();
   const { maskRef, enterDone, flipVisible } = useFullscreenMaskFlip({
@@ -214,11 +184,8 @@ export function FullscreenPlayer({
   }, []);
 
   useEffect(() => {
-    // NOTE: keep the pointerdown preload <link> alive here — the <video> reuses
-    // its cached bytes for an instant start. It's released only *after* playback
-    // actually begins (see startPlayback), and auto-expires as a backstop, so it
-    // never accumulates. (Releasing it on mount aborted the in-flight fetch and
-    // made playback start unstable — the e815c50 regression.)
+    // Pointerdown preload warms HTTP cache; setVideoSource releases the <link>
+    // as soon as the <video> takes the URL so iOS does not decode two buffers.
     hasStartedRef.current = false;
     maxProgressRef.current = 0;
     allClipsCompletedRef.current = false;
@@ -230,8 +197,6 @@ export function FullscreenPlayer({
   // <video> decoders so nothing lingers between open/close cycles (iPhone 13).
   useEffect(() => {
     return () => {
-      preloadReleaseCleanupRef.current?.();
-      preloadReleaseCleanupRef.current = null;
       releaseSlots("unmount");
     };
   }, [releaseSlots]);
@@ -248,18 +213,6 @@ export function FullscreenPlayer({
     return true;
   }, [playbackUrl, video.bgmUrl]);
 
-  const beginPreloadRelease = useCallback(
-    (el: HTMLVideoElement) => {
-      if (!playbackUrl) return;
-      preloadReleaseCleanupRef.current?.();
-      preloadReleaseCleanupRef.current = releasePreloadAfterFirstFrame(
-        el,
-        playbackUrl,
-      );
-    },
-    [playbackUrl],
-  );
-
   const startPlayback = useCallback(() => {
     const slot0 = slotARef.current;
     if (!slot0 || !playbackUrl) return;
@@ -273,10 +226,9 @@ export function FullscreenPlayer({
       .then(() => {
         hasStartedRef.current = true;
         setShowVideoSurface(true);
-        beginPreloadRelease(slot0);
       })
       .catch(() => {});
-  }, [playbackUrl, prepareSources, beginPreloadRelease]);
+  }, [playbackUrl, prepareSources]);
 
   useEffect(() => {
     if (!flipVisible) return;
@@ -302,7 +254,6 @@ export function FullscreenPlayer({
         .then(() => {
           hasStartedRef.current = true;
           setShowVideoSurface(true);
-          beginPreloadRelease(el);
         })
         .catch(() => {});
     };
@@ -314,7 +265,7 @@ export function FullscreenPlayer({
       el.removeEventListener("playing", markStarted);
       for (const name of events) el.removeEventListener(name, retry);
     };
-  }, [flipVisible, playbackUrl, beginPreloadRelease]);
+  }, [flipVisible, playbackUrl]);
 
   useEffect(() => {
     const el = slotARef.current;
@@ -405,11 +356,6 @@ export function FullscreenPlayer({
   useEffect(() => {
     if (!isExiting) return;
     const timer = window.setTimeout(() => {
-      preloadReleaseCleanupRef.current?.();
-      preloadReleaseCleanupRef.current = null;
-      // Release decoders while the elements are still mounted, then hand back to
-      // the parent (which unmounts this player). The unmount effect above is a
-      // second safety net in case close happens via another path.
       releaseSlots("close");
       onClose(buildReport());
     }, FULLSCREEN_EXIT_MS);

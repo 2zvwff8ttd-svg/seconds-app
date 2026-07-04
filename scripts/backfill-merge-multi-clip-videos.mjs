@@ -128,14 +128,26 @@ function getClipExtensionFromStoragePath(storagePath) {
 const FFMPEG_ENCODE_VIDEO = [
   "-c:v",
   "libx264",
+  "-profile:v",
+  "baseline",
+  "-level",
+  "3.1",
   "-preset",
-  "ultrafast",
+  "fast",
   "-crf",
   "28",
   "-pix_fmt",
   "yuv420p",
+  "-g",
+  "30",
+  "-keyint_min",
+  "30",
+  "-sc_threshold",
+  "0",
+  "-tag:v",
+  "avc1",
 ];
-const FFMPEG_ENCODE_AUDIO = ["-c:a", "aac", "-b:a", "128k"];
+const FFMPEG_ENCODE_AUDIO = ["-c:a", "aac", "-b:a", "128k", "-ac", "2"];
 const FFMPEG_MP4_FLAGS = ["-movflags", "+faststart"];
 
 function runProcess(cmd, cmdArgs, options = {}) {

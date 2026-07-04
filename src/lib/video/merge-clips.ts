@@ -4,6 +4,7 @@ import {
   safeDeleteFile,
   writeFileFromBlob,
 } from "@/lib/video/ffmpeg-client";
+import { iosMp4OutputEncodeArgs } from "@/lib/video/ios-mp4-encode";
 
 /** concat 時のメモリ超過を防ぐ上限 */
 export const MERGE_MAX_CLIP_COUNT = 10;
@@ -127,18 +128,7 @@ async function execConcatEncode(
     "0",
     "-i",
     listName,
-    "-c:v",
-    "libx264",
-    "-preset",
-    "ultrafast",
-    "-crf",
-    "28",
-    "-pix_fmt",
-    "yuv420p",
-    "-c:a",
-    "aac",
-    "-movflags",
-    "+faststart",
+    ...iosMp4OutputEncodeArgs(),
     outName,
   ]);
 }
