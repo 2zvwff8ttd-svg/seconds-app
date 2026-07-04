@@ -1,6 +1,6 @@
 "use client";
 
-import { BurstEffect } from "@/components/home/BurstEffect";
+import { FullscreenPlayerDebugOverlay } from "@/components/home/FullscreenPlayerDebugOverlay";
 import { FullscreenVideoMask } from "@/components/home/FullscreenVideoMask";
 import { useFullscreenMaskFlip } from "@/components/home/useFullscreenMaskFlip";
 import { ReportButton } from "@/components/reports/ReportButton";
@@ -507,6 +507,13 @@ export function FullscreenPlayer({
             </div>
           )}
           </FullscreenVideoMask>
+
+          <FullscreenPlayerDebugOverlay
+            videoRef={slotARef}
+            showVideoSurface={showVideoSurface}
+            flipVisible={flipVisible}
+            videoId={video.id}
+          />
 
           {isExiting && maskDiameter > 0 && (
             <div className="absolute inset-0 z-40">
