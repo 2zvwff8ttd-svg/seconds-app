@@ -369,6 +369,12 @@ function manifestPath() {
 }
 
 function printAudit(targets, supabaseUrl, includeMerged) {
+  console.log(`[audit] ${targets.length} video(s) with clip_thumbnail_urls > 1\n`);
+  let applyCount = 0;
+  let skipCount = 0;
+
+  for (const video of targets) {
+    const skip = applySkipReason(video, supabaseUrl, includeMerged);
     const videoPath = extractMediaStoragePath(video.video_url, supabaseUrl);
     console.log(`  video_id=${video.id}`);
     console.log(`    title=${JSON.stringify(video.title)}`);
@@ -376,7 +382,9 @@ function printAudit(targets, supabaseUrl, includeMerged) {
     console.log(`    has_bgm=${Boolean(video.bgm_url?.trim()) ? "yes" : "no"}`);
     console.log(`    video_url_file=${basename(videoPath)}`);
     if (skip) {
-      console.log(`    apply=${skip === "already_reencoded" ? "skip (already reencoded)" : "skip (video-merged.mp4 = libx264 backfill)"}`);
+      console.log(
+        `    apply=${skip === "already_reencoded" ? "skip (already reencoded)" : "skip (video-merged.mp4 = libx264 backfill)"}`,
+      );
       skipCount++;
     } else {
       console.log(`    apply=yes`);
