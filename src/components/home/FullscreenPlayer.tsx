@@ -1,7 +1,6 @@
 "use client";
 
 import { BurstEffect } from "@/components/home/BurstEffect";
-import { FullscreenPlayerDebugOverlay } from "@/components/home/FullscreenPlayerDebugOverlay";
 import { FullscreenVideoMask } from "@/components/home/FullscreenVideoMask";
 import { useFullscreenMaskFlip } from "@/components/home/useFullscreenMaskFlip";
 import { ReportButton } from "@/components/reports/ReportButton";
@@ -17,7 +16,6 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchVideoById } from "@/lib/videos/fetch-video";
 import { normalizeMediaPublicUrl } from "@/lib/videos/normalize-media-url";
 import {
-  getPreloadLinkCount,
   releaseVideoUrl,
 } from "@/lib/videos/preload-video";
 import type { FeedVideo } from "@/types/feed";
@@ -100,7 +98,6 @@ export function FullscreenPlayer({
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(() =>
     normalizeMediaPublicUrl(video.videoUrl),
   );
-  const [playbackUrlError, setPlaybackUrlError] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
@@ -141,20 +138,12 @@ export function FullscreenPlayer({
 
     const fromProps = normalizeMediaPublicUrl(video.videoUrl);
     setPlaybackUrl(fromProps);
-    setPlaybackUrlError(
-      fromProps ? null : "動画URLが空または無効です（video_url）",
-    );
 
     void fetchVideoById(video.id)
       .then((row) => {
         if (cancelled || !row) return;
         const fresh = normalizeMediaPublicUrl(row.videoUrl);
-        if (!fresh) {
-          setPlaybackUrlError("動画URLが空または無効です（DB）");
-          return;
-        }
-        setPlaybackUrl(fresh);
-        setPlaybackUrlError(null);
+        if (fresh) setPlaybackUrl(fresh);
       })
       .catch(() => {
         /* keep feed URL */
@@ -165,22 +154,9 @@ export function FullscreenPlayer({
     };
   }, [video.id, video.videoUrl]);
 
-  const releaseSlots = useCallback((reason: string) => {
-    const released =
-      Number(releaseVideoElement(slotARef.current)) +
-      Number(releaseVideoElement(slotBRef.current));
-    // Log after the DOM settles so the count reflects reality post-unmount.
-    // Watch this in Safari Web Inspector: with no player open it must return to
-    // 0, and it must NOT grow across repeated open/close cycles.
-    if (typeof window !== "undefined") {
-      window.setTimeout(() => {
-        const videoCount = document.querySelectorAll("video").length;
-        console.log(
-          `[fullscreen-player] released ${released} decoder(s) on ${reason} · ` +
-            `<video> in DOM: ${videoCount} · preload links: ${getPreloadLinkCount()}`,
-        );
-      }, 0);
-    }
+  const releaseSlots = useCallback(() => {
+    releaseVideoElement(slotARef.current);
+    releaseVideoElement(slotBRef.current);
   }, []);
 
   useEffect(() => {
@@ -197,7 +173,7 @@ export function FullscreenPlayer({
   // <video> decoders so nothing lingers between open/close cycles (iPhone 13).
   useEffect(() => {
     return () => {
-      releaseSlots("unmount");
+      releaseSlots();
     };
   }, [releaseSlots]);
 
@@ -356,7 +332,7 @@ export function FullscreenPlayer({
   useEffect(() => {
     if (!isExiting) return;
     const timer = window.setTimeout(() => {
-      releaseSlots("close");
+      releaseSlots();
       onClose(buildReport());
     }, FULLSCREEN_EXIT_MS);
     return () => window.clearTimeout(timer);
@@ -497,15 +473,6 @@ export function FullscreenPlayer({
             </div>
           )}
           </FullscreenVideoMask>
-
-          <FullscreenPlayerDebugOverlay
-            videoRef={slotARef}
-            showVideoSurface={showVideoSurface}
-            flipVisible={flipVisible}
-            videoId={video.id}
-            playbackUrl={playbackUrl}
-            playbackUrlError={playbackUrlError}
-          />
 
           {isExiting && maskDiameter > 0 && (
             <div className="absolute inset-0 z-40">
