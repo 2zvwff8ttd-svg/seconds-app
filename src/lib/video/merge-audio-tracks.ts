@@ -10,7 +10,7 @@ import {
   writeFfmpegInput,
 } from "@/lib/video/ffmpeg-mux-utils";
 import { getFfmpeg, safeDeleteFile } from "@/lib/video/ffmpeg-client";
-import { iosMp4VideoEncodeArgs } from "@/lib/video/ios-mp4-encode";
+import { iosMp4OutputEncodeArgs, iosMp4ScaleFilterArgs, iosMp4VideoEncodeArgs } from "@/lib/video/ios-mp4-encode";
 
 /** 既存の動画音声を背景に残すときの音量（ナレーションが主役） */
 export const NARRATION_VIDEO_AUDIO_VOLUME = 0.2;
@@ -54,7 +54,9 @@ function buildMuxArgs(
   strategy: VideoMuxStrategy,
 ): string[] {
   const videoCodecArgs =
-    strategy === "copy" ? ["-c:v", "copy"] : iosMp4VideoEncodeArgs();
+    strategy === "copy"
+      ? ["-c:v", "copy"]
+      : [...iosMp4ScaleFilterArgs(), ...iosMp4VideoEncodeArgs()];
 
   return [
     "-i",

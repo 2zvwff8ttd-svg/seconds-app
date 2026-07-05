@@ -33,9 +33,20 @@ const root = join(__dirname, "..");
 const MEDIA_BUCKET = "media";
 const OUTPUT_STORAGE_NAME = "video-reencoded.mp4";
 /** Bump when ffmpeg recipe changes; recorded in apply manifests for traceability. */
-const ENCODE_RECIPE_ID = "ios-baseline-v1";
+const ENCODE_RECIPE_ID = "ios-baseline-v2-scale";
+const IOS_MAX_VIDEO_WIDTH = 1080;
 const MIN_OUTPUT_BYTES = 1024;
+const MIN_FRAMES_PER_SECOND = 15;
 const RAW_CLIP_PATTERN = /^clip-(\d+)\.(webm|mp4|mov)$/i;
+
+/** Recover timestamps from corrupt HEVC copy-concat sources when possible. */
+const FFMPEG_DECODE_FLAGS = [
+  "-fflags",
+  "+genpts+discardcorrupt",
+  "-err_detect",
+  "ignore_err",
+];
+const FFMPEG_SCALE = ["-vf", `scale='min(${IOS_MAX_VIDEO_WIDTH},iw)':-2`];
 
 const FFMPEG_ENCODE_VIDEO = [
   "-c:v",
@@ -285,10 +296,52 @@ async function downloadStorageFile(supabase, storagePath, destPath) {
   }
 }
 
+async function countDecodableVideoFrames(localPath) {
+  const { stdout } = await runProcess("ffprobe", [
+    "-v",
+    "error",
+    "-select_streams",
+    "v:0",
+    "-count_frames",
+    "-show_entries",
+    "stream=nb_read_frames,duration",
+    "-of",
+    "json",
+    localPath,
+  ]);
+  const parsed = JSON.parse(stdout);
+  const stream = parsed.streams?.[0] ?? {};
+  return {
+    frames: Number(stream.nb_read_frames ?? 0),
+    durationSec: Number(stream.duration ?? 0),
+  };
+}
+
+async function assertHealthyFrameDensity(localPath) {
+  const { frames, durationSec } = await countDecodableVideoFrames(localPath);
+  const expectedMin = Math.max(12, Math.floor(durationSec * MIN_FRAMES_PER_SECOND));
+  if (frames >= expectedMin) return { frames, durationSec };
+
+  throw new Error(
+    `再エンコード結果の映像フレームが極端に少ないです（${frames} frames / ${durationSec.toFixed(1)}s）。` +
+      ` 元の video.mp4 が HEVC copy 結合で壊れている可能性があります。Storage に clip-0.* 等の生クリップが残っていれば concat_raw_clips で復旧できます。`,
+  );
+}
+
 async function transcodeFileToMp4(inputName, outputName, workDir) {
   await runProcess(
     "ffmpeg",
-    ["-y", "-i", inputName, ...FFMPEG_ENCODE_VIDEO, ...FFMPEG_ENCODE_AUDIO, ...FFMPEG_MP4_FLAGS, outputName],
+    [
+      "-y",
+      ...FFMPEG_DECODE_FLAGS,
+      "-i",
+      inputName,
+      ...FFMPEG_SCALE,
+      ...FFMPEG_ENCODE_VIDEO,
+      ...FFMPEG_ENCODE_AUDIO,
+      ...FFMPEG_MP4_FLAGS,
+      outputName,
+    ],
     { cwd: workDir },
   );
 }
@@ -304,6 +357,7 @@ async function concatEncodeToMp4(listFile, outputName, workDir) {
       "0",
       "-i",
       listFile,
+      ...FFMPEG_SCALE,
       ...FFMPEG_ENCODE_VIDEO,
       ...FFMPEG_ENCODE_AUDIO,
       ...FFMPEG_MP4_FLAGS,
@@ -340,6 +394,10 @@ async function produceReencodedMp4(supabase, plan, workDir) {
   if (st.size < MIN_OUTPUT_BYTES) {
     throw new Error("再エンコード結果が小さすぎます");
   }
+  const density = await assertHealthyFrameDensity(outputPath);
+  console.log(
+    `  output frames=${density.frames} duration=${density.durationSec.toFixed(2)}s`,
+  );
   return { outputPath, contentType: "video/mp4" };
 }
 

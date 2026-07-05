@@ -4,6 +4,11 @@
  * - +faststart: moov atom at file start for streaming start
  * - fixed GOP: fewer decode stalls after seek / loop
  */
+export const IOS_MAX_VIDEO_WIDTH = 1080;
+
+/** Downscale tall phone captures (e.g. 3024×4032) for iOS compositor + upload limits. */
+export const IOS_MP4_SCALE_FILTER = `scale='min(${IOS_MAX_VIDEO_WIDTH},iw)':-2`;
+
 export const IOS_MP4_VIDEO_ENCODE_ARGS = [
   "-c:v",
   "libx264",
@@ -37,6 +42,11 @@ export const IOS_MP4_AUDIO_ENCODE_ARGS = [
 ] as const;
 
 export const IOS_MP4_MUX_ARGS = ["-movflags", "+faststart"] as const;
+
+/** Scale + libx264 (use before iosMp4VideoEncodeArgs / iosMp4OutputEncodeArgs). */
+export function iosMp4ScaleFilterArgs(): string[] {
+  return ["-vf", IOS_MP4_SCALE_FILTER];
+}
 
 /** Video-only libx264 args (mux paths that encode audio separately). */
 export function iosMp4VideoEncodeArgs(): string[] {

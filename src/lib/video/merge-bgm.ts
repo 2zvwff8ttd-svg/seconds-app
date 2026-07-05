@@ -1,7 +1,7 @@
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile } from "@ffmpeg/util";
 import { getFfmpeg, safeDeleteFile } from "@/lib/video/ffmpeg-client";
-import { iosMp4OutputEncodeArgs } from "@/lib/video/ios-mp4-encode";
+import { iosMp4OutputEncodeArgs, iosMp4ScaleFilterArgs } from "@/lib/video/ios-mp4-encode";
 
 function bgmStorageName(runId: string, blob: Blob): string {
   const ext = bgmFileName(blob).split(".").pop() || "mp3";
@@ -61,6 +61,7 @@ async function execMerge(
           "0:v:0",
           "-map",
           "1:a:0",
+          ...iosMp4ScaleFilterArgs(),
           ...iosMp4OutputEncodeArgs(),
           "-shortest",
           "-f",
