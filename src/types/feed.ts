@@ -17,5 +17,8 @@ export type FeedVideo = {
   countryCode?: string;
   /** 新着順・レコメンド用（published_at または created_at） */
   publishedAt?: string;
+  /** 公開予定（pending 時の残り日数見積もり用） */
+  publishAt?: string;
+  videoStatus?: "pending" | "published";
   displayMaskShape?: VideoDisplayMaskShape;
 };

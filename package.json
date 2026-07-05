@@ -17,6 +17,7 @@
     "functions:invoke-daily-morning": "node scripts/invoke-daily-morning.mjs",
     "backfill:merge-multi-clip": "node scripts/backfill-merge-multi-clip-videos.mjs",
     "backfill:reencode-videos": "node scripts/backfill-reencode-videos.mjs",
+    "audit:video-retention": "node scripts/audit-video-retention-expiry.mjs",
     "icons:generate": "node scripts/generate-pwa-icons.mjs",
     "icons:ios": "node scripts/sync-ios-app-icon.mjs",
     "cap:sync": "npx cap sync android && node scripts/fix-android-strings.mjs && node scripts/patch-camera-preview-android.mjs",

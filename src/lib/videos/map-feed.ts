@@ -67,6 +67,8 @@ export function videoRowToFeedVideo(
     isViralTop: options?.isViralTop,
     countryCode: row.country,
     publishedAt: row.published_at ?? row.created_at,
+    publishAt: row.publish_at ?? undefined,
+    videoStatus: row.status ?? "published",
     displayMaskShape: parseVideoDisplayMaskShape(row.display_mask_shape),
   };
 }

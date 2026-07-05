@@ -2,6 +2,7 @@
 
 import { AiEnhancePanel } from "@/components/post/AiEnhancePanel";
 import { BonusDayCountdownNote } from "@/components/post/BonusDayCountdownNote";
+import { VideoRetentionNote } from "@/components/video/VideoRetentionNote";
 import { NarrationRecorder } from "@/components/post/NarrationRecorder";
 import { ThumbnailPicker } from "@/components/post/ThumbnailPicker";
 import { CameraRecorder } from "@/components/record/CameraRecorder";
@@ -447,6 +448,10 @@ export function PostForm() {
         <p className="mt-2 text-xs text-muted">
           公開されるまで他のユーザーには表示されません。
         </p>
+        <VideoRetentionNote
+          publishAt={uploadSuccess.publishAt}
+          className="mt-3 text-xs leading-relaxed text-violet-200/90"
+        />
         <BonusDayCountdownNote
           message={uploadSuccess.bonusCountdownMessage}
           className="mt-6 w-full max-w-xs"

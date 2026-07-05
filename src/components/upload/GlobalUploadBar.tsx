@@ -1,6 +1,7 @@
 "use client";
 
 import { UploadProgress } from "@/components/post/UploadProgress";
+import { VideoRetentionNote } from "@/components/video/VideoRetentionNote";
 import { useUpload } from "@/lib/upload/upload-context";
 import Link from "next/link";
 
@@ -60,6 +61,10 @@ export function GlobalUploadBar() {
           <p className="global-upload-bar__hint">
             明日の7時に公開されます。
           </p>
+          <VideoRetentionNote
+            publishAt={success.publishAt}
+            className="global-upload-bar__hint mt-1"
+          />
         </div>
       )}
 

@@ -1,6 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { sendMorningDigestPushes } from "../_shared/morning-digest-push.ts";
+import {
+  expireRetentionVideos,
+} from "../_shared/video-retention-expiry.ts";
 
 const JST = "Asia/Tokyo";
 
@@ -12,6 +15,7 @@ const JST = "Asia/Tokyo";
  * 2. 全ユーザーに 5〜30 秒の撮影時間を daily_assignments に登録
  * 3. 全ユーザーへ morning_digest 通知（title: ?Seconds / body: 固定コピー、秒数は出さない）
  * 4. enabled な iOS トークンへ morning_digest APNs 送信（notifications の title/body をそのまま使用）
+ * 5. 10日保持期限切れ動画の削除（app_config.video_retention.expiry_enabled=true のときのみ）
  *
  * スケジュール（7:00 JST = 22:00 UTC）:
  *   Dashboard → Edge Functions → daily-morning → Schedules
@@ -75,10 +79,39 @@ Deno.serve(async (req) => {
 
   const pushSummary = await sendMorningDigestPushes(supabase, startedAt);
 
+  let retentionSummary: Record<string, unknown> = { skipped: true };
+  try {
+    const retention = await expireRetentionVideos(supabase, supabaseUrl, {
+      apply: false,
+    });
+    const applyExpiry = retention.config.expiry_enabled;
+    const applied = applyExpiry
+      ? await expireRetentionVideos(supabase, supabaseUrl, { apply: true })
+      : null;
+
+    retentionSummary = {
+      policy_start_jst: retention.config.policy_start_jst,
+      retention_days: retention.config.retention_days,
+      expiry_enabled: retention.config.expiry_enabled,
+      candidates: retention.candidates.length,
+      deleted: applied?.deleted ?? 0,
+      failed: applied?.failed ?? [],
+      dry_run_only: !applyExpiry,
+    };
+  } catch (retentionErr) {
+    console.error("[daily-morning] retention expiry failed:", retentionErr);
+    retentionSummary = {
+      error: retentionErr instanceof Error
+        ? retentionErr.message
+        : String(retentionErr),
+    };
+  }
+
   const elapsedMs = Date.now() - startedAt.getTime();
   console.log("[daily-morning] completed", {
     result: data,
     push: pushSummary,
+    retention: retentionSummary,
     elapsedMs,
   });
 
@@ -89,6 +122,7 @@ Deno.serve(async (req) => {
     elapsed_ms: elapsedMs,
     result: data,
     push: pushSummary,
+    retention: retentionSummary,
   });
 });
 

@@ -7,6 +7,7 @@ import { ReportButton } from "@/components/reports/ReportButton";
 import { BlockUserButton } from "@/components/blocks/BlockUserButton";
 import { useBgmPlayback } from "@/components/video/useBgmPlayback";
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
+import { VideoRetentionNote } from "@/components/video/VideoRetentionNote";
 import {
   getDefaultFullscreenOrigin,
   type BubbleOriginRect,
@@ -546,6 +547,13 @@ export function FullscreenPlayer({
               昨日の国別 #1
             </p>
           )}
+          <VideoRetentionNote
+            publishedAt={
+              video.videoStatus === "published" ? video.publishedAt : null
+            }
+            publishAt={video.publishAt ?? video.publishedAt}
+            className="mt-2 text-xs text-white/55"
+          />
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-hidden rounded-2xl bg-black/35 p-3 backdrop-blur-md">

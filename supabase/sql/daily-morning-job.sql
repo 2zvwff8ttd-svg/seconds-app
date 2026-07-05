@@ -1,7 +1,6 @@
 -- =============================================================================
 -- 毎朝 7:00 JST 日次ジョブ RPC（SQL Editor で実行）
--- 018_post_streak 適用後: ストリークに応じた秒数割当（10の倍数日は5〜60秒）
--- 028: morning_digest body copy update
+-- 029: 10日保持期限の pending 件数を返す（削除は Edge / audit スクリプト）
 -- =============================================================================
 
 create or replace function public.run_daily_morning_job()
@@ -17,6 +16,7 @@ declare
   v_published_count integer := 0;
   v_assignment_count integer := 0;
   v_notification_count integer := 0;
+  v_retention_pending integer := 0;
   v_morning_digest_title constant text := '?Seconds';
   v_morning_digest_body constant text :=
     '今日の秒数が届いたよ！何気ない1日を思い出に残そう';
@@ -33,6 +33,9 @@ begin
     returning user_id, id
   )
   select count(*) into v_published_count from published;
+
+  select count(*) into v_retention_pending
+  from public.list_videos_for_retention_expiry();
 
   for v_user in
     select p.id, coalesce(p.current_streak, 0) as current_streak
@@ -62,6 +65,11 @@ begin
     'published_videos', v_published_count,
     'assignments', v_assignment_count,
     'notifications', v_notification_count,
+    'retention_expiry_pending', v_retention_pending,
+    'retention_expiry_enabled', coalesce(
+      (public.get_video_retention_config()->>'expiry_enabled')::boolean,
+      false
+    ),
     'date_jst', v_today,
     'ran_at_jst', timezone('Asia/Tokyo', now())
   );
