@@ -33,10 +33,11 @@ const root = join(__dirname, "..");
 const MEDIA_BUCKET = "media";
 const OUTPUT_STORAGE_NAME = "video-reencoded.mp4";
 /** Bump when ffmpeg recipe changes; recorded in apply manifests for traceability. */
-const ENCODE_RECIPE_ID = "ios-baseline-v2-scale";
+const ENCODE_RECIPE_ID = "ios-baseline-v3-framecheck";
 const IOS_MAX_VIDEO_WIDTH = 1080;
 const MIN_OUTPUT_BYTES = 1024;
-const MIN_FRAMES_PER_SECOND = 15;
+/** ~24fps floor; partial HEVC copy-concat sources often land near 16fps and still freeze on iOS. */
+const MIN_FRAMES_PER_SECOND = 24;
 const RAW_CLIP_PATTERN = /^clip-(\d+)\.(webm|mp4|mov)$/i;
 
 /** Recover timestamps from corrupt HEVC copy-concat sources when possible. */
@@ -317,13 +318,16 @@ async function countDecodableVideoFrames(localPath) {
   };
 }
 
-async function assertHealthyFrameDensity(localPath) {
+async function assertHealthyFrameDensity(localPath, label = "再エンコード結果") {
   const { frames, durationSec } = await countDecodableVideoFrames(localPath);
+  const effFps = durationSec > 0 ? frames / durationSec : 0;
   const expectedMin = Math.max(12, Math.floor(durationSec * MIN_FRAMES_PER_SECOND));
-  if (frames >= expectedMin) return { frames, durationSec };
+  if (frames >= expectedMin) {
+    return { frames, durationSec, effFps };
+  }
 
   throw new Error(
-    `再エンコード結果の映像フレームが極端に少ないです（${frames} frames / ${durationSec.toFixed(1)}s）。` +
+    `${label}の映像フレームが不足しています（${frames} frames / ${durationSec.toFixed(1)}s = ${effFps.toFixed(1)} fps, 必要 ≥${MIN_FRAMES_PER_SECOND} fps）。` +
       ` 元の video.mp4 が HEVC copy 結合で壊れている可能性があります。Storage に clip-0.* 等の生クリップが残っていれば concat_raw_clips で復旧できます。`,
   );
 }
@@ -375,6 +379,13 @@ async function produceReencodedMp4(supabase, plan, workDir) {
     const localName = `source_${plan.sourceFile}`;
     console.log(`  download ${plan.sourcePath}`);
     await downloadStorageFile(supabase, plan.sourcePath, join(workDir, localName));
+    const sourceDensity = await assertHealthyFrameDensity(
+      join(workDir, localName),
+      "入力ソース",
+    );
+    console.log(
+      `  input frames=${sourceDensity.frames} duration=${sourceDensity.durationSec.toFixed(2)}s (${sourceDensity.effFps.toFixed(1)} fps)`,
+    );
     console.log(`  ffmpeg re-encode (full file) → ${outputName}`);
     await transcodeFileToMp4(localName, outputName, workDir);
   } else {
@@ -396,7 +407,7 @@ async function produceReencodedMp4(supabase, plan, workDir) {
   }
   const density = await assertHealthyFrameDensity(outputPath);
   console.log(
-    `  output frames=${density.frames} duration=${density.durationSec.toFixed(2)}s`,
+    `  output frames=${density.frames} duration=${density.durationSec.toFixed(2)}s (${density.effFps.toFixed(1)} fps)`,
   );
   return { outputPath, contentType: "video/mp4" };
 }
