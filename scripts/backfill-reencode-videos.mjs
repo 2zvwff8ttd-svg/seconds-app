@@ -40,6 +40,19 @@ const MIN_OUTPUT_BYTES = 1024;
 const MIN_FRAMES_PER_SECOND = 24;
 const RAW_CLIP_PATTERN = /^clip-(\d+)\.(webm|mp4|mov)$/i;
 
+/** Audit category A (fixable) — 2026-07-07 playback backfill */
+export const FIXABLE_A_VIDEO_IDS = [
+  "421ca992-b33e-4bb3-8dd3-dea22de9894d", // おちゃめなディナー
+  "df0304b3-a505-4eba-956f-159e478ed6b7", // 旨辛鶏料理
+  "83259cc3-9c3d-47f2-b16d-2ef9f4a535b8", // 無題のvlog
+  "cad39a47-5215-469c-9225-6163295849d3", // 深夜の運動会
+  "96096c86-0986-49ad-b7b7-ed2ea62f5b45", // 炊きたてご飯
+  "bcbc4c5b-e014-4dd8-9154-cc70489a99d4", // 歴史修正主義を学ぶ
+  "c18e3b26-6033-4c25-ac6f-7970e2939a8a", // チルタイム
+  "92ae8db9-72e6-4dcf-a03e-dea316854afa", // 沖縄とゆうこ
+  "b0674d92-9961-48cb-8143-907397facdf2", // 沖縄とゆうこ
+];
+
 /** Recover timestamps from corrupt HEVC copy-concat sources when possible. */
 const FFMPEG_DECODE_FLAGS = [
   "-fflags",
@@ -96,6 +109,8 @@ function parseArgs(argv) {
     manifest: null,
     includeMerged: false,
     force: false,
+    ids: null,
+    fixableA: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
@@ -104,7 +119,16 @@ function parseArgs(argv) {
     else if (arg === "--cleanup") args.cleanup = true;
     else if (arg === "--include-merged") args.includeMerged = true;
     else if (arg === "--force") args.force = true;
-    else if (arg === "--manifest") {
+    else if (arg === "--fixable-a") args.fixableA = true;
+    else if (arg === "--ids") {
+      const raw = argv[++i];
+      if (!raw) throw new Error("--ids にはカンマ区切りの video UUID が必要です");
+      args.ids = raw
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+      if (args.ids.length === 0) throw new Error("--ids に有効な UUID がありません");
+    } else if (arg === "--manifest") {
       args.manifest = argv[++i];
       if (!args.manifest) throw new Error("--manifest にはファイルパスが必要です");
     } else if (arg === "--help" || arg === "-h") {
@@ -123,23 +147,36 @@ function printHelp() {
   node scripts/backfill-reencode-videos.mjs --apply
   node scripts/backfill-reencode-videos.mjs --apply --force
   node scripts/backfill-reencode-videos.mjs --apply --include-merged
+  node scripts/backfill-reencode-videos.mjs --dry-run --fixable-a
+  node scripts/backfill-reencode-videos.mjs --apply --fixable-a
+  node scripts/backfill-reencode-videos.mjs --dry-run --ids <uuid>,<uuid>,...
   node scripts/backfill-reencode-videos.mjs --cleanup --manifest <manifest.json>
 
+  --fixable-a       監査カテゴリ A（直せる 9 本）だけを対象にする
+  --ids             対象 video_id をカンマ区切りで限定（単一 clip-0 も可）
   --force           video-reencoded.mp4 が既にあっても現行の iOS 設定で作り直す
-  --include-merged  video-merged.mp4 も再エンコード対象に含める（既定はスキップ）`);
+  --include-merged  video-merged.mp4 を単一ファイル再エンコード（生クリップ無し時のみ）`);
 }
 
-function requireSupabase() {
+function requireSupabase({ allowAnon = false } = {}) {
   loadEnvLocal();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/[\r\n]+/g, "").trim();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.replace(/[\r\n]+/g, "").trim();
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.replace(/[\r\n]+/g, "").trim();
+  const key = serviceKey ?? (allowAnon ? anonKey : null);
   if (!url || !key) {
     console.error(
-      "NEXT_PUBLIC_SUPABASE_URL と SUPABASE_SERVICE_ROLE_KEY を .env.local に設定してください。",
+      allowAnon
+        ? "NEXT_PUBLIC_SUPABASE_URL と ANON または SERVICE_ROLE キーが必要です。"
+        : "NEXT_PUBLIC_SUPABASE_URL と SUPABASE_SERVICE_ROLE_KEY を .env.local に設定してください。",
     );
     process.exit(1);
   }
-  return { url, supabase: createClient(url, key) };
+  return {
+    url,
+    supabase: createClient(url, key),
+    keyType: serviceKey ? "service" : "anon",
+  };
 }
 
 function mediaPublicPrefix(supabaseUrl) {
@@ -173,7 +210,11 @@ function thumbCount(video) {
     : 0;
 }
 
-function applySkipReason(video, supabaseUrl, includeMerged, force) {
+function applySkipReason(video, supabaseUrl, includeMerged, force, plan) {
+  if (plan?.mode === "concat_raw_clips" || plan?.mode === "transcode_single_raw") {
+    return null;
+  }
+
   const path = extractMediaStoragePath(video.video_url, supabaseUrl);
   const file = basename(path ?? video.video_url);
   if (!force && file === OUTPUT_STORAGE_NAME) {
@@ -224,18 +265,50 @@ async function assertFfmpegAvailable() {
   await runProcess("ffmpeg", ["-version"]);
 }
 
+const VIDEO_SELECT =
+  "id, user_id, title, video_url, bgm_url, clip_thumbnail_urls, duration_seconds, created_at, status";
+
 async function fetchReencodeTargets(supabase) {
   const { data: videos, error } = await supabase
     .from("videos")
-    .select(
-      "id, user_id, title, video_url, bgm_url, clip_thumbnail_urls, duration_seconds, created_at",
-    )
+    .select(VIDEO_SELECT)
     .not("clip_thumbnail_urls", "is", null)
     .order("created_at", { ascending: true });
 
   if (error) throw new Error(error.message);
 
   return (videos ?? []).filter((v) => thumbCount(v) > 1);
+}
+
+async function fetchTargetsByIds(supabase, ids) {
+  const { data: videos, error } = await supabase
+    .from("videos")
+    .select(VIDEO_SELECT)
+    .in("id", ids);
+
+  if (error) throw new Error(error.message);
+
+  const byId = new Map((videos ?? []).map((v) => [v.id, v]));
+  const missing = ids.filter((id) => !byId.has(id));
+  if (missing.length > 0) {
+    throw new Error(`videos が見つかりません: ${missing.join(", ")}`);
+  }
+
+  return ids.map((id) => byId.get(id));
+}
+
+async function resolveTargetIds(args) {
+  if (args.fixableA) return [...FIXABLE_A_VIDEO_IDS];
+  if (args.ids?.length) return args.ids;
+  return null;
+}
+
+async function fetchTargets(supabase, args) {
+  const explicitIds = await resolveTargetIds(args);
+  if (explicitIds) {
+    return fetchTargetsByIds(supabase, explicitIds);
+  }
+  return fetchReencodeTargets(supabase);
 }
 
 async function listRawClipPaths(supabase, userId, videoId) {
@@ -250,6 +323,7 @@ async function listRawClipPaths(supabase, userId, videoId) {
     clips.push({
       order: Number(match[1]),
       ext: match[2].toLowerCase() === "mov" ? "mp4" : match[2].toLowerCase(),
+      name: item.name,
       storagePath: `${folder}/${item.name}`,
     });
   }
@@ -268,6 +342,14 @@ async function resolveInputPlan(supabase, video, supabaseUrl) {
   if (rawClips.length >= 2) {
     return {
       mode: "concat_raw_clips",
+      rawClips,
+      fallbackVideoPath: videoPath,
+    };
+  }
+
+  if (rawClips.length === 1) {
+    return {
+      mode: "transcode_single_raw",
       rawClips,
       fallbackVideoPath: videoPath,
     };
@@ -318,16 +400,21 @@ async function countDecodableVideoFrames(localPath) {
   };
 }
 
-async function assertHealthyFrameDensity(localPath, label = "再エンコード結果") {
+async function assertHealthyFrameDensity(
+  localPath,
+  label = "再エンコード結果",
+  { minFrames } = {},
+) {
   const { frames, durationSec } = await countDecodableVideoFrames(localPath);
   const effFps = durationSec > 0 ? frames / durationSec : 0;
-  const expectedMin = Math.max(12, Math.floor(durationSec * MIN_FRAMES_PER_SECOND));
+  const expectedMin =
+    minFrames ?? Math.max(12, Math.floor(durationSec * MIN_FRAMES_PER_SECOND));
   if (frames >= expectedMin) {
     return { frames, durationSec, effFps };
   }
 
   throw new Error(
-    `${label}の映像フレームが不足しています（${frames} frames / ${durationSec.toFixed(1)}s = ${effFps.toFixed(1)} fps, 必要 ≥${MIN_FRAMES_PER_SECOND} fps）。` +
+    `${label}の映像フレームが不足しています（${frames} frames / ${durationSec.toFixed(1)}s = ${effFps.toFixed(1)} fps, 必要 ≥${expectedMin} frames）。` +
       ` 元の video.mp4 が HEVC copy 結合で壊れている可能性があります。Storage に clip-0.* 等の生クリップが残っていれば concat_raw_clips で復旧できます。`,
   );
 }
@@ -388,6 +475,32 @@ async function produceReencodedMp4(supabase, plan, workDir) {
     );
     console.log(`  ffmpeg re-encode (full file) → ${outputName}`);
     await transcodeFileToMp4(localName, outputName, workDir);
+  } else if (plan.mode === "transcode_single_raw") {
+    const clip = plan.rawClips[0];
+    const localName = `clip_${clip.order}.${clip.ext}`;
+    console.log(`  download ${clip.storagePath} (transcodeClipForPost equivalent)`);
+    await downloadStorageFile(supabase, clip.storagePath, join(workDir, localName));
+    const sourceDensity = await countDecodableVideoFrames(join(workDir, localName));
+    console.log(
+      `  input frames=${sourceDensity.frames} duration=${sourceDensity.durationSec.toFixed(2)}s (${sourceDensity.durationSec > 0 ? (sourceDensity.frames / sourceDensity.durationSec).toFixed(1) : "?"} fps)`,
+    );
+    console.log(`  ffmpeg libx264 transcode (single raw clip) → ${outputName}`);
+    await transcodeFileToMp4(localName, outputName, workDir);
+    const st = await stat(outputPath);
+    if (st.size < MIN_OUTPUT_BYTES) {
+      throw new Error("再エンコード結果が小さすぎます");
+    }
+    const minOutFrames = Math.max(
+      12,
+      Math.floor(sourceDensity.frames * 0.9),
+    );
+    const density = await assertHealthyFrameDensity(outputPath, "再エンコード結果", {
+      minFrames: minOutFrames,
+    });
+    console.log(
+      `  output frames=${density.frames} duration=${density.durationSec.toFixed(2)}s (${density.effFps.toFixed(1)} fps)`,
+    );
+    return { outputPath, contentType: "video/mp4" };
   } else {
     const virtualNames = [];
     for (const clip of plan.rawClips) {
@@ -456,8 +569,10 @@ function manifestPath() {
   return join(root, "scripts", `backfill-reencode-manifest-${stamp}.json`);
 }
 
-function printAudit(targets, supabaseUrl, includeMerged, force) {
-  console.log(`[audit] ${targets.length} video(s) with clip_thumbnail_urls > 1\n`);
+async function printAudit(supabase, targets, supabaseUrl, includeMerged, force, { explicitIds = false } = {}) {
+  console.log(
+    `[audit] ${targets.length} video(s)${explicitIds ? " (--ids / --fixable-a)" : " with clip_thumbnail_urls > 1"}\n`,
+  );
   if (force) {
     console.log(
       `[audit] --force: 既存の ${OUTPUT_STORAGE_NAME} も現行エンコード設定 (${ENCODE_RECIPE_ID}) で作り直します\n`,
@@ -470,13 +585,28 @@ function printAudit(targets, supabaseUrl, includeMerged, force) {
   for (const video of targets) {
     const path = extractMediaStoragePath(video.video_url, supabaseUrl);
     const file = basename(path ?? video.video_url);
-    const skip = applySkipReason(video, supabaseUrl, includeMerged, force);
+    let plan = null;
+    try {
+      plan = await resolveInputPlan(supabase, video, supabaseUrl);
+    } catch {
+      plan = null;
+    }
+    const skip = applySkipReason(video, supabaseUrl, includeMerged, force, plan);
     const videoPath = path;
     console.log(`  video_id=${video.id}`);
     console.log(`    title=${JSON.stringify(video.title)}`);
     console.log(`    thumb_count=${thumbCount(video)}`);
     console.log(`    has_bgm=${Boolean(video.bgm_url?.trim()) ? "yes" : "no"}`);
     console.log(`    video_url_file=${basename(videoPath)}`);
+    if (plan) {
+      const planDetail =
+        plan.mode === "concat_raw_clips"
+          ? `concat_raw_clips (${plan.rawClips.length} clips)`
+          : plan.mode === "transcode_single_raw"
+            ? `transcode_single_raw (${plan.rawClips[0]?.name})`
+            : `reencode_single_file (${plan.sourceFile})`;
+      console.log(`    plan=${planDetail}`);
+    }
     if (skip) {
       console.log(
         `    apply=${skip === "already_reencoded" ? "skip (already reencoded)" : "skip (video-merged.mp4 = libx264 backfill)"}`,
@@ -535,7 +665,6 @@ async function runApply(supabase, supabaseUrl, targets, includeMerged, force) {
   let skipCount = 0;
 
   for (const video of targets) {
-    const skip = applySkipReason(video, supabaseUrl, includeMerged, force);
     const videoPath = extractMediaStoragePath(video.video_url, supabaseUrl);
 
     const { data: clipsBefore } = await supabase
@@ -561,9 +690,23 @@ async function runApply(supabase, supabaseUrl, targets, includeMerged, force) {
       after: null,
     };
 
+    let plan;
+    try {
+      plan = await resolveInputPlan(supabase, video, supabaseUrl);
+    } catch (err) {
+      entry.status = "failed";
+      entry.error = err instanceof Error ? err.message : String(err);
+      manifest.videos.push(entry);
+      failCount++;
+      console.error(`FAILED video_id=${video.id} plan: ${entry.error}`);
+      continue;
+    }
+
+    const skip = applySkipReason(video, supabaseUrl, includeMerged, force, plan);
     if (skip) {
       entry.status = "skipped";
       entry.error = skip;
+      entry.input_mode = plan.mode;
       manifest.videos.push(entry);
       skipCount++;
       console.log(`SKIP video_id=${video.id} reason=${skip}`);
@@ -575,10 +718,11 @@ async function runApply(supabase, supabaseUrl, targets, includeMerged, force) {
 
     try {
       console.log(`\n[apply] video_id=${video.id} title=${JSON.stringify(video.title)}`);
-      const plan = await resolveInputPlan(supabase, video, supabaseUrl);
       entry.input_mode = plan.mode;
       if (plan.mode === "concat_raw_clips") {
         console.log(`  input: ${plan.rawClips.length} raw clip file(s) in Storage`);
+      } else if (plan.mode === "transcode_single_raw") {
+        console.log(`  input: transcode ${plan.rawClips[0]?.name}`);
       } else {
         console.log(`  input: re-encode ${plan.sourceFile}`);
       }
@@ -678,27 +822,37 @@ async function main() {
     process.exit(1);
   }
 
-  const { url: supabaseUrl, supabase } = requireSupabase();
+  const explicitIds = Boolean(args.fixableA || args.ids?.length);
+  const { url: supabaseUrl, supabase, keyType } = requireSupabase({
+    allowAnon: args.dryRun,
+  });
 
   if (args.cleanup) {
     await runCleanup(supabase, supabaseUrl, args.manifest);
     return;
   }
 
-  const targets = await fetchReencodeTargets(supabase);
+  const targets = await fetchTargets(supabase, args);
   if (targets.length === 0) {
-    console.log("[audit] clip_thumbnail_urls > 1 の動画は 0 件です");
+    console.log("[audit] 対象動画は 0 件です");
     return;
   }
+
+  console.log(`[targets] ${targets.length} video(s) key=${keyType}\n`);
 
   for (const video of targets) {
     try {
       const plan = await resolveInputPlan(supabase, video, supabaseUrl);
-      const skip = applySkipReason(video, supabaseUrl, args.includeMerged, args.force);
+      const skip = applySkipReason(video, supabaseUrl, args.includeMerged, args.force, plan);
+      const planLabel =
+        plan.mode === "concat_raw_clips"
+          ? `clips=${plan.rawClips.length}`
+          : plan.mode === "transcode_single_raw"
+            ? `raw=${plan.rawClips[0]?.name}`
+            : `file=${plan.sourceFile}`;
       console.log(
-        `[plan] ${JSON.stringify(video.title)} mode=${plan.mode}` +
-          (plan.mode === "concat_raw_clips" ? ` clips=${plan.rawClips.length}` : ` file=${plan.sourceFile}`) +
-          (skip ? ` (${skip})` : args.force && basename(extractMediaStoragePath(video.video_url, supabaseUrl) ?? "") === OUTPUT_STORAGE_NAME ? " (force re-encode)" : ""),
+        `[plan] ${JSON.stringify(video.title)} mode=${plan.mode} ${planLabel}` +
+          (skip ? ` (${skip})` : ""),
       );
     } catch (err) {
       console.log(
@@ -708,7 +862,9 @@ async function main() {
   }
   console.log("");
 
-  printAudit(targets, supabaseUrl, args.includeMerged, args.force);
+  await printAudit(supabase, targets, supabaseUrl, args.includeMerged, args.force, {
+    explicitIds,
+  });
 
   if (args.dryRun) {
     console.log("[dry-run] 変更は行いませんでした");
