@@ -134,6 +134,20 @@ async function execConcatEncode(
   ]);
 }
 
+async function execSingleClipEncode(
+  ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
+  inputName: string,
+  outName: string,
+): Promise<void> {
+  await execFfmpegWithLogs(ffmpeg, [
+    "-i",
+    inputName,
+    ...iosMp4ScaleFilterArgs(),
+    ...iosMp4OutputEncodeArgs(),
+    outName,
+  ]);
+}
+
 async function readMergedOutput(
   ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
   outName: string,
@@ -196,6 +210,60 @@ async function cleanupMergeRun(ctx: MergeRunContext, outName?: string): Promise<
   if (outName) await safeDeleteFile(ctx.ffmpeg, outName);
   for (const name of ctx.virtualNames) {
     await safeDeleteFile(ctx.ffmpeg, name);
+  }
+}
+
+/**
+ * Re-encode a single clip to iOS-safe baseline H.264 MP4 (1080w max, faststart).
+ * Raw phone captures (HEVC / tall resolution / WebM) must not ship as clip-0.* —
+ * Safari/WKWebView stalls or shows a frozen / snowy frame layer on many devices.
+ */
+export async function transcodeClipForPost(
+  file: File,
+  onProgress?: (ratio: number, label: string) => void,
+): Promise<File> {
+  const container = detectContainer(file);
+  if (!container) {
+    throw new Error("対応していない動画形式のため最適化できません");
+  }
+
+  const inputExt = outputExtension(container);
+  const runId = crypto.randomUUID().slice(0, 8);
+  const inputName = `single_in_${runId}.${inputExt}`;
+  const outName = `single_out_${runId}.mp4`;
+
+  onProgress?.(0.02, "動画エンジンを読み込み中…");
+  const ffmpeg = await getFfmpeg();
+
+  const onFfmpegProgress = ({ progress }: { progress: number }) => {
+    if (typeof progress === "number") {
+      onProgress?.(0.2 + Math.min(0.7, progress * 0.7), "動画を最適化中…");
+    }
+  };
+
+  try {
+    onProgress?.(0.08, "クリップを準備中…");
+    await writeFileFromBlob(ffmpeg, inputName, file);
+    ffmpeg.on("progress", onFfmpegProgress);
+
+    onProgress?.(0.18, "動画を再エンコード中…");
+    await execSingleClipEncode(ffmpeg, inputName, outName);
+    onProgress?.(0.94, "最適化ファイルを読み込み中…");
+    const encoded = await readMergedOutput(
+      ffmpeg,
+      outName,
+      "video/mp4",
+      "video.mp4",
+    );
+    onProgress?.(1, "動画の最適化が完了しました");
+    return encoded;
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`動画の最適化に失敗しました（${detail}）`);
+  } finally {
+    ffmpeg.off("progress", onFfmpegProgress);
+    await safeDeleteFile(ffmpeg, inputName);
+    await safeDeleteFile(ffmpeg, outName);
   }
 }
 

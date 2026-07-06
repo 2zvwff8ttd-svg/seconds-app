@@ -26,9 +26,15 @@ function assertEnv(value: string | undefined, name: string): string {
 }
 
 export function getSupabaseUrl() {
-  return assertEnv(SUPABASE_URL, "NEXT_PUBLIC_SUPABASE_URL");
+  return assertEnv(SUPABASE_URL, "NEXT_PUBLIC_SUPABASE_URL").replace(
+    /[\r\n]+/g,
+    "",
+  ).trim();
 }
 
 export function getSupabaseAnonKey() {
-  return assertEnv(SUPABASE_ANON_KEY, "NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  return assertEnv(SUPABASE_ANON_KEY, "NEXT_PUBLIC_SUPABASE_ANON_KEY").replace(
+    /[\r\n]+/g,
+    "",
+  ).trim();
 }

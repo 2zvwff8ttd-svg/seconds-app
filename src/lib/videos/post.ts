@@ -9,7 +9,10 @@ import {
 } from "@/lib/supabase/video-schema";
 import { getMediaPublicUrl, uploadFileWithProgress, formatUploadSize } from "@/lib/storage/upload";
 import { totalDurationSecondsForDb } from "@/lib/recording/clip-budget";
-import { mergeClipsForPost } from "@/lib/video/merge-clips";
+import {
+  mergeClipsForPost,
+  transcodeClipForPost,
+} from "@/lib/video/merge-clips";
 import { mergeVideoWithNarration } from "@/lib/video/merge-audio-tracks";
 import {
   captureVideoThumbnail,
@@ -67,10 +70,6 @@ function isRlsError(message: string): boolean {
     message.includes("row-level security") ||
     message.includes("42501")
   );
-}
-
-function clipExtension(file: File): string {
-  return getVideoExtension(file);
 }
 
 function rethrowPostStage(stage: string, err: unknown): never {
@@ -294,13 +293,21 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
       rethrowPostStage("クリップ結合", err);
     }
   } else {
-    const file = clipFiles[0];
-    uploadTargets = [
-      {
-        file,
-        storageName: `clip-0.${clipExtension(file)}`,
-      },
-    ];
+    onStageChange("merging_clips");
+    onProgress(8, "動画を最適化中…");
+
+    try {
+      const encoded = await transcodeClipForPost(
+        clipFiles[0]!,
+        (ratio, label) => {
+          onProgress(8 + ratio * 14, label);
+        },
+      );
+      uploadTargets = [{ file: encoded, storageName: "video.mp4" }];
+      onProgress(22, "動画の最適化が完了しました");
+    } catch (err) {
+      rethrowPostStage("動画の最適化", err);
+    }
   }
 
   if (hasNarration && uploadTargets.length > 1) {

@@ -52,7 +52,7 @@ export function videoRowToFeedVideo(
   return {
     id: row.id,
     videoUrl: normalizeMediaPublicUrl(row.video_url) ?? "",
-    bgmUrl: row.bgm_url?.trim() || undefined,
+    bgmUrl: normalizeMediaPublicUrl(row.bgm_url) ?? undefined,
     thumbnailUrl: row.thumbnail_url ?? undefined,
     clipThumbnailUrls: Array.isArray(row.clip_thumbnail_urls)
       ? row.clip_thumbnail_urls.filter(
