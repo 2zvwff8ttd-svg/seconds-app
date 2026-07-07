@@ -3,6 +3,7 @@
 import {
   saveVideoToCameraRoll,
   shareVideo,
+  type SaveShareProgress,
 } from "@/lib/video/save-share-video";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -17,6 +18,12 @@ type VideoSaveShareButtonsProps = {
 type Feedback = {
   tone: "success" | "error";
   message: string;
+};
+
+type ActionProgress = {
+  action: "save" | "share";
+  label: string;
+  ratio: number;
 };
 
 const chromeButtonClass =
@@ -37,6 +44,10 @@ function shareSuccessMessage(
   return "リンクをコピーしました";
 }
 
+function showDeterminateProgress(progress: SaveShareProgress): boolean {
+  return progress.phase === "download" && progress.ratio > 0 && progress.ratio < 1;
+}
+
 export function VideoSaveShareButtons({
   videoUrl,
   title,
@@ -45,6 +56,9 @@ export function VideoSaveShareButtons({
   layout = "row",
 }: VideoSaveShareButtonsProps) {
   const [busyAction, setBusyAction] = useState<"save" | "share" | null>(null);
+  const [actionProgress, setActionProgress] = useState<ActionProgress | null>(
+    null,
+  );
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const feedbackTimerRef = useRef<number | null>(null);
 
@@ -71,12 +85,37 @@ export function VideoSaveShareButtons({
     return () => clearFeedbackTimer();
   }, [clearFeedbackTimer]);
 
+  const handleProgress = useCallback(
+    (action: "save" | "share", progress: SaveShareProgress) => {
+      setActionProgress({
+        action,
+        label: progress.label,
+        ratio: progress.ratio,
+      });
+    },
+    [],
+  );
+
   const runSave = useCallback(async () => {
     if (!videoUrl || busyAction) return;
     setBusyAction("save");
-    const result = await saveVideoToCameraRoll(videoUrl, title);
+    setActionProgress({
+      action: "save",
+      label: "保存の準備中...",
+      ratio: 0,
+    });
+
+    const result = await saveVideoToCameraRoll(videoUrl, title, {
+      onProgress: (progress) => handleProgress("save", progress),
+    });
+
     setBusyAction(null);
-    if (result.ok && (result.mode === "camera_roll" || result.mode === "browser_download")) {
+    setActionProgress(null);
+
+    if (
+      result.ok &&
+      (result.mode === "camera_roll" || result.mode === "browser_download")
+    ) {
       showFeedback({
         tone: "success",
         message: saveSuccessMessage(result.mode),
@@ -84,13 +123,24 @@ export function VideoSaveShareButtons({
     } else if (!result.ok) {
       showFeedback({ tone: "error", message: result.message });
     }
-  }, [busyAction, showFeedback, title, videoUrl]);
+  }, [busyAction, handleProgress, showFeedback, title, videoUrl]);
 
   const runShare = useCallback(async () => {
     if (!videoUrl || busyAction) return;
     setBusyAction("share");
-    const result = await shareVideo(videoUrl, title);
+    setActionProgress({
+      action: "share",
+      label: "共有の準備中...",
+      ratio: 0,
+    });
+
+    const result = await shareVideo(videoUrl, title, {
+      onProgress: (progress) => handleProgress("share", progress),
+    });
+
     setBusyAction(null);
+    setActionProgress(null);
+
     if (
       result.ok &&
       (result.mode === "share_sheet" ||
@@ -104,7 +154,7 @@ export function VideoSaveShareButtons({
     } else if (!result.ok) {
       showFeedback({ tone: "error", message: result.message });
     }
-  }, [busyAction, showFeedback, title, videoUrl]);
+  }, [busyAction, handleProgress, showFeedback, title, videoUrl]);
 
   if (!videoUrl) return null;
 
@@ -113,68 +163,104 @@ export function VideoSaveShareButtons({
       ? "flex-row items-center gap-2"
       : "flex-col items-center gap-2";
 
+  const progressPercent =
+    actionProgress && showDeterminateProgress({
+      phase: "download",
+      ratio: actionProgress.ratio,
+      label: actionProgress.label,
+    })
+      ? Math.round(actionProgress.ratio * 100)
+      : null;
+
   return (
-    <div className={`relative flex shrink-0 ${layoutClass} ${className}`}>
-      <button
-        type="button"
-        className={chromeButtonClass}
-        onClick={() => void runSave()}
-        disabled={disabled || busyAction !== null}
-        aria-label="動画を写真に保存"
-        title="写真に保存"
-      >
-        {busyAction === "save" ? (
-          <span
-            className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-            aria-hidden
-          />
-        ) : (
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            aria-hidden
-          >
-            <path d="M12 3v12" strokeLinecap="round" />
-            <path d="M7 10l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M5 20h14" strokeLinecap="round" />
-          </svg>
-        )}
-      </button>
+    <div className={`relative flex shrink-0 flex-col items-end ${className}`}>
+      <div className={`flex shrink-0 ${layoutClass}`}>
+        <button
+          type="button"
+          className={chromeButtonClass}
+          onClick={() => void runSave()}
+          disabled={disabled || busyAction !== null}
+          aria-label="動画を写真に保存"
+          title="写真に保存"
+        >
+          {busyAction === "save" ? (
+            <span
+              className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+              aria-hidden
+            />
+          ) : (
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              aria-hidden
+            >
+              <path d="M12 3v12" strokeLinecap="round" />
+              <path
+                d="M7 10l5 5 5-5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path d="M5 20h14" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
 
-      <button
-        type="button"
-        className={chromeButtonClass}
-        onClick={() => void runShare()}
-        disabled={disabled || busyAction !== null}
-        aria-label="動画を共有"
-        title="共有"
-      >
-        {busyAction === "share" ? (
-          <span
-            className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-            aria-hidden
-          />
-        ) : (
-          <svg
-            viewBox="0 0 24 24"
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            aria-hidden
-          >
-            <circle cx="18" cy="5" r="2.5" />
-            <circle cx="6" cy="12" r="2.5" />
-            <circle cx="18" cy="19" r="2.5" />
-            <path d="M8.2 11.2 15.8 6.8M8.2 12.8l7.6 4.4" strokeLinecap="round" />
-          </svg>
-        )}
-      </button>
+        <button
+          type="button"
+          className={chromeButtonClass}
+          onClick={() => void runShare()}
+          disabled={disabled || busyAction !== null}
+          aria-label="動画を共有"
+          title="共有"
+        >
+          {busyAction === "share" ? (
+            <span
+              className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+              aria-hidden
+            />
+          ) : (
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              aria-hidden
+            >
+              <circle cx="18" cy="5" r="2.5" />
+              <circle cx="6" cy="12" r="2.5" />
+              <circle cx="18" cy="19" r="2.5" />
+              <path
+                d="M8.2 11.2 15.8 6.8M8.2 12.8l7.6 4.4"
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
+        </button>
+      </div>
 
-      {feedback && (
+      {actionProgress && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="pointer-events-none absolute right-0 top-full z-40 mt-2 w-[min(72vw,15rem)] rounded-xl bg-black/80 px-3 py-2 text-xs font-medium leading-snug text-white shadow-lg backdrop-blur-sm"
+        >
+          <p>{actionProgress.label}</p>
+          {progressPercent != null && (
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/20">
+              <div
+                className="h-full rounded-full bg-white/85 transition-[width] duration-150"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {!actionProgress && feedback && (
         <div
           role="status"
           className={`pointer-events-none absolute right-0 top-full z-40 mt-2 max-w-[min(72vw,15rem)] rounded-xl px-3 py-2 text-xs font-medium leading-snug shadow-lg ${

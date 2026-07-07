@@ -20,6 +20,7 @@ import { normalizeMediaPublicUrl } from "@/lib/videos/normalize-media-url";
 import {
   releaseVideoUrl,
 } from "@/lib/videos/preload-video";
+import { prefetchVideoForSaveShare } from "@/lib/video/video-file-cache";
 import type { FeedVideo } from "@/types/feed";
 import type { WatchReport } from "@/types/recommendation";
 import { UserIdentity } from "@/components/profile/UserIdentity";
@@ -170,6 +171,10 @@ export function FullscreenPlayer({
     setIsPaused(false);
     setShowVideoSurface(false);
   }, [video.id, playbackUrl]);
+
+  useEffect(() => {
+    prefetchVideoForSaveShare(playbackUrl);
+  }, [playbackUrl]);
 
   // Belt-and-suspenders: whenever this player instance unmounts, tear down both
   // <video> decoders so nothing lingers between open/close cycles (iPhone 13).

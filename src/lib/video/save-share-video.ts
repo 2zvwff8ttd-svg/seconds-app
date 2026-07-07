@@ -1,8 +1,12 @@
 import { Media } from "@capacitor-community/media";
 import { Capacitor } from "@capacitor/core";
-import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { normalizeMediaPublicUrl } from "@/lib/videos/normalize-media-url";
+import {
+  getOrFetchNativeVideoUri,
+  getOrFetchVideoBlob,
+  type VideoCacheProgress,
+} from "@/lib/video/video-file-cache";
 
 export type SaveShareSuccessMode =
   | "camera_roll"
@@ -15,43 +19,39 @@ export type SaveShareResult =
   | { ok: true; mode: SaveShareSuccessMode }
   | { ok: false; message: string };
 
+export type SaveShareProgress = {
+  phase: "prepare" | "download" | "save" | "share";
+  ratio: number;
+  label: string;
+};
+
+export type SaveShareOptions = {
+  onProgress?: (progress: SaveShareProgress) => void;
+};
+
 function sanitizeFileStem(title: string): string {
   const trimmed = title.trim().slice(0, 48) || "seconds-video";
   return trimmed.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
 }
 
-async function fetchVideoBlob(url: string): Promise<Blob> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`動画の取得に失敗しました (${response.status})`);
-  }
-  const blob = await response.blob();
-  if (blob.size < 1024) {
-    throw new Error("動画データが小さすぎます");
-  }
-  return blob;
+function emitProgress(
+  onProgress: SaveShareOptions["onProgress"],
+  progress: SaveShareProgress,
+): void {
+  onProgress?.(progress);
 }
 
-async function downloadVideoToNativeCache(
-  url: string,
-  fileName: string,
-): Promise<string> {
-  await Filesystem.downloadFile({
-    url,
-    path: fileName,
-    directory: Directory.Cache,
-  });
-
-  const { uri } = await Filesystem.getUri({
-    path: fileName,
-    directory: Directory.Cache,
-  });
-
-  if (!uri) {
-    throw new Error("動画ファイルのパスを取得できませんでした");
-  }
-
-  return uri;
+function mapDownloadProgress(
+  onProgress: SaveShareOptions["onProgress"],
+): ((progress: VideoCacheProgress) => void) | undefined {
+  if (!onProgress) return undefined;
+  return (progress) => {
+    onProgress({
+      phase: "download",
+      ratio: progress.ratio,
+      label: progress.label,
+    });
+  };
 }
 
 export function canUseNativeSaveShare(): boolean {
@@ -69,21 +69,49 @@ export function canUseWebShare(): boolean {
 export async function saveVideoToCameraRoll(
   videoUrl: string,
   title: string,
+  options: SaveShareOptions = {},
 ): Promise<SaveShareResult> {
   const normalized = normalizeMediaPublicUrl(videoUrl);
   if (!normalized) {
     return { ok: false, message: "動画 URL が無効です" };
   }
 
+  const { onProgress } = options;
+
   try {
+    emitProgress(onProgress, {
+      phase: "prepare",
+      ratio: 0,
+      label: "保存の準備中...",
+    });
+
     if (Capacitor.isNativePlatform()) {
-      const fileName = `${sanitizeFileStem(title)}-${Date.now()}.mp4`;
-      const localUri = await downloadVideoToNativeCache(normalized, fileName);
+      const localUri = await getOrFetchNativeVideoUri(
+        normalized,
+        mapDownloadProgress(onProgress),
+      );
+
+      emitProgress(onProgress, {
+        phase: "save",
+        ratio: 0.9,
+        label: "写真に保存しています...",
+      });
+
       await Media.saveVideo({ path: localUri });
       return { ok: true, mode: "camera_roll" };
     }
 
-    const blob = await fetchVideoBlob(normalized);
+    const blob = await getOrFetchVideoBlob(
+      normalized,
+      mapDownloadProgress(onProgress),
+    );
+
+    emitProgress(onProgress, {
+      phase: "save",
+      ratio: 0.9,
+      label: "保存しています...",
+    });
+
     const objectUrl = URL.createObjectURL(blob);
     try {
       const anchor = document.createElement("a");
@@ -103,21 +131,10 @@ export async function saveVideoToCameraRoll(
   }
 }
 
-async function resolveNativeShareFileUri(
-  videoUrl: string,
-  fileStem: string,
-): Promise<string> {
-  const normalized = normalizeMediaPublicUrl(videoUrl);
-  if (!normalized) {
-    throw new Error("動画 URL が無効です");
-  }
-  const fileName = `${fileStem}-${Date.now()}.mp4`;
-  return downloadVideoToNativeCache(normalized, fileName);
-}
-
 export async function shareVideo(
   videoUrl: string,
   title: string,
+  options: SaveShareOptions = {},
 ): Promise<SaveShareResult> {
   const normalized = normalizeMediaPublicUrl(videoUrl);
   if (!normalized) {
@@ -125,13 +142,27 @@ export async function shareVideo(
   }
 
   const shareTitle = title.trim() || "Seconds";
+  const { onProgress } = options;
 
   try {
+    emitProgress(onProgress, {
+      phase: "prepare",
+      ratio: 0,
+      label: "共有の準備中...",
+    });
+
     if (Capacitor.isNativePlatform()) {
-      const localUri = await resolveNativeShareFileUri(
+      const localUri = await getOrFetchNativeVideoUri(
         normalized,
-        sanitizeFileStem(shareTitle),
+        mapDownloadProgress(onProgress),
       );
+
+      emitProgress(onProgress, {
+        phase: "share",
+        ratio: 0.95,
+        label: "共有シートを開いています...",
+      });
+
       await Share.share({
         title: shareTitle,
         files: [localUri],
@@ -141,6 +172,12 @@ export async function shareVideo(
     }
 
     if (canUseWebShare()) {
+      emitProgress(onProgress, {
+        phase: "share",
+        ratio: 0.95,
+        label: "共有しています...",
+      });
+
       await navigator.share({
         title: shareTitle,
         url: normalized,
@@ -149,6 +186,12 @@ export async function shareVideo(
     }
 
     if (navigator.clipboard?.writeText) {
+      emitProgress(onProgress, {
+        phase: "share",
+        ratio: 0.95,
+        label: "リンクをコピーしています...",
+      });
+
       await navigator.clipboard.writeText(normalized);
       return { ok: true, mode: "link_copy" };
     }
