@@ -523,11 +523,7 @@ export function FullscreenPlayer({
         </div>
       )}
 
-      <div className="fullscreen-player__footer fullscreen-player__chrome-layer relative z-30 flex max-h-[min(52dvh,420px)] shrink-0 flex-col px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
-        <div
-          className="pointer-events-none absolute inset-x-0 -top-16 h-16 bg-gradient-to-t from-[#010102] via-[#010102]/85 to-transparent"
-          aria-hidden
-        />
+      <div className="fullscreen-player__footer fullscreen-player__chrome-layer relative z-30 flex max-h-[min(52dvh,420px)] shrink-0 flex-col bg-[#010102] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">
         <div className="shrink-0">
           <div className="flex items-start gap-3">
             <div className="min-w-0 flex-1">
