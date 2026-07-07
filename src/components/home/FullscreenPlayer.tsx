@@ -8,6 +8,7 @@ import { BlockUserButton } from "@/components/blocks/BlockUserButton";
 import { useBgmPlayback } from "@/components/video/useBgmPlayback";
 import { VideoSocialPanel } from "@/components/video/VideoSocialPanel";
 import { VideoRetentionNote } from "@/components/video/VideoRetentionNote";
+import { VideoSaveShareButtons } from "@/components/video/VideoSaveShareButtons";
 import {
   getDefaultFullscreenOrigin,
   type BubbleOriginRect,
@@ -500,6 +501,15 @@ export function FullscreenPlayer({
           <path d="M6 6l12 12M18 6L6 18" />
         </svg>
       </button>
+
+      {playbackUrl && (
+        <VideoSaveShareButtons
+          videoUrl={playbackUrl}
+          title={video.title}
+          disabled={isExiting}
+          className="fullscreen-player__chrome-layer absolute left-4 top-[calc(max(0.75rem,env(safe-area-inset-top))+3.25rem)] z-30"
+        />
+      )}
 
       {currentUserId && currentUserId !== video.creatorId && (
         <div className="fullscreen-player__chrome-layer absolute right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 flex flex-col items-end gap-2">
