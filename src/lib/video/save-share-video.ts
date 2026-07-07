@@ -4,8 +4,15 @@ import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import { normalizeMediaPublicUrl } from "@/lib/videos/normalize-media-url";
 
+export type SaveShareSuccessMode =
+  | "camera_roll"
+  | "browser_download"
+  | "share_sheet"
+  | "web_share"
+  | "link_copy";
+
 export type SaveShareResult =
-  | { ok: true }
+  | { ok: true; mode: SaveShareSuccessMode }
   | { ok: false; message: string };
 
 function sanitizeFileStem(title: string): string {
@@ -25,46 +32,26 @@ async function fetchVideoBlob(url: string): Promise<Blob> {
   return blob;
 }
 
-async function blobToBase64(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
-async function writeVideoToNativeCache(
-  blob: Blob,
+async function downloadVideoToNativeCache(
+  url: string,
   fileName: string,
 ): Promise<string> {
-  const base64 = await blobToBase64(blob);
-  const { uri } = await Filesystem.writeFile({
+  await Filesystem.downloadFile({
+    url,
     path: fileName,
-    data: base64,
     directory: Directory.Cache,
   });
+
+  const { uri } = await Filesystem.getUri({
+    path: fileName,
+    directory: Directory.Cache,
+  });
+
+  if (!uri) {
+    throw new Error("動画ファイルのパスを取得できませんでした");
+  }
+
   return uri;
-}
-
-async function resolveLocalVideoUri(
-  videoUrl: string,
-  fileStem: string,
-): Promise<string> {
-  const normalized = normalizeMediaPublicUrl(videoUrl);
-  if (!normalized) {
-    throw new Error("動画 URL が無効です");
-  }
-
-  if (Capacitor.isNativePlatform()) {
-    const blob = await fetchVideoBlob(normalized);
-    const fileName = `${fileStem}-${Date.now()}.mp4`;
-    return writeVideoToNativeCache(blob, fileName);
-  }
-
-  return normalized;
 }
 
 export function canUseNativeSaveShare(): boolean {
@@ -75,6 +62,10 @@ export function canUseWebShare(): boolean {
   return typeof navigator !== "undefined" && typeof navigator.share === "function";
 }
 
+/**
+ * Saves to the device photo library on Capacitor (Media.saveVideo → camera roll).
+ * Web browsers cannot write to the camera roll; they fall back to a file download.
+ */
 export async function saveVideoToCameraRoll(
   videoUrl: string,
   title: string,
@@ -86,12 +77,10 @@ export async function saveVideoToCameraRoll(
 
   try {
     if (Capacitor.isNativePlatform()) {
-      const localUri = await resolveLocalVideoUri(
-        normalized,
-        sanitizeFileStem(title),
-      );
+      const fileName = `${sanitizeFileStem(title)}-${Date.now()}.mp4`;
+      const localUri = await downloadVideoToNativeCache(normalized, fileName);
       await Media.saveVideo({ path: localUri });
-      return { ok: true };
+      return { ok: true, mode: "camera_roll" };
     }
 
     const blob = await fetchVideoBlob(normalized);
@@ -107,11 +96,23 @@ export async function saveVideoToCameraRoll(
     } finally {
       URL.revokeObjectURL(objectUrl);
     }
-    return { ok: true };
+    return { ok: true, mode: "browser_download" };
   } catch (err) {
     const detail = err instanceof Error ? err.message : "保存に失敗しました";
     return { ok: false, message: detail };
   }
+}
+
+async function resolveNativeShareFileUri(
+  videoUrl: string,
+  fileStem: string,
+): Promise<string> {
+  const normalized = normalizeMediaPublicUrl(videoUrl);
+  if (!normalized) {
+    throw new Error("動画 URL が無効です");
+  }
+  const fileName = `${fileStem}-${Date.now()}.mp4`;
+  return downloadVideoToNativeCache(normalized, fileName);
 }
 
 export async function shareVideo(
@@ -127,7 +128,7 @@ export async function shareVideo(
 
   try {
     if (Capacitor.isNativePlatform()) {
-      const localUri = await resolveLocalVideoUri(
+      const localUri = await resolveNativeShareFileUri(
         normalized,
         sanitizeFileStem(shareTitle),
       );
@@ -136,7 +137,7 @@ export async function shareVideo(
         files: [localUri],
         dialogTitle: "動画を共有",
       });
-      return { ok: true };
+      return { ok: true, mode: "share_sheet" };
     }
 
     if (canUseWebShare()) {
@@ -144,18 +145,21 @@ export async function shareVideo(
         title: shareTitle,
         url: normalized,
       });
-      return { ok: true };
+      return { ok: true, mode: "web_share" };
     }
 
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(normalized);
-      return { ok: true };
+      return { ok: true, mode: "link_copy" };
     }
 
     return { ok: false, message: "この環境では共有できません" };
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
-      return { ok: true };
+      return {
+        ok: true,
+        mode: Capacitor.isNativePlatform() ? "share_sheet" : "web_share",
+      };
     }
     const detail = err instanceof Error ? err.message : "共有に失敗しました";
     return { ok: false, message: detail };

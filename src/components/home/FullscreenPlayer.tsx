@@ -502,15 +502,6 @@ export function FullscreenPlayer({
         </svg>
       </button>
 
-      {playbackUrl && (
-        <VideoSaveShareButtons
-          videoUrl={playbackUrl}
-          title={video.title}
-          disabled={isExiting}
-          className="fullscreen-player__chrome-layer absolute left-4 top-[calc(max(0.75rem,env(safe-area-inset-top))+3.25rem)] z-30"
-        />
-      )}
-
       {currentUserId && currentUserId !== video.creatorId && (
         <div className="fullscreen-player__chrome-layer absolute right-4 top-[max(0.75rem,env(safe-area-inset-top))] z-30 flex flex-col items-end gap-2">
           <BlockUserButton
@@ -538,9 +529,21 @@ export function FullscreenPlayer({
           aria-hidden
         />
         <div className="shrink-0">
-          <p className="text-base font-semibold text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.65)] sm:text-lg">
-            {video.title}
-          </p>
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.65)] sm:text-lg">
+                {video.title}
+              </p>
+            </div>
+            {playbackUrl && (
+              <VideoSaveShareButtons
+                videoUrl={playbackUrl}
+                title={video.title}
+                disabled={isExiting}
+                layout="row"
+              />
+            )}
+          </div>
           <UserIdentity
             username={video.creatorName}
             displayName={video.creatorDisplayName}
