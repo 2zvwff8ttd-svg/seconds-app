@@ -17,6 +17,7 @@ import {
   mergeRecommendationContext,
 } from "@/lib/recommendation/context";
 import { recordWatchEngagement } from "@/lib/recommendation/engagements";
+import { incrementVideoView } from "@/lib/videos/record-video-view";
 import {
   applySessionCommentSignal,
   applySessionLikeSignal,
@@ -201,6 +202,10 @@ export function BubbleField({
       sessionWatchedIdsRef.current.add(watched.id);
       applySessionWatchSignal(sessionPrefRef.current, watched, report);
       void recordWatchEngagement(watched.id, report);
+      // Meaningful watch (~2s+ or closed after progress) — lifetime unique + daily tallies
+      if (report.progress >= 0.08 || report.completed) {
+        void incrementVideoView(watched.id);
+      }
 
       const excludeIds = new Set(activeBubbles.map((v) => v.id));
 

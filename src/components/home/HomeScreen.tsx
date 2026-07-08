@@ -1,7 +1,12 @@
 "use client";
 
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { CrownCelebrationModal } from "@/components/crown/CrownCelebrationModal";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import {
+  fetchPendingCrownCelebration,
+  type PendingCrownCelebration,
+} from "@/lib/crown/celebration";
 import { scheduleHomeNavPrefetches } from "@/lib/navigation/prefetch-routes";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { BubbleField } from "./BubbleField";
@@ -18,6 +23,8 @@ export function HomeScreen() {
   const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [immersive, setImmersive] = useState(false);
   const [backgroundHidden, setBackgroundHidden] = useState(false);
+  const [crownCelebration, setCrownCelebration] =
+    useState<PendingCrownCelebration | null>(null);
 
   // Free the starfield only when the main thread is idle after the fullscreen
   // enter settles, so its teardown never competes with the first video frame
@@ -54,6 +61,20 @@ export function HomeScreen() {
     fetchTodayAssignedSeconds()
       .then(setAssignedSeconds)
       .catch(() => setAssignedSeconds(null));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPendingCrownCelebration()
+      .then((pending) => {
+        if (!cancelled && pending) setCrownCelebration(pending);
+      })
+      .catch(() => {
+        /* ignore — RPC may not exist until SQL is applied */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleFeedReady = useCallback(() => {
@@ -99,6 +120,13 @@ export function HomeScreen() {
         onFullscreenChange={setImmersive}
       />
       <BottomNav onInsetChange={setBottomInset} />
+
+      {crownCelebration && !immersive ? (
+        <CrownCelebrationModal
+          celebration={crownCelebration}
+          onDismissed={() => setCrownCelebration(null)}
+        />
+      ) : null}
     </div>
   );
 }

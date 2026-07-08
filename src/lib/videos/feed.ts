@@ -16,24 +16,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /** 補充用に多めに取得するプール上限 */
 const FEED_POOL_LIMIT = 40;
 
-function getYesterdayRangeJst() {
-  const now = new Date();
-  const jstOffset = 9 * 60;
-  const jstNow = new Date(now.getTime() + (jstOffset + now.getTimezoneOffset()) * 60000);
-  const start = new Date(jstNow);
-  start.setDate(start.getDate() - 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-
-  const toIso = (d: Date) => {
-    const utc = new Date(d.getTime() - (jstOffset + now.getTimezoneOffset()) * 60000);
-    return utc.toISOString();
-  };
-
-  return { start: toIso(start), end: toIso(end) };
-}
-
 function applyPublishedFilter(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   query: any,
@@ -51,36 +33,48 @@ function applyPublishedFilter(
   return query;
 }
 
+/**
+ * Latest daily crown for this country (from crown_awards).
+ * Falls back to null when the table is missing or no award exists yet.
+ */
 async function fetchViralVideo(
   supabase: SupabaseClient,
   countryCode: string,
   select: string,
-  caps: Awaited<ReturnType<typeof probeVideoSchema>>,
+  _caps: Awaited<ReturnType<typeof probeVideoSchema>>,
 ) {
-  const { start, end } = getYesterdayRangeJst();
-
-  let query = supabase
-    .from("videos")
-    .select(select)
-    .eq("country", countryCode);
-
-  query = applyPublishedFilter(query, caps);
-
-  if (caps.hasPublishedAt) {
-    query = query.gte("published_at", start).lt("published_at", end);
-  } else {
-    query = query.gte("created_at", start).lt("created_at", end);
-  }
-
-  const { data, error } = await query
-    .order("view_count", { ascending: false })
+  const { data: award, error: awardError } = await supabase
+    .from("crown_awards")
+    .select("video_id, award_date")
+    .eq("country", countryCode)
+    .order("award_date", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (error) {
-    if (error.message.includes("schema cache")) {
+  if (awardError) {
+    if (
+      awardError.message.includes("schema cache") ||
+      awardError.message.includes("does not exist") ||
+      awardError.code === "42P01" ||
+      awardError.code === "PGRST205"
+    ) {
       return null;
     }
+    console.warn("[fetchViralVideo] crown_awards", awardError.message);
+    return null;
+  }
+
+  const videoId = award?.video_id;
+  if (!videoId || typeof videoId !== "string") return null;
+
+  const { data, error } = await supabase
+    .from("videos")
+    .select(select)
+    .eq("id", videoId)
+    .maybeSingle();
+
+  if (error) {
+    if (error.message.includes("schema cache")) return null;
     throw new Error(error.message);
   }
 

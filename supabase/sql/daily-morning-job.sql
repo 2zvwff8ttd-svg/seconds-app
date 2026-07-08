@@ -1,79 +1,14 @@
 -- =============================================================================
--- 毎朝 7:00 JST 日次ジョブ RPC（SQL Editor で実行）
--- 029: 10日保持期限の pending 件数を返す（削除は Edge / audit スクリプト）
+-- 毎朝 7:00 JST 日次ジョブ RPC
+-- Crown awarding is defined in 030-crown-awards.sql / migrations/030_crown_awards.sql
+-- Re-run that file after schema changes so run_daily_morning_job stays in sync.
 -- =============================================================================
 
-create or replace function public.run_daily_morning_job()
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_today date := (timezone('Asia/Tokyo', now()))::date;
-  v_user record;
-  v_seconds integer;
-  v_published_count integer := 0;
-  v_assignment_count integer := 0;
-  v_notification_count integer := 0;
-  v_retention_pending integer := 0;
-  v_morning_digest_title constant text := '?Seconds';
-  v_morning_digest_body constant text :=
-    '今日の秒数が届いたよ！何気ない1日を思い出に残そう';
-begin
-  with published as (
-    update public.videos
-    set
-      status = 'published'::public.video_status,
-      published_at = coalesce(
-        published_at,
-        timezone('Asia/Tokyo', now())
-      )
-    where status = 'pending'::public.video_status
-    returning user_id, id
-  )
-  select count(*) into v_published_count from published;
-
-  select count(*) into v_retention_pending
-  from public.list_videos_for_retention_expiry();
-
-  for v_user in
-    select p.id, coalesce(p.current_streak, 0) as current_streak
-    from public.profiles p
-  loop
-    v_seconds := public.random_assigned_seconds(v_user.current_streak);
-
-    insert into public.daily_assignments (user_id, assigned_seconds, date)
-    values (v_user.id, v_seconds, v_today)
-    on conflict (user_id, date) do update
-      set assigned_seconds = excluded.assigned_seconds;
-
-    v_assignment_count := v_assignment_count + 1;
-
-    insert into public.notifications (user_id, type, title, body)
-    values (
-      v_user.id,
-      'morning_digest',
-      v_morning_digest_title,
-      v_morning_digest_body
-    );
-
-    v_notification_count := v_notification_count + 1;
-  end loop;
-
-  return jsonb_build_object(
-    'published_videos', v_published_count,
-    'assignments', v_assignment_count,
-    'notifications', v_notification_count,
-    'retention_expiry_pending', v_retention_pending,
-    'retention_expiry_enabled', coalesce(
-      (public.get_video_retention_config()->>'expiry_enabled')::boolean,
-      false
-    ),
-    'date_jst', v_today,
-    'ran_at_jst', timezone('Asia/Tokyo', now())
-  );
-end;
-$$;
-
-grant execute on function public.run_daily_morning_job() to service_role;
+-- Prefer applying the full crown migration:
+--   supabase/sql/030-crown-awards.sql
+--
+-- That file recreates run_daily_morning_job with:
+--   1) pending → published
+--   2) award_daily_crowns(yesterday JST)
+--   3) retention pending count
+--   4) daily_assignments + morning_digest notifications

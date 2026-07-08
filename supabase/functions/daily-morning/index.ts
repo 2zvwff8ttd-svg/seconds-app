@@ -12,10 +12,14 @@ const JST = "Asia/Tokyo";
  *
  * 処理内容（DB: public.run_daily_morning_job）:
  * 1. pending 動画を published に変更
- * 2. 全ユーザーに 5〜30 秒の撮影時間を daily_assignments に登録
- * 3. 全ユーザーへ morning_digest 通知（title: ?Seconds / body: 固定コピー、秒数は出さない）
- * 4. enabled な iOS トークンへ morning_digest APNs 送信（notifications の title/body をそのまま使用）
- * 5. 10日保持期限切れ動画の削除（app_config.video_retention.expiry_enabled=true のときのみ）
+ * 2. 前日（JST）の国別 #1 を award_daily_crowns で確定（video_daily_views + 10日クールダウン）
+ * 3. 全ユーザーに 5〜30 秒の撮影時間を daily_assignments に登録
+ * 4. 全ユーザーへ morning_digest 通知（title: ?Seconds / body: 固定コピー、秒数は出さない）
+ * 5. enabled な iOS トークンへ morning_digest APNs 送信（notifications の title/body をそのまま使用）
+ * 6. 10日保持期限切れ動画の削除（app_config.video_retention.expiry_enabled=true のときのみ）
+ *
+ * Crown schema / award_daily_crowns は SQL Editor で:
+ *   supabase/sql/030-crown-awards.sql
  *
  * スケジュール（7:00 JST = 22:00 UTC）:
  *   Dashboard → Edge Functions → daily-morning → Schedules
@@ -71,7 +75,7 @@ Deno.serve(async (req) => {
       {
         ok: false,
         error: error.message,
-        hint: "SQL Editor で supabase/sql/daily-morning-job.sql を実行してください。",
+        hint: "SQL Editor で supabase/sql/030-crown-awards.sql を実行してください（run_daily_morning_job 含む）。",
       },
       500,
     );
