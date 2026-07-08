@@ -93,6 +93,29 @@ const checks = [
     fail: "pickBestCaptureFormat helper missing",
   },
   {
+    label: "targets ~1080p with max long side 1920",
+    ok:
+      controller.includes("targetShortSide: Int32 = 1080") &&
+      controller.includes("maxLongSide: Int32 = 1920") &&
+      controller.includes("formatLongSide(for:"),
+    fail: "1080p target / maxLongSide=1920 selection missing",
+  },
+  {
+    label: "does not pick max-pixel HD pool",
+    ok:
+      !controller.includes("hdShortSideThreshold") &&
+      !controller.includes("formatPixelCount(for:"),
+    fail: "old max-pixel / hdShortSideThreshold format selection still present",
+  },
+  {
+    label: "prefers H.264 over HEVC for movie output",
+    ok:
+      /if codecs\.contains\(\.h264\) \{\s*codec = \.h264\s*\} else if codecs\.contains\(\.hevc\)/m.test(
+        controller,
+      ),
+    fail: "H.264-first codec selection missing (HEVC still preferred)",
+  },
+  {
     label: "configureMovieFileOutput helper",
     ok: controller.includes("func configureMovieFileOutput(_ movieOutput: AVCaptureMovieFileOutput)"),
     fail: "configureMovieFileOutput helper missing",

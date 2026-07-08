@@ -16,45 +16,85 @@ const pluginRoot = resolve(
 const controllerPath = resolve(pluginRoot, "CameraController.swift");
 const pluginPath = resolve(pluginRoot, "CameraPreviewPlugin.swift");
 
-/** Shared Swift block injected into CameraController extension (quality capture). */
+/**
+ * Shared Swift block injected into CameraController (quality capture).
+ *
+ * v4 (fix b5d9681): target shortSide ≈ 1080 with longSide ≤ 1920 — never pick 4K
+ * max-pixel formats. Prefer H.264 over HEVC so capture stays light enough for 30fps.
+ */
 const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
     private enum SecondsAppCaptureSettings {
+        /// 1080p30 H.264: ~5–8 Mbps is typical; 6 Mbps keeps quality without overload.
         static let movieMinAverageBitRate = 6_000_000
-        static let hdShortSideThreshold: Int32 = 1080
-        static let sdShortSideThreshold: Int32 = 720
+        static let targetShortSide: Int32 = 1080
+        static let maxLongSide: Int32 = 1920
+        static let minShortSide: Int32 = 720
+    }
+
+    private func formatDimensions(for format: AVCaptureDevice.Format) -> CMVideoDimensions {
+        CMVideoFormatDescriptionGetDimensions(format.formatDescription)
     }
 
     private func formatShortSide(for format: AVCaptureDevice.Format) -> Int32 {
-        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        let dimensions = formatDimensions(for: format)
         return min(dimensions.width, dimensions.height)
     }
 
-    private func formatPixelCount(for format: AVCaptureDevice.Format) -> Int64 {
-        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-        return Int64(dimensions.width) * Int64(dimensions.height)
+    private func formatLongSide(for format: AVCaptureDevice.Format) -> Int32 {
+        let dimensions = formatDimensions(for: format)
+        return max(dimensions.width, dimensions.height)
     }
 
+    private func formatSupportsAtLeast30Fps(_ format: AVCaptureDevice.Format) -> Bool {
+        format.videoSupportedFrameRateRanges.contains { $0.maxFrameRate >= 29.0 }
+    }
+
+    /// Pick ~1080p (short ≈ 1080, long ≤ 1920). Never prefer 4K / max pixels.
     private func pickBestCaptureFormat(from formats: [AVCaptureDevice.Format]) -> AVCaptureDevice.Format? {
         guard !formats.isEmpty else { return nil }
-        let hdFormats = formats.filter {
-            formatShortSide(for: $0) >= SecondsAppCaptureSettings.hdShortSideThreshold
-        }
-        let sdFormats = formats.filter {
-            formatShortSide(for: $0) >= SecondsAppCaptureSettings.sdShortSideThreshold
-        }
-        let pool = hdFormats.isEmpty ? sdFormats : hdFormats
-        if pool.isEmpty {
-            return formats.max { lhs, rhs in
-                formatPixelCount(for: lhs) < formatPixelCount(for: rhs)
+
+        let targetShort = SecondsAppCaptureSettings.targetShortSide
+        let maxLong = SecondsAppCaptureSettings.maxLongSide
+        let minShort = SecondsAppCaptureSettings.minShortSide
+
+        let withinCap = formats.filter { formatLongSide(for: $0) <= maxLong }
+        let with30fps = withinCap.filter { formatSupportsAtLeast30Fps($0) }
+        let capped = with30fps.isEmpty ? withinCap : with30fps
+        let search = capped.isEmpty ? formats : capped
+
+        return search.min { lhs, rhs in
+            let leftLong = formatLongSide(for: lhs)
+            let rightLong = formatLongSide(for: rhs)
+            let leftOverCap = leftLong > maxLong
+            let rightOverCap = rightLong > maxLong
+            if leftOverCap != rightOverCap {
+                return !leftOverCap
             }
-        }
-        return pool.max { lhs, rhs in
-            let leftPixels = formatPixelCount(for: lhs)
-            let rightPixels = formatPixelCount(for: rhs)
-            if leftPixels != rightPixels {
-                return leftPixels < rightPixels
+
+            let leftShort = formatShortSide(for: lhs)
+            let rightShort = formatShortSide(for: rhs)
+            let leftDist = abs(Int(leftShort) - Int(targetShort))
+            let rightDist = abs(Int(rightShort) - Int(targetShort))
+            if leftDist != rightDist {
+                return leftDist < rightDist
             }
-            return lhs.videoFieldOfView < rhs.videoFieldOfView
+
+            // Prefer short side in [720, 1080] over taller crops (e.g. 1440).
+            let leftInBand = leftShort >= minShort && leftShort <= targetShort
+            let rightInBand = rightShort >= minShort && rightShort <= targetShort
+            if leftInBand != rightInBand {
+                return leftInBand
+            }
+
+            // Prefer 30fps-capable when comparing otherwise equal formats.
+            let left30 = formatSupportsAtLeast30Fps(lhs)
+            let right30 = formatSupportsAtLeast30Fps(rhs)
+            if left30 != right30 {
+                return left30
+            }
+
+            // Prefer wider FOV for a natural preview.
+            return lhs.videoFieldOfView > rhs.videoFieldOfView
         }
     }
 
@@ -63,11 +103,12 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
         let codecs = movieOutput.availableVideoCodecTypes
         guard !codecs.isEmpty else { return }
 
+        // H.264 first — HEVC + high-res capture was dropping frames on device.
         let codec: AVVideoCodecType
-        if codecs.contains(.hevc) {
-            codec = .hevc
-        } else if codecs.contains(.h264) {
+        if codecs.contains(.h264) {
             codec = .h264
+        } else if codecs.contains(.hevc) {
+            codec = .hevc
         } else {
             codec = codecs[0]
         }
@@ -84,7 +125,7 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
         movieOutput.setOutputSettings(outputSettings, for: connection)
     }
 
-    /// seconds-app: reset zoom and pick highest-resolution format (1080p+, then widest FOV).
+    /// seconds-app: reset zoom and pick ~1080p format (long side ≤ 1920), not max pixels.
     private func applyNaturalPreviewDeviceSettings(to device: AVCaptureDevice) throws {
         try device.lockForConfiguration()
         defer { device.unlockForConfiguration() }
@@ -1166,6 +1207,141 @@ await patchFile(
   controllerPath,
   [[naturalPreviewQualityV2BrokenOld, naturalPreviewQualityV3FixedNew]],
   "CameraController.swift (quality v2→v3 compile fixes)",
+);
+
+/**
+ * Previously shipped “1080p+” patch that actually picked max pixels (4K) + HEVC.
+ * Two variants: pristine v3 (zoom=1.0) and post-lens patch (defaultWideRawZoom).
+ */
+const QUALITY_V3_SETTINGS_AND_PICKERS = `    private enum SecondsAppCaptureSettings {
+        static let movieMinAverageBitRate = 6_000_000
+        static let hdShortSideThreshold: Int32 = 1080
+        static let sdShortSideThreshold: Int32 = 720
+    }
+
+    private func formatShortSide(for format: AVCaptureDevice.Format) -> Int32 {
+        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        return min(dimensions.width, dimensions.height)
+    }
+
+    private func formatPixelCount(for format: AVCaptureDevice.Format) -> Int64 {
+        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+        return Int64(dimensions.width) * Int64(dimensions.height)
+    }
+
+    private func pickBestCaptureFormat(from formats: [AVCaptureDevice.Format]) -> AVCaptureDevice.Format? {
+        guard !formats.isEmpty else { return nil }
+        let hdFormats = formats.filter {
+            formatShortSide(for: $0) >= SecondsAppCaptureSettings.hdShortSideThreshold
+        }
+        let sdFormats = formats.filter {
+            formatShortSide(for: $0) >= SecondsAppCaptureSettings.sdShortSideThreshold
+        }
+        let pool = hdFormats.isEmpty ? sdFormats : hdFormats
+        if pool.isEmpty {
+            return formats.max { lhs, rhs in
+                formatPixelCount(for: lhs) < formatPixelCount(for: rhs)
+            }
+        }
+        return pool.max { lhs, rhs in
+            let leftPixels = formatPixelCount(for: lhs)
+            let rightPixels = formatPixelCount(for: rhs)
+            if leftPixels != rightPixels {
+                return leftPixels < rightPixels
+            }
+            return lhs.videoFieldOfView < rhs.videoFieldOfView
+        }
+    }
+
+    private func configureMovieFileOutput(_ movieOutput: AVCaptureMovieFileOutput) {
+        guard let connection = movieOutput.connection(with: .video) else { return }
+        let codecs = movieOutput.availableVideoCodecTypes
+        guard !codecs.isEmpty else { return }
+
+        let codec: AVVideoCodecType
+        if codecs.contains(.hevc) {
+            codec = .hevc
+        } else if codecs.contains(.h264) {
+            codec = .h264
+        } else {
+            codec = codecs[0]
+        }
+
+        let compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: NSNumber(value: SecondsAppCaptureSettings.movieMinAverageBitRate),
+            AVVideoExpectedSourceFrameRateKey: NSNumber(value: 30),
+            AVVideoMaxKeyFrameIntervalKey: NSNumber(value: 30),
+        ]
+        let outputSettings: [String: Any] = [
+            AVVideoCodecKey: codec,
+            AVVideoCompressionPropertiesKey: compressionProperties,
+        ]
+        movieOutput.setOutputSettings(outputSettings, for: connection)
+    }`;
+
+const naturalPreviewQualityV3MaxPixelOldZoom1 = `extension CameraController {
+${QUALITY_V3_SETTINGS_AND_PICKERS}
+
+    /// seconds-app: reset zoom and pick highest-resolution format (1080p+, then widest FOV).
+    private func applyNaturalPreviewDeviceSettings(to device: AVCaptureDevice) throws {
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+        device.videoZoomFactor = 1.0
+        if let bestFormat = pickBestCaptureFormat(from: device.formats) {
+            device.activeFormat = bestFormat
+        }
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+    }
+
+    func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
+
+const naturalPreviewQualityV3MaxPixelOldWideZoom = `extension CameraController {
+${QUALITY_V3_SETTINGS_AND_PICKERS}
+
+    /// seconds-app: reset zoom and pick highest-resolution format (1080p+, then widest FOV).
+    private func applyNaturalPreviewDeviceSettings(to device: AVCaptureDevice) throws {
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+        if let bestFormat = pickBestCaptureFormat(from: device.formats) {
+            device.activeFormat = bestFormat
+        }
+        device.videoZoomFactor = defaultWideRawZoom(for: device)
+        zoomFactor = device.videoZoomFactor
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+    }
+
+    func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
+
+/** v4 block that preserves defaultWideRawZoom from the lens/focus patches. */
+const QUALITY_CAPTURE_EXTENSION_WITH_WIDE_ZOOM = QUALITY_CAPTURE_EXTENSION.replace(
+  `        device.videoZoomFactor = 1.0
+        if let bestFormat = pickBestCaptureFormat(from: device.formats) {
+            device.activeFormat = bestFormat
+        }
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }`,
+  `        if let bestFormat = pickBestCaptureFormat(from: device.formats) {
+            device.activeFormat = bestFormat
+        }
+        device.videoZoomFactor = defaultWideRawZoom(for: device)
+        zoomFactor = device.videoZoomFactor
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }`,
+);
+
+await patchFile(
+  controllerPath,
+  [
+    [naturalPreviewQualityV3MaxPixelOldWideZoom, QUALITY_CAPTURE_EXTENSION_WITH_WIDE_ZOOM],
+    [naturalPreviewQualityV3MaxPixelOldZoom1, QUALITY_CAPTURE_EXTENSION],
+  ],
+  "CameraController.swift (quality v3→v4: ~1080p cap + H.264 preferred)",
 );
 
 const sessionPresetV1Old = `            self.captureSession?.sessionPreset = .high`;
