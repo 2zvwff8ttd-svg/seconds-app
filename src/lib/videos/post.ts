@@ -13,6 +13,7 @@ import {
   mergeClipsForPost,
   transcodeClipForPost,
 } from "@/lib/video/merge-clips";
+import type { PostEncodePath } from "@/lib/video/video-post-probe";
 import { mergeVideoWithNarration } from "@/lib/video/merge-audio-tracks";
 import {
   captureVideoThumbnail,
@@ -24,6 +25,11 @@ import {
   DEFAULT_VIDEO_DISPLAY_MASK,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
+import {
+  createPostTimer,
+  logPostTiming,
+  type PostTimingReport,
+} from "@/lib/videos/post-timing";
 import type { PostUploadStage, VideoVisibility } from "@/types/video";
 
 export type PostClipInput = {
@@ -220,6 +226,44 @@ async function saveVideoRow(
   };
 }
 
+async function buildClipThumbnailBlobs(
+  clips: PostClipInput[],
+  precomputed: Array<Blob | undefined>,
+  onProgress: (percent: number, label: string) => void,
+  progressBase: number,
+  progressRange: number,
+): Promise<Blob[]> {
+  const thumbnailSources = clips.map((clip) => clip.file);
+  const clipThumbnailBlobs: Blob[] = [];
+
+  for (let i = 0; i < thumbnailSources.length; i += 1) {
+    const cached = precomputed[i];
+    if (cached) {
+      clipThumbnailBlobs.push(cached);
+      onProgress(
+        progressBase +
+          ((i + 1) / thumbnailSources.length) * progressRange,
+        `サムネイル ${i + 1}/${thumbnailSources.length}（キャッシュ）`,
+      );
+      continue;
+    }
+
+    onProgress(
+      progressBase + (i / thumbnailSources.length) * progressRange,
+      `サムネイル ${i + 1}/${thumbnailSources.length} を作成中…`,
+    );
+    try {
+      clipThumbnailBlobs.push(await captureVideoThumbnail(thumbnailSources[i]!));
+    } catch (err) {
+      const detail =
+        err instanceof Error ? err.message : "サムネイル生成に失敗しました";
+      throw new Error(`クリップ${i + 1}のサムネイル: ${detail}`);
+    }
+  }
+
+  return clipThumbnailBlobs;
+}
+
 export async function postVideo(input: PostVideoInput): Promise<PostVideoResult> {
   const clips = input.clips;
   if (clips.length === 0) {
@@ -239,6 +283,20 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   const { title, visibility, onStageChange, onProgress } = input;
   const hasNarration = Boolean(input.narrationBlob);
   const bgmUrl = input.bgmUrl?.trim() || undefined;
+  const timer = createPostTimer();
+  const timing: PostTimingReport = {
+    authMs: 0,
+    transcodeMs: 0,
+    narrationMs: 0,
+    thumbsMs: 0,
+    parallelEncodeThumbsMs: 0,
+    thumbUploadMs: 0,
+    videoUploadMs: 0,
+    dbSaveMs: 0,
+    totalMs: 0,
+    clipCount: clips.length,
+    durationSeconds: 0,
+  };
 
   if (hasNarration && bgmUrl) {
     throw new Error("ナレーションとBGMは同時に指定できません");
@@ -268,73 +326,10 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     rethrowPostStage("プロフィール確認", err);
   }
 
+  timing.authMs = timer.mark();
+  timing.durationSeconds = durationSeconds;
+
   type UploadTarget = { file: File; storageName: string };
-
-  let uploadTargets: UploadTarget[];
-
-  if (clipFiles.length > 1) {
-    onStageChange("merging_clips");
-    onProgress(8, "クリップを結合中…");
-
-    try {
-      const mergedFile = await mergeClipsForPost(
-        clipFiles,
-        durationSeconds,
-        (ratio, label) => {
-          onProgress(8 + ratio * 12, label);
-        },
-      );
-      const ext = getVideoExtension(mergedFile);
-      uploadTargets = [
-        { file: mergedFile, storageName: `video.${ext}` },
-      ];
-      onProgress(22, "クリップの結合が完了しました");
-    } catch (err) {
-      rethrowPostStage("クリップ結合", err);
-    }
-  } else {
-    onStageChange("merging_clips");
-    onProgress(8, "動画を最適化中…");
-
-    try {
-      const encoded = await transcodeClipForPost(
-        clipFiles[0]!,
-        (ratio, label) => {
-          onProgress(8 + ratio * 14, label);
-        },
-      );
-      uploadTargets = [{ file: encoded, storageName: "video.mp4" }];
-      onProgress(22, "動画の最適化が完了しました");
-    } catch (err) {
-      rethrowPostStage("動画の最適化", err);
-    }
-  }
-
-  if (hasNarration && uploadTargets.length > 1) {
-    throw new Error(NARRATION_REQUIRES_SINGLE_VIDEO_MESSAGE);
-  }
-
-  if (hasNarration && input.narrationBlob) {
-    onStageChange("merging_audio");
-    onProgress(22, "ナレーションを合成中…");
-
-    try {
-      const muxed = await mergeVideoWithNarration(
-        uploadTargets[0]!.file,
-        input.narrationBlob,
-        {
-          videoDurationSec: durationSeconds,
-          onProgress: (ratio) => {
-            onProgress(22 + ratio * 16, "ナレーションを合成中…");
-          },
-        },
-      );
-      uploadTargets = [{ file: muxed, storageName: "video.mp4" }];
-      onProgress(38, "ナレーションの合成が完了しました");
-    } catch (err) {
-      rethrowPostStage("ナレーション合成", err);
-    }
-  }
 
   const progress = hasNarration
     ? {
@@ -358,45 +353,120 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
         saving: 92,
       };
 
-  onStageChange("preparing");
-  onProgress(progress.preparing, "サムネイルを作成中…");
-
-  const thumbnailSources = clips.map((clip) => clip.file);
   const precomputed = input.precomputedClipThumbnails ?? [];
+  let transcodePath: PostEncodePath | undefined;
+  const parallelStart = performance.now();
+  timer.resetMark();
 
+  const encodeTask = (async (): Promise<UploadTarget[]> => {
+    const encodeStarted = performance.now();
+    let targets: UploadTarget[];
+
+    if (clipFiles.length > 1) {
+      onStageChange("merging_clips");
+      onProgress(8, "クリップを結合中…");
+
+      const merged = await mergeClipsForPost(
+        clipFiles,
+        durationSeconds,
+        (ratio, label) => {
+          onProgress(8 + ratio * 12, label);
+        },
+      );
+      transcodePath = merged.encodePath;
+      const ext = getVideoExtension(merged.file);
+      targets = [{ file: merged.file, storageName: `video.${ext}` }];
+      onProgress(22, "クリップの結合が完了しました");
+    } else {
+      onStageChange("merging_clips");
+      onProgress(8, "動画を最適化中…");
+
+      const encoded = await transcodeClipForPost(clipFiles[0]!, (ratio, label) => {
+        onProgress(8 + ratio * 14, label);
+      });
+      transcodePath = encoded.encodePath;
+      targets = [{ file: encoded.file, storageName: "video.mp4" }];
+      onProgress(22, "動画の最適化が完了しました");
+    }
+
+    timing.transcodeMs = performance.now() - encodeStarted;
+    timing.transcodePath = transcodePath;
+    return targets;
+  })();
+
+  const thumbsTask = (async (): Promise<{
+    country: string;
+    clipThumbnailBlobs: Blob[];
+  }> => {
+    const thumbsStarted = performance.now();
+    onStageChange("preparing");
+    onProgress(progress.preparing, "サムネイルを作成中…");
+
+    const country = await detectCountryCode();
+    const clipThumbnailBlobs = await buildClipThumbnailBlobs(
+      clips,
+      precomputed,
+      onProgress,
+      progress.preparing,
+      progress.preparingRange,
+    );
+
+    timing.thumbsMs = performance.now() - thumbsStarted;
+    return { country, clipThumbnailBlobs };
+  })();
+
+  let uploadTargets: UploadTarget[];
   let country: string;
   let clipThumbnailBlobs: Blob[];
+
   try {
-    country = await detectCountryCode();
-
-    clipThumbnailBlobs = [];
-    for (let i = 0; i < thumbnailSources.length; i += 1) {
-      const cached = precomputed[i];
-      if (cached) {
-        clipThumbnailBlobs.push(cached);
-        onProgress(
-          progress.preparing +
-            ((i + 1) / thumbnailSources.length) * progress.preparingRange,
-          `サムネイル ${i + 1}/${thumbnailSources.length}（キャッシュ）`,
-        );
-        continue;
-      }
-
-      onProgress(
-        progress.preparing +
-          (i / thumbnailSources.length) * progress.preparingRange,
-        `サムネイル ${i + 1}/${thumbnailSources.length} を作成中…`,
-      );
-      try {
-        clipThumbnailBlobs.push(await captureVideoThumbnail(thumbnailSources[i]!));
-      } catch (err) {
-        const detail =
-          err instanceof Error ? err.message : "サムネイル生成に失敗しました";
-        throw new Error(`クリップ${i + 1}のサムネイル: ${detail}`);
-      }
-    }
+    const [encodedTargets, thumbResult] = await Promise.all([
+      encodeTask,
+      thumbsTask,
+    ]);
+    uploadTargets = encodedTargets;
+    country = thumbResult.country;
+    clipThumbnailBlobs = thumbResult.clipThumbnailBlobs;
   } catch (err) {
-    rethrowPostStage("サムネイル作成", err);
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("サムネイル")) {
+      rethrowPostStage("サムネイル作成", err);
+    }
+    if (clipFiles.length > 1) {
+      rethrowPostStage("クリップ結合", err);
+    }
+    rethrowPostStage("動画の最適化", err);
+  }
+
+  timing.parallelEncodeThumbsMs = performance.now() - parallelStart;
+
+  if (hasNarration && uploadTargets.length > 1) {
+    throw new Error(NARRATION_REQUIRES_SINGLE_VIDEO_MESSAGE);
+  }
+
+  if (hasNarration && input.narrationBlob) {
+    onStageChange("merging_audio");
+    onProgress(22, "ナレーションを合成中…");
+    timer.resetMark();
+
+    try {
+      const muxed = await mergeVideoWithNarration(
+        uploadTargets[0]!.file,
+        input.narrationBlob,
+        {
+          videoDurationSec: durationSeconds,
+          onProgress: (ratio) => {
+            onProgress(22 + ratio * 16, "ナレーションを合成中…");
+          },
+        },
+      );
+      uploadTargets = [{ file: muxed, storageName: "video.mp4" }];
+      onProgress(38, "ナレーションの合成が完了しました");
+    } catch (err) {
+      rethrowPostStage("ナレーション合成", err);
+    }
+
+    timing.narrationMs = timer.mark();
   }
 
   const videoId = crypto.randomUUID();
@@ -408,6 +478,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   onStageChange("uploading_thumbnail");
   const thumbUploadShare =
     progress.thumbUploadSpan / clipThumbnailBlobs.length;
+  timer.resetMark();
 
   for (let i = 0; i < clipThumbnailBlobs.length; i++) {
     onProgress(
@@ -437,8 +508,11 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     }
   }
 
+  timing.thumbUploadMs = timer.mark();
+
   const clipUrls: string[] = [];
   const uploadShare = progress.videoUploadSpan / uploadTargets.length;
+  timer.resetMark();
 
   for (let i = 0; i < uploadTargets.length; i++) {
     const { file, storageName } = uploadTargets[i];
@@ -482,6 +556,8 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     clipUrls.push(getMediaPublicUrl(clipPath));
   }
 
+  timing.videoUploadMs = timer.mark();
+
   const videoUrl = clipUrls[0]!;
   const clipThumbnailUrls = clipThumbnailPaths.map((path) =>
     getMediaPublicUrl(path),
@@ -513,6 +589,7 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
 
   onStageChange("saving");
   onProgress(progress.saving, "投稿を保存中…");
+  timer.resetMark();
 
   let inserted: { id: string; publishAt: string };
   try {
@@ -555,6 +632,10 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
   } catch (err) {
     rethrowPostStage("連続投稿の記録", err);
   }
+
+  timing.dbSaveMs = timer.mark();
+  timing.totalMs = timer.elapsed();
+  logPostTiming(timing);
 
   onStageChange("done");
   onProgress(100, "投稿を受け付けました");

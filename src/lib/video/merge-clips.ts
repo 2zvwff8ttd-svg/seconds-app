@@ -4,7 +4,16 @@ import {
   safeDeleteFile,
   writeFileFromBlob,
 } from "@/lib/video/ffmpeg-client";
-import { iosMp4OutputEncodeArgs, iosMp4ScaleFilterArgs } from "@/lib/video/ios-mp4-encode";
+import {
+  iosMp4OutputEncodeArgs,
+  iosMp4ScaleFilterArgs,
+  type IosMp4EncodePreset,
+} from "@/lib/video/ios-mp4-encode";
+import {
+  probeClipForPostUpload,
+  probeClipsForMergeEncode,
+  type PostEncodePath,
+} from "@/lib/video/video-post-probe";
 
 /** concat 時のメモリ超過を防ぐ上限 */
 export const MERGE_MAX_CLIP_COUNT = 10;
@@ -12,6 +21,12 @@ export const MERGE_MAX_TOTAL_SECONDS = 90;
 /** WASM ヒープ向けの保守的合計サイズ */
 export const MERGE_MAX_TOTAL_BYTES = 56 * 1024 * 1024;
 export const MERGE_MAX_SINGLE_CLIP_BYTES = 28 * 1024 * 1024;
+
+export type TranscodeClipResult = {
+  file: File;
+  encodePath: PostEncodePath;
+  probeReasons: string[];
+};
 
 type ClipContainer = "mp4" | "webm";
 
@@ -31,6 +46,10 @@ function outputMime(container: ClipContainer): string {
 
 function outputExtension(container: ClipContainer): string {
   return container === "mp4" ? "mp4" : "webm";
+}
+
+function encodePresetForPath(path: PostEncodePath): IosMp4EncodePreset {
+  return path === "reencode_ultrafast" ? "ultrafast" : "veryfast";
 }
 
 export function assessClipMergeEligibility(
@@ -120,6 +139,7 @@ async function execConcatEncode(
   ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
   listName: string,
   outName: string,
+  preset: IosMp4EncodePreset,
 ): Promise<void> {
   await execFfmpegWithLogs(ffmpeg, [
     "-f",
@@ -129,7 +149,7 @@ async function execConcatEncode(
     "-i",
     listName,
     ...iosMp4ScaleFilterArgs(),
-    ...iosMp4OutputEncodeArgs(),
+    ...iosMp4OutputEncodeArgs({ preset }),
     outName,
   ]);
 }
@@ -138,12 +158,28 @@ async function execSingleClipEncode(
   ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
   inputName: string,
   outName: string,
+  preset: IosMp4EncodePreset,
 ): Promise<void> {
   await execFfmpegWithLogs(ffmpeg, [
     "-i",
     inputName,
     ...iosMp4ScaleFilterArgs(),
-    ...iosMp4OutputEncodeArgs(),
+    ...iosMp4OutputEncodeArgs({ preset }),
+    outName,
+  ]);
+}
+
+async function execSingleClipRemux(
+  ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
+  inputName: string,
+  outName: string,
+): Promise<void> {
+  await execFfmpegWithLogs(ffmpeg, [
+    "-i",
+    inputName,
+    "-c",
+    "copy",
+    ...["-movflags", "+faststart"],
     outName,
   ]);
 }
@@ -214,40 +250,58 @@ async function cleanupMergeRun(ctx: MergeRunContext, outName?: string): Promise<
 }
 
 /**
- * Re-encode a single clip to iOS-safe baseline H.264 MP4 (1080w max, faststart).
- * Raw phone captures (HEVC / tall resolution / WebM) must not ship as clip-0.* —
- * Safari/WKWebView stalls or shows a frozen / snowy frame layer on many devices.
+ * Re-encode or remux a single clip to iOS-safe baseline H.264 MP4.
+ * Safe H.264 inputs skip full re-encode (copy + faststart only).
  */
 export async function transcodeClipForPost(
   file: File,
   onProgress?: (ratio: number, label: string) => void,
-): Promise<File> {
+): Promise<TranscodeClipResult> {
   const container = detectContainer(file);
   if (!container) {
     throw new Error("対応していない動画形式のため最適化できません");
   }
+
+  onProgress?.(0.04, "動画を検査中…");
+  const probe = await probeClipForPostUpload(file);
+  const encodePath = probe.encodePath;
 
   const inputExt = outputExtension(container);
   const runId = crypto.randomUUID().slice(0, 8);
   const inputName = `single_in_${runId}.${inputExt}`;
   const outName = `single_out_${runId}.mp4`;
 
-  onProgress?.(0.02, "動画エンジンを読み込み中…");
+  onProgress?.(0.08, "動画エンジンを読み込み中…");
   const ffmpeg = await getFfmpeg();
 
   const onFfmpegProgress = ({ progress }: { progress: number }) => {
     if (typeof progress === "number") {
-      onProgress?.(0.2 + Math.min(0.7, progress * 0.7), "動画を最適化中…");
+      const label =
+        encodePath === "remux_copy"
+          ? "動画を最適化中…"
+          : "動画を再エンコード中…";
+      onProgress?.(0.2 + Math.min(0.7, progress * 0.7), label);
     }
   };
 
   try {
-    onProgress?.(0.08, "クリップを準備中…");
+    onProgress?.(0.12, "クリップを準備中…");
     await writeFileFromBlob(ffmpeg, inputName, file);
     ffmpeg.on("progress", onFfmpegProgress);
 
-    onProgress?.(0.18, "動画を再エンコード中…");
-    await execSingleClipEncode(ffmpeg, inputName, outName);
+    if (encodePath === "remux_copy") {
+      onProgress?.(0.18, "動画を最適化中…");
+      await execSingleClipRemux(ffmpeg, inputName, outName);
+    } else {
+      onProgress?.(0.18, "動画を再エンコード中…");
+      await execSingleClipEncode(
+        ffmpeg,
+        inputName,
+        outName,
+        encodePresetForPath(encodePath),
+      );
+    }
+
     onProgress?.(0.94, "最適化ファイルを読み込み中…");
     const encoded = await readMergedOutput(
       ffmpeg,
@@ -256,7 +310,11 @@ export async function transcodeClipForPost(
       "video.mp4",
     );
     onProgress?.(1, "動画の最適化が完了しました");
-    return encoded;
+    return {
+      file: encoded,
+      encodePath,
+      probeReasons: probe.reasons,
+    };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`動画の最適化に失敗しました（${detail}）`);
@@ -267,6 +325,11 @@ export async function transcodeClipForPost(
   }
 }
 
+export type MergeClipsResult = {
+  file: File;
+  encodePath: PostEncodePath;
+};
+
 /**
  * Merge multiple clips into one File for upload via libx264+aac re-encode only.
  * Copy-concat is avoided — iOS stalls at segment boundaries when keyframes do not
@@ -276,12 +339,13 @@ export async function mergeClipsForPost(
   files: File[],
   totalDurationSeconds: number,
   onProgress?: (ratio: number, label: string) => void,
-): Promise<File> {
+): Promise<MergeClipsResult> {
   if (files.length <= 1) {
     if (files.length === 0) {
       throw new Error("投稿するクリップがありません");
     }
-    return files[0]!;
+    const single = await transcodeClipForPost(files[0]!, onProgress);
+    return { file: single.file, encodePath: single.encodePath };
   }
 
   const assessment = assessClipMergeEligibility(files, totalDurationSeconds);
@@ -292,6 +356,10 @@ export async function mergeClipsForPost(
         : assessment.reason ?? "クリップを結合できません",
     );
   }
+
+  onProgress?.(0.04, "クリップを検査中…");
+  const { worstPath } = await probeClipsForMergeEncode(files);
+  const preset = encodePresetForPath(worstPath);
 
   const inputExt = outputExtension(assessment.container);
   const encodeOutName = `merged_enc_${crypto.randomUUID().slice(0, 8)}.mp4`;
@@ -308,7 +376,7 @@ export async function mergeClipsForPost(
     ctx.ffmpeg.on("progress", onFfmpegProgress);
 
     onProgress?.(0.32, "クリップを再エンコードしながら結合中…");
-    await execConcatEncode(ctx.ffmpeg, ctx.listName, encodeOutName);
+    await execConcatEncode(ctx.ffmpeg, ctx.listName, encodeOutName, preset);
     onProgress?.(0.92, "結合ファイルを読み込み中…");
     const merged = await readMergedOutput(
       ctx.ffmpeg,
@@ -317,7 +385,10 @@ export async function mergeClipsForPost(
       "merged.mp4",
     );
     onProgress?.(1, "クリップの結合が完了しました");
-    return merged;
+    return {
+      file: merged,
+      encodePath: worstPath === "remux_copy" ? "reencode_veryfast" : worstPath,
+    };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`クリップの結合に失敗しました（${detail}）`);
@@ -327,4 +398,11 @@ export async function mergeClipsForPost(
       await cleanupMergeRun(ctx, encodeOutName);
     }
   }
+}
+
+/** Warm ffmpeg.wasm while the user fills in post details. */
+export function warmPostFfmpeg(): void {
+  void getFfmpeg().catch(() => {
+    /* background warm-up */
+  });
 }

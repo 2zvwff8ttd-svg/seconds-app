@@ -23,7 +23,7 @@ import {
 import {
   NARRATION_REQUIRES_SINGLE_VIDEO_MESSAGE,
 } from "@/lib/videos/post";
-import { assessClipMergeEligibility } from "@/lib/video/merge-clips";
+import { assessClipMergeEligibility, warmPostFfmpeg } from "@/lib/video/merge-clips";
 import {
   bonusDayMessageFromStreak,
   fetchCurrentStreak,
@@ -225,6 +225,11 @@ export function PostForm() {
     setNarrationBlob(null);
     setNarrationDurationSec(0);
   }, [clipKey]);
+
+  useEffect(() => {
+    if (!showPostDetails) return;
+    warmPostFfmpeg();
+  }, [showPostDetails]);
 
   const runMusicGeneration = useCallback(
     async (result: AiAnalyzeResult, totalSeconds: number, runId: number) => {
