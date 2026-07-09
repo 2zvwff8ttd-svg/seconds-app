@@ -8,12 +8,12 @@
 -- ---------------------------------------------------------------------------
 create table if not exists public.notification_preferences (
   user_id uuid primary key references public.profiles (id) on delete cascade,
-  morning_digest boolean not null default true,
-  like boolean not null default true,
-  comment boolean not null default true,
-  follow boolean not null default true,
-  mention boolean not null default true,
-  crown boolean not null default true,
+  push_morning_digest boolean not null default true,
+  push_like boolean not null default true,
+  push_comment boolean not null default true,
+  push_follow boolean not null default true,
+  push_mention boolean not null default true,
+  push_crown boolean not null default true,
   updated_at timestamptz not null default now()
 );
 
@@ -150,12 +150,12 @@ begin
   end if;
 
   case p_push_type
-    when 'morning_digest' then return v_prefs.morning_digest;
-    when 'like' then return v_prefs.like;
-    when 'comment' then return v_prefs.comment;
-    when 'follow' then return v_prefs.follow;
-    when 'mention' then return v_prefs.mention;
-    when 'crown' then return v_prefs.crown;
+    when 'morning_digest' then return v_prefs.push_morning_digest;
+    when 'like' then return v_prefs.push_like;
+    when 'comment' then return v_prefs.push_comment;
+    when 'follow' then return v_prefs.push_follow;
+    when 'mention' then return v_prefs.push_mention;
+    when 'crown' then return v_prefs.push_crown;
     else return true;
   end case;
 end;
