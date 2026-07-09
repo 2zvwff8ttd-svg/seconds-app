@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { sendMorningDigestPushes } from "../_shared/morning-digest-push.ts";
+import { flushCrownPushOutbox } from "../_shared/push-outbox-processor.ts";
 import {
   expireRetentionVideos,
 } from "../_shared/video-retention-expiry.ts";
@@ -15,8 +16,12 @@ const JST = "Asia/Tokyo";
  * 2. 前日（JST）の国別 #1 を award_daily_crowns で確定（video_daily_views + 10日クールダウン）
  * 3. 全ユーザーに 5〜30 秒の撮影時間を daily_assignments に登録
  * 4. 全ユーザーへ morning_digest 通知（title: ?Seconds / body: 固定コピー、秒数は出さない）
- * 5. enabled な iOS トークンへ morning_digest APNs 送信（notifications の title/body をそのまま使用）
- * 6. 10日保持期限切れ動画の削除（app_config.video_retention.expiry_enabled=true のときのみ）
+ * 5. enabled な iOS トークンへ morning_digest APNs 送信（notification_preferences 尊重）
+ * 6. 王冠プッシュ（push_outbox crown を即時フラッシュ）
+ * 7. 10日保持期限切れ動画の削除（app_config.video_retention.expiry_enabled=true のときのみ）
+ *
+ * Crown / push outbox schema:
+ *   supabase/sql/031-notification-push.sql
  *
  * Crown schema / award_daily_crowns は SQL Editor で:
  *   supabase/sql/030-crown-awards.sql
@@ -82,6 +87,7 @@ Deno.serve(async (req) => {
   }
 
   const pushSummary = await sendMorningDigestPushes(supabase, startedAt);
+  const crownPushSummary = await flushCrownPushOutbox(supabase);
 
   let retentionSummary: Record<string, unknown> = { skipped: true };
   try {
@@ -115,6 +121,7 @@ Deno.serve(async (req) => {
   console.log("[daily-morning] completed", {
     result: data,
     push: pushSummary,
+    crown_push: crownPushSummary,
     retention: retentionSummary,
     elapsedMs,
   });
@@ -126,6 +133,7 @@ Deno.serve(async (req) => {
     elapsed_ms: elapsedMs,
     result: data,
     push: pushSummary,
+    crown_push: crownPushSummary,
     retention: retentionSummary,
   });
 });

@@ -4,6 +4,7 @@ import {
   sendApnsAlert,
   type ApnsConfig,
 } from "./apns.ts";
+import { isUserPushEnabled } from "./push-dispatch.ts";
 
 type MorningDigestRow = {
   user_id: string;
@@ -25,6 +26,7 @@ export type MorningDigestPushSummary = {
   disabled?: number;
   digests?: number;
   tokens?: number;
+  pref_skipped?: number;
   error?: string;
 };
 
@@ -82,11 +84,22 @@ export async function sendMorningDigestPushes(
 
     let sent = 0;
     let failed = 0;
+    let prefSkipped = 0;
     const invalidTokenIds: string[] = [];
 
     for (const row of tokenRows) {
       const digest = digestByUser.get(row.user_id);
       if (!digest) continue;
+
+      const pushEnabled = await isUserPushEnabled(
+        supabase,
+        row.user_id,
+        "morning_digest",
+      );
+      if (!pushEnabled) {
+        prefSkipped += 1;
+        continue;
+      }
 
       const result = await sendApnsPush(config, row.token, digest.title, digest.body);
       if (result.ok) {
@@ -125,6 +138,7 @@ export async function sendMorningDigestPushes(
       disabled: invalidTokenIds.length,
       digests: digestRows.length,
       tokens: tokenRows.length,
+      pref_skipped: prefSkipped,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
