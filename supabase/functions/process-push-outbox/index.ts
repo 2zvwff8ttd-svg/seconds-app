@@ -6,7 +6,7 @@ import { processPushOutbox } from "../_shared/push-outbox-processor.ts";
  * Aggregates pending social push events and sends APNs alerts.
  *
  * Schedule: every 3 minutes (Dashboard → Edge Functions → Schedules)
- *   cron: */3 * * * *
+ *   Use a 3-minute interval cron in the Dashboard (do not paste raw cron here).
  *
  * Deploy:
  *   npm run functions:deploy-process-push-outbox
