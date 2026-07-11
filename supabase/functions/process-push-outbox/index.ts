@@ -5,8 +5,9 @@ import { processPushOutbox } from "../_shared/push-outbox-processor.ts";
 /**
  * Aggregates pending social push events and sends APNs alerts.
  *
- * Schedule: every 3 minutes (Dashboard → Edge Functions → Schedules)
- *   Use a 3-minute interval cron in the Dashboard (do not paste raw cron here).
+ * Schedule: every 3 minutes (Dashboard → Integrations → Cron / pg_cron)
+ *   Like/comment/follow: individual push per event; burst of 5+ within 5 min aggregates.
+ *   Mention/crown: always individual immediate.
  *
  * Deploy:
  *   npm run functions:deploy-process-push-outbox

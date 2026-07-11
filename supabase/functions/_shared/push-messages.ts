@@ -6,48 +6,11 @@ export type PushNotificationType =
   | "mention"
   | "crown";
 
-export type PushWindowConfig = {
-  /** Wait this long after the oldest pending event before flushing */
-  windowMs: number;
-  /** Minimum gap between pushes for the same bucket */
-  bucketCooldownMs: number;
-  /** Bypass global recipient cooldown */
-  bypassGlobalCooldown: boolean;
-};
+/** Aggregate only when this many+ events land in the same bucket within BURST_WINDOW_MS. */
+export const BURST_AGGREGATE_THRESHOLD = 5;
 
-export const PUSH_WINDOW_CONFIG: Record<
-  Exclude<PushNotificationType, "morning_digest">,
-  PushWindowConfig
-> = {
-  like: {
-    windowMs: 30 * 60 * 1000,
-    bucketCooldownMs: 30 * 60 * 1000,
-    bypassGlobalCooldown: false,
-  },
-  comment: {
-    windowMs: 15 * 60 * 1000,
-    bucketCooldownMs: 15 * 60 * 1000,
-    bypassGlobalCooldown: false,
-  },
-  follow: {
-    windowMs: 60 * 60 * 1000,
-    bucketCooldownMs: 60 * 60 * 1000,
-    bypassGlobalCooldown: false,
-  },
-  mention: {
-    windowMs: 30 * 1000,
-    bucketCooldownMs: 5 * 60 * 1000,
-    bypassGlobalCooldown: true,
-  },
-  crown: {
-    windowMs: 0,
-    bucketCooldownMs: 0,
-    bypassGlobalCooldown: true,
-  },
-};
-
-/** Minimum gap between any two pushes to the same user (except mention/crown). */
-export const GLOBAL_PUSH_COOLDOWN_MS = 2 * 60 * 1000;
+/** "立て続け" window: oldest→newest pending span must be within this to aggregate. */
+export const BURST_WINDOW_MS = 5 * 60 * 1000;
 
 export type PushAlertCopy = {
   title: string;
@@ -110,4 +73,13 @@ export function buildAggregatedPushCopy(
     default:
       return { title: "?Seconds", body: "新しいお知らせがあります" };
   }
+}
+
+export function shouldAggregateBurst(
+  eventCount: number,
+  oldestCreatedAtMs: number,
+  newestCreatedAtMs: number,
+): boolean {
+  if (eventCount < BURST_AGGREGATE_THRESHOLD) return false;
+  return newestCreatedAtMs - oldestCreatedAtMs <= BURST_WINDOW_MS;
 }

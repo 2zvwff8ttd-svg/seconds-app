@@ -1,9 +1,8 @@
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
   buildAggregatedPushCopy,
-  GLOBAL_PUSH_COOLDOWN_MS,
-  PUSH_WINDOW_CONFIG,
   resolveActorLabel,
+  shouldAggregateBurst,
   type PushNotificationType,
 } from "./push-messages.ts";
 import {
@@ -93,9 +92,7 @@ export async function processPushOutbox(
 
     const groups = new Map<string, BucketGroup>();
     for (const row of rows) {
-      if (
-        row.push_type === "crown" && options?.includeCrown === false
-      ) {
+      if (row.push_type === "crown" && options?.includeCrown === false) {
         continue;
       }
       if (
@@ -121,101 +118,26 @@ export async function processPushOutbox(
     }
 
     summary.buckets_seen = groups.size;
-    const now = Date.now();
 
     for (const group of groups.values()) {
-      const windowConfig = PUSH_WINDOW_CONFIG[group.pushType];
-      const oldestMs = Math.min(
-        ...group.events.map((e) => new Date(e.created_at).getTime()),
+      const events = [...group.events].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-      const ageMs = now - oldestMs;
 
-      if (ageMs < windowConfig.windowMs) {
-        summary.buckets_deferred += 1;
+      if (group.pushType === "mention" || group.pushType === "crown") {
+        await flushIndividualEvents(supabase, config, group, events, summary);
         continue;
       }
 
-      const bucketLastSent = await getLatestBucketSendAt(
-        supabase,
-        group.bucketKey,
-      );
-      if (
-        bucketLastSent &&
-        now - bucketLastSent < windowConfig.bucketCooldownMs
-      ) {
-        summary.buckets_deferred += 1;
-        continue;
-      }
+      const oldestMs = new Date(events[0].created_at).getTime();
+      const newestMs = new Date(events[events.length - 1].created_at).getTime();
 
-      if (!windowConfig.bypassGlobalCooldown) {
-        const recipientLastSent = await getLatestRecipientSendAt(
-          supabase,
-          group.recipientUserId,
-        );
-        if (
-          recipientLastSent &&
-          now - recipientLastSent < GLOBAL_PUSH_COOLDOWN_MS
-        ) {
-          summary.buckets_deferred += 1;
-          continue;
-        }
-      }
-
-      const actorIds = uniqueActorIds(group.events);
-      const actorCount = Math.max(actorIds.length, 1);
-      const primaryActorId = pickPrimaryActorId(group.events);
-      const primaryLabel = await resolvePrimaryActorLabel(
-        supabase,
-        primaryActorId,
-      );
-      const copy = buildAggregatedPushCopy(
-        group.pushType,
-        primaryLabel,
-        actorCount,
-      );
-
-      const dispatch: PushDispatchResult = await sendPushAlertToUser(
-        supabase,
-        config,
-        group.recipientUserId,
-        group.pushType,
-        copy.title,
-        copy.body,
-      );
-
-      if (dispatch.skipped && dispatch.reason === "pref_off") {
-        await markBucketRows(supabase, group, "skipped", "pref_off");
-        summary.buckets_skipped += 1;
-        summary.events_marked_skipped += group.events.length;
-        continue;
-      }
-
-      if (dispatch.skipped && dispatch.reason === "no_token") {
-        await markBucketRows(supabase, group, "skipped", "no_token");
-        summary.buckets_skipped += 1;
-        summary.events_marked_skipped += group.events.length;
-        continue;
-      }
-
-      if (dispatch.sent > 0) {
-        await recordPushSendLog(supabase, {
-          recipientUserId: group.recipientUserId,
-          pushType: group.pushType,
-          bucketKey: group.bucketKey,
-          actorCount,
-          title: copy.title,
-          body: copy.body,
-        });
-        await markBucketRows(supabase, group, "sent", null);
-        summary.buckets_flushed += 1;
-        summary.events_marked_sent += group.events.length;
-        summary.pushes_sent += dispatch.sent;
+      if (shouldAggregateBurst(events.length, oldestMs, newestMs)) {
+        await flushAggregatedBucket(supabase, config, group, events, summary);
       } else {
-        summary.buckets_deferred += 1;
+        await flushIndividualEvents(supabase, config, group, events, summary);
       }
-
-      summary.pushes_failed += dispatch.failed;
-      summary.tokens_disabled += dispatch.disabled;
     }
 
     return summary;
@@ -226,36 +148,153 @@ export async function processPushOutbox(
   }
 }
 
-async function getLatestBucketSendAt(
+async function flushAggregatedBucket(
   supabase: SupabaseClient,
-  bucketKey: string,
-): Promise<number | null> {
-  const { data, error } = await supabase
-    .from("push_send_log")
-    .select("sent_at")
-    .eq("bucket_key", bucketKey)
-    .order("sent_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  config: NonNullable<ReturnType<typeof loadApnsConfigOrNull>>,
+  group: BucketGroup,
+  events: PushOutboxRow[],
+  summary: ProcessPushOutboxSummary,
+): Promise<void> {
+  const actorIds = uniqueActorIds(events);
+  const actorCount = Math.max(actorIds.length, 1);
+  const primaryActorId = pickPrimaryActorId(events);
+  const primaryLabel = await resolvePrimaryActorLabel(supabase, primaryActorId);
+  const copy = buildAggregatedPushCopy(group.pushType, primaryLabel, actorCount);
 
-  if (error || !data?.sent_at) return null;
-  return new Date(data.sent_at as string).getTime();
+  const dispatch = await sendPushAlertToUser(
+    supabase,
+    config,
+    group.recipientUserId,
+    group.pushType,
+    copy.title,
+    copy.body,
+  );
+
+  if (handleDispatchSkip(supabase, group, events, dispatch, summary)) return;
+
+  if (dispatch.sent > 0) {
+    await recordPushSendLog(supabase, {
+      recipientUserId: group.recipientUserId,
+      pushType: group.pushType,
+      bucketKey: group.bucketKey,
+      actorCount,
+      title: copy.title,
+      body: copy.body,
+    });
+    await markOutboxRows(
+      supabase,
+      events.map((e) => e.id),
+      "sent",
+      null,
+    );
+    summary.buckets_flushed += 1;
+    summary.events_marked_sent += events.length;
+    summary.pushes_sent += dispatch.sent;
+  } else {
+    summary.buckets_deferred += 1;
+  }
+
+  summary.pushes_failed += dispatch.failed;
+  summary.tokens_disabled += dispatch.disabled;
 }
 
-async function getLatestRecipientSendAt(
+async function flushIndividualEvents(
   supabase: SupabaseClient,
-  recipientUserId: string,
-): Promise<number | null> {
-  const { data, error } = await supabase
-    .from("push_send_log")
-    .select("sent_at")
-    .eq("recipient_user_id", recipientUserId)
-    .order("sent_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  config: NonNullable<ReturnType<typeof loadApnsConfigOrNull>>,
+  group: BucketGroup,
+  events: PushOutboxRow[],
+  summary: ProcessPushOutboxSummary,
+): Promise<void> {
+  let sentAny = false;
 
-  if (error || !data?.sent_at) return null;
-  return new Date(data.sent_at as string).getTime();
+  for (const event of events) {
+    const primaryLabel = await resolvePrimaryActorLabel(
+      supabase,
+      event.actor_id,
+    );
+    const copy = buildAggregatedPushCopy(group.pushType, primaryLabel, 1);
+
+    const dispatch = await sendPushAlertToUser(
+      supabase,
+      config,
+      group.recipientUserId,
+      group.pushType,
+      copy.title,
+      copy.body,
+    );
+
+    if (dispatch.skipped && dispatch.reason === "pref_off") {
+      await markOutboxRows(supabase, [event.id], "skipped", "pref_off");
+      summary.buckets_skipped += 1;
+      summary.events_marked_skipped += 1;
+      continue;
+    }
+
+    if (dispatch.skipped && dispatch.reason === "no_token") {
+      await markOutboxRows(supabase, [event.id], "skipped", "no_token");
+      summary.buckets_skipped += 1;
+      summary.events_marked_skipped += 1;
+      continue;
+    }
+
+    if (dispatch.sent > 0) {
+      await recordPushSendLog(supabase, {
+        recipientUserId: group.recipientUserId,
+        pushType: group.pushType,
+        bucketKey: `${group.bucketKey}:${event.id}`,
+        actorCount: 1,
+        title: copy.title,
+        body: copy.body,
+      });
+      await markOutboxRows(supabase, [event.id], "sent", null);
+      summary.events_marked_sent += 1;
+      summary.pushes_sent += dispatch.sent;
+      sentAny = true;
+    } else {
+      summary.buckets_deferred += 1;
+    }
+
+    summary.pushes_failed += dispatch.failed;
+    summary.tokens_disabled += dispatch.disabled;
+  }
+
+  if (sentAny) {
+    summary.buckets_flushed += 1;
+  }
+}
+
+function handleDispatchSkip(
+  supabase: SupabaseClient,
+  group: BucketGroup,
+  events: PushOutboxRow[],
+  dispatch: PushDispatchResult,
+  summary: ProcessPushOutboxSummary,
+): boolean {
+  if (dispatch.skipped && dispatch.reason === "pref_off") {
+    void markOutboxRows(
+      supabase,
+      events.map((e) => e.id),
+      "skipped",
+      "pref_off",
+    );
+    summary.buckets_skipped += 1;
+    summary.events_marked_skipped += events.length;
+    return true;
+  }
+
+  if (dispatch.skipped && dispatch.reason === "no_token") {
+    void markOutboxRows(
+      supabase,
+      events.map((e) => e.id),
+      "skipped",
+      "no_token",
+    );
+    summary.buckets_skipped += 1;
+    summary.events_marked_skipped += events.length;
+    return true;
+  }
+
+  return false;
 }
 
 function uniqueActorIds(events: PushOutboxRow[]): string[] {
@@ -294,26 +333,24 @@ async function resolvePrimaryActorLabel(
   return resolveActorLabel(profile.display_name, profile.username);
 }
 
-async function markBucketRows(
+async function markOutboxRows(
   supabase: SupabaseClient,
-  group: BucketGroup,
+  ids: string[],
   status: "sent" | "skipped",
   skipReason: string | null,
 ): Promise<void> {
-  const ids = group.events.map((e) => e.id);
+  if (ids.length === 0) return;
+
   const patch: Record<string, unknown> = {
     status,
     sent_at: new Date().toISOString(),
   };
   if (skipReason) patch.skip_reason = skipReason;
 
-  const { error } = await supabase
-    .from("push_outbox")
-    .update(patch)
-    .in("id", ids);
+  const { error } = await supabase.from("push_outbox").update(patch).in("id", ids);
 
   if (error) {
-    console.warn("[process-push-outbox] markBucketRows failed", error.message);
+    console.warn("[process-push-outbox] markOutboxRows failed", error.message);
   }
 }
 
