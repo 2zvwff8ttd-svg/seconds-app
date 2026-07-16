@@ -21,6 +21,7 @@ const pluginPath = resolve(pluginRoot, "CameraPreviewPlugin.swift");
  *
  * v4 (fix b5d9681): target shortSide ≈ 1080 with longSide ≤ 1920 — never pick 4K
  * max-pixel formats. Prefer H.264 over HEVC so capture stays light enough for 30fps.
+ * v5: lock activeVideoMin/MaxFrameDuration to 30fps (CFR) — VFR was recording at ~18fps under load.
  */
 const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
     private enum SecondsAppCaptureSettings {
@@ -29,6 +30,7 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
         static let targetShortSide: Int32 = 1080
         static let maxLongSide: Int32 = 1920
         static let minShortSide: Int32 = 720
+        static let targetFrameRate: Int32 = 30
     }
 
     private func formatDimensions(for format: AVCaptureDevice.Format) -> CMVideoDimensions {
@@ -45,11 +47,74 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
         return max(dimensions.width, dimensions.height)
     }
 
-    private func formatSupportsAtLeast30Fps(_ format: AVCaptureDevice.Format) -> Bool {
-        format.videoSupportedFrameRateRanges.contains { $0.maxFrameRate >= 29.0 }
+    /// True when the format can lock both min and max duration to exactly 30fps (CFR).
+    private func formatSupportsLocked30Fps(_ format: AVCaptureDevice.Format) -> Bool {
+        format.videoSupportedFrameRateRanges.contains { range in
+            range.minFrameRate <= 30.0 && range.maxFrameRate >= 29.0
+        }
     }
 
-    /// Pick ~1080p (short ≈ 1080, long ≤ 1920). Never prefer 4K / max pixels.
+    /// Call while device is already lockedForConfiguration.
+    private func applyLocked30FpsFrameRate(to device: AVCaptureDevice) {
+        guard formatSupportsLocked30Fps(device.activeFormat) else { return }
+        let duration = CMTime(value: 1, timescale: SecondsAppCaptureSettings.targetFrameRate)
+        device.activeVideoMinFrameDuration = duration
+        device.activeVideoMaxFrameDuration = duration
+    }
+
+    private func frameRate(from duration: CMTime) -> Double {
+        guard duration.value > 0 else { return 0 }
+        return Double(duration.timescale) / Double(duration.value)
+    }
+
+    private func logActiveFrameRate(context: String, device: AVCaptureDevice) {
+        let minFps = frameRate(from: device.activeVideoMinFrameDuration)
+        let maxFps = frameRate(from: device.activeVideoMaxFrameDuration)
+        print(
+            "[seconds-app-camera] \\(context) activeVideoMinFrameDuration fps=\\(String(format: "%.2f", minFps)) activeVideoMaxFrameDuration fps=\\(String(format: "%.2f", maxFps)) suppressGestures=\\(suppressRecordingGestures)"
+        )
+    }
+
+    private func lockFocusAndExposureForRecording(on device: AVCaptureDevice) {
+        if device.isFocusModeSupported(.locked) {
+            device.focusMode = .locked
+        }
+        if device.isExposureModeSupported(.locked) {
+            device.exposureMode = .locked
+        }
+    }
+
+    private func restoreContinuousFocusAndExposure() {
+        guard let device = activeCaptureDevice() else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+        } catch {
+            debugPrint(error)
+        }
+    }
+
+    /// Re-apply 30fps lock + AE/AF lock immediately before MovieFileOutput starts.
+    private func prepareDeviceForRecording() {
+        guard let device = activeCaptureDevice() else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            applyLocked30FpsFrameRate(to: device)
+            lockFocusAndExposureForRecording(on: device)
+            logActiveFrameRate(context: "before startRecording", device: device)
+        } catch {
+            debugPrint(error)
+        }
+    }
+
+    /// Pick ~1080p (short ≈ 1080, long ≤ 1920) that can lock 30fps CFR. Never prefer 4K / max pixels.
     private func pickBestCaptureFormat(from formats: [AVCaptureDevice.Format]) -> AVCaptureDevice.Format? {
         guard !formats.isEmpty else { return nil }
 
@@ -57,10 +122,10 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
         let maxLong = SecondsAppCaptureSettings.maxLongSide
         let minShort = SecondsAppCaptureSettings.minShortSide
 
-        let withinCap = formats.filter { formatLongSide(for: $0) <= maxLong }
-        let with30fps = withinCap.filter { formatSupportsAtLeast30Fps($0) }
-        let capped = with30fps.isEmpty ? withinCap : with30fps
-        let search = capped.isEmpty ? formats : capped
+        let locked30 = formats.filter { formatSupportsLocked30Fps($0) }
+        let withinCap = locked30.filter { formatLongSide(for: $0) <= maxLong }
+        // Prefer locked-30 + within 1920; fall back to any locked-30; last resort all formats.
+        let search = withinCap.isEmpty ? (locked30.isEmpty ? formats : locked30) : withinCap
 
         return search.min { lhs, rhs in
             let leftLong = formatLongSide(for: lhs)
@@ -69,6 +134,12 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
             let rightOverCap = rightLong > maxLong
             if leftOverCap != rightOverCap {
                 return !leftOverCap
+            }
+
+            let leftLocked = formatSupportsLocked30Fps(lhs)
+            let rightLocked = formatSupportsLocked30Fps(rhs)
+            if leftLocked != rightLocked {
+                return leftLocked
             }
 
             let leftShort = formatShortSide(for: lhs)
@@ -84,13 +155,6 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
             let rightInBand = rightShort >= minShort && rightShort <= targetShort
             if leftInBand != rightInBand {
                 return leftInBand
-            }
-
-            // Prefer 30fps-capable when comparing otherwise equal formats.
-            let left30 = formatSupportsAtLeast30Fps(lhs)
-            let right30 = formatSupportsAtLeast30Fps(rhs)
-            if left30 != right30 {
-                return left30
             }
 
             // Prefer wider FOV for a natural preview.
@@ -125,7 +189,7 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
         movieOutput.setOutputSettings(outputSettings, for: connection)
     }
 
-    /// seconds-app: reset zoom and pick ~1080p format (long side ≤ 1920), not max pixels.
+    /// seconds-app: reset zoom and pick ~1080p format (long side ≤ 1920), lock 30fps CFR.
     private func applyNaturalPreviewDeviceSettings(to device: AVCaptureDevice) throws {
         try device.lockForConfiguration()
         defer { device.unlockForConfiguration() }
@@ -133,9 +197,11 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
         if let bestFormat = pickBestCaptureFormat(from: device.formats) {
             device.activeFormat = bestFormat
         }
+        applyLocked30FpsFrameRate(to: device)
         if device.isFocusModeSupported(.continuousAutoFocus) {
             device.focusMode = .continuousAutoFocus
         }
+        logActiveFrameRate(context: "after applyNaturalPreviewDeviceSettings", device: device)
     }
 
     func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
@@ -156,6 +222,8 @@ const controllerPropertiesNew = `    var zoomFactor: CGFloat = 1.0
     private var startRecordingCompletion: ((Error?) -> Void)?
     private var stopRecordingCompletion: ((URL?, Error?) -> Void)?
     private var _rotationCoordinator: Any?
+    /// When true, ignore tap-focus / pinch / setZoom (Phase B during MovieFileOutput recording).
+    private var suppressRecordingGestures = false
 }`;
 
 const configurePhotoOld = `            if captureSession.canAddOutput(self.photoOutput!) { captureSession.addOutput(self.photoOutput!) }
@@ -221,6 +289,8 @@ const captureVideoNew = `    func startRecording(completion: @escaping (Error?) 
         try? FileManager.default.removeItem(at: fileUrl)
 
         updateVideoOrientation()
+        prepareDeviceForRecording()
+        suppressRecordingGestures = true
 
         self.startRecordingCompletion = completion
         movieOutput.startRecording(to: fileUrl, recordingDelegate: self)
@@ -259,6 +329,11 @@ const fileOutputDelegateNew = `extension CameraController: AVCaptureFileOutputRe
     }
 
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        suppressRecordingGestures = false
+        restoreContinuousFocusAndExposure()
+        if let device = activeCaptureDevice() {
+            logActiveFrameRate(context: "after stopRecording", device: device)
+        }
         if let completion = stopRecordingCompletion {
             stopRecordingCompletion = nil
             if let error = error {
@@ -1316,23 +1391,27 @@ ${QUALITY_V3_SETTINGS_AND_PICKERS}
 
     func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {`;
 
-/** v4 block that preserves defaultWideRawZoom from the lens/focus patches. */
+/** v4/v5 block that preserves defaultWideRawZoom from the lens/focus patches. */
 const QUALITY_CAPTURE_EXTENSION_WITH_WIDE_ZOOM = QUALITY_CAPTURE_EXTENSION.replace(
   `        device.videoZoomFactor = 1.0
         if let bestFormat = pickBestCaptureFormat(from: device.formats) {
             device.activeFormat = bestFormat
         }
+        applyLocked30FpsFrameRate(to: device)
         if device.isFocusModeSupported(.continuousAutoFocus) {
             device.focusMode = .continuousAutoFocus
-        }`,
+        }
+        logActiveFrameRate(context: "after applyNaturalPreviewDeviceSettings", device: device)`,
   `        if let bestFormat = pickBestCaptureFormat(from: device.formats) {
             device.activeFormat = bestFormat
         }
+        applyLocked30FpsFrameRate(to: device)
         device.videoZoomFactor = defaultWideRawZoom(for: device)
         zoomFactor = device.videoZoomFactor
         if device.isFocusModeSupported(.continuousAutoFocus) {
             device.focusMode = .continuousAutoFocus
-        }`,
+        }
+        logActiveFrameRate(context: "after applyNaturalPreviewDeviceSettings", device: device)`,
 );
 
 await patchFile(
@@ -1587,3 +1666,196 @@ while (controllerDedup.split(duplicatePublicGravityOld).length > 2) {
 if (dedupChanged) {
   await writeFile(controllerPath, controllerDedup, "utf8");
 }
+
+// ── Phase A/B v5: lock 30fps CFR + recording AE/AF lock + suppress gestures ─
+
+let controllerV5 = await readFile(controllerPath, "utf8");
+
+if (!controllerV5.includes("suppressRecordingGestures")) {
+  if (controllerV5.includes("private var _rotationCoordinator: Any?\n}")) {
+    controllerV5 = controllerV5.replace(
+      "private var _rotationCoordinator: Any?\n}",
+      `private var _rotationCoordinator: Any?
+    /// When true, ignore tap-focus / pinch / setZoom (Phase B during MovieFileOutput recording).
+    private var suppressRecordingGestures = false
+}`,
+    );
+    console.log(
+      "[patch-camera-preview-ios] CameraController.swift (suppressRecordingGestures property)",
+    );
+  }
+}
+
+if (!controllerV5.includes("applyLocked30FpsFrameRate")) {
+  const v4QualityStart = "extension CameraController {\n    private enum SecondsAppCaptureSettings {";
+  const prepareAnchor = "\n    func prepare(cameraPosition: String, disableAudio: Bool, completionHandler: @escaping (Error?) -> Void) {";
+  const startIdx = controllerV5.indexOf(v4QualityStart);
+  const prepareIdx = controllerV5.indexOf(prepareAnchor, startIdx);
+  if (startIdx >= 0 && prepareIdx > startIdx) {
+    controllerV5 =
+      controllerV5.slice(0, startIdx) +
+      QUALITY_CAPTURE_EXTENSION_WITH_WIDE_ZOOM +
+      controllerV5.slice(prepareIdx + prepareAnchor.length);
+    // QUALITY_CAPTURE_EXTENSION_WITH_WIDE_ZOOM already ends with prepare(...) {
+    // but we sliced after prepareAnchor which included the prepare signature — fix by
+    // not double-including. WITH_WIDE_ZOOM ends with prepare signature, so slice should
+    // start AFTER the prepare opening — we already consumed prepareAnchor from old file
+    // and WITH_WIDE_ZOOM includes prepare opening. Good.
+    console.log(
+      "[patch-camera-preview-ios] CameraController.swift (quality v4→v5: 30fps lock + AE/AF helpers)",
+    );
+  } else {
+    console.warn(
+      "[patch-camera-preview-ios] skip v5 quality: SecondsAppCaptureSettings / prepare anchor not found",
+    );
+  }
+}
+
+const startRecordingV4Old = `        updateVideoOrientation()
+
+        self.startRecordingCompletion = completion
+        movieOutput.startRecording(to: fileUrl, recordingDelegate: self)`;
+
+const startRecordingV5New = `        updateVideoOrientation()
+        prepareDeviceForRecording()
+        suppressRecordingGestures = true
+
+        self.startRecordingCompletion = completion
+        movieOutput.startRecording(to: fileUrl, recordingDelegate: self)`;
+
+if (
+  controllerV5.includes(startRecordingV4Old) &&
+  !controllerV5.includes("suppressRecordingGestures = true")
+) {
+  controllerV5 = controllerV5.replace(startRecordingV4Old, startRecordingV5New);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (startRecording prepareDeviceForRecording)",
+  );
+} else if (controllerV5.includes("suppressRecordingGestures = true")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (startRecording prepareDeviceForRecording) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip startRecording v5: pattern not found",
+  );
+}
+
+const finishRecordingV4Old = `    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        if let completion = stopRecordingCompletion {`;
+
+const finishRecordingV5New = `    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        suppressRecordingGestures = false
+        restoreContinuousFocusAndExposure()
+        if let device = activeCaptureDevice() {
+            logActiveFrameRate(context: "after stopRecording", device: device)
+        }
+        if let completion = stopRecordingCompletion {`;
+
+if (
+  controllerV5.includes(finishRecordingV4Old) &&
+  !controllerV5.includes(
+    "suppressRecordingGestures = false\n        restoreContinuousFocusAndExposure()",
+  )
+) {
+  controllerV5 = controllerV5.replace(finishRecordingV4Old, finishRecordingV5New);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (stopRecording restore continuous AE/AF)",
+  );
+} else if (
+  controllerV5.includes(
+    "suppressRecordingGestures = false\n        restoreContinuousFocusAndExposure()",
+  )
+) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (stopRecording restore continuous AE/AF) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip stopRecording v5: pattern not found",
+  );
+}
+
+const handlePinchV4Old = `    @objc
+    private func handlePinch(_ pinch: UIPinchGestureRecognizer) {
+        guard let device = self.currentCameraPosition == .rear ? rearCamera : frontCamera else { return }`;
+
+const handlePinchV5New = `    @objc
+    private func handlePinch(_ pinch: UIPinchGestureRecognizer) {
+        guard !suppressRecordingGestures else { return }
+        guard let device = self.currentCameraPosition == .rear ? rearCamera : frontCamera else { return }`;
+
+if (
+  controllerV5.includes(handlePinchV4Old) &&
+  !controllerV5.includes("guard !suppressRecordingGestures else { return }\n        guard let device = self.currentCameraPosition")
+) {
+  controllerV5 = controllerV5.replace(handlePinchV4Old, handlePinchV5New);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (pinch disabled while recording)",
+  );
+}
+
+const setFocusV4Old = `  func setFocusAtNormalizedPoint(x: CGFloat, y: CGFloat, in previewView: UIView) {
+    guard let device = activeCaptureDevice(), let previewLayer = previewLayer else { return }`;
+
+const setFocusV5New = `  func setFocusAtNormalizedPoint(x: CGFloat, y: CGFloat, in previewView: UIView) {
+    guard !suppressRecordingGestures else { return }
+    guard let device = activeCaptureDevice(), let previewLayer = previewLayer else { return }`;
+
+if (
+  controllerV5.includes(setFocusV4Old) &&
+  !controllerV5.includes(
+    "func setFocusAtNormalizedPoint(x: CGFloat, y: CGFloat, in previewView: UIView) {\n    guard !suppressRecordingGestures else { return }",
+  )
+) {
+  controllerV5 = controllerV5.replace(setFocusV4Old, setFocusV5New);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (tap focus disabled while recording)",
+  );
+}
+
+const setZoomV4Old = `  /// \`factor\` is display zoom (0.5× = ultra-wide, 1× = wide).
+  func setZoomFactor(_ factor: CGFloat) throws {
+    guard let device = activeCaptureDevice() else {
+      throw CameraControllerError.captureSessionIsMissing
+    }`;
+
+const setZoomV5New = `  /// \`factor\` is display zoom (0.5× = ultra-wide, 1× = wide).
+  func setZoomFactor(_ factor: CGFloat) throws {
+    guard !suppressRecordingGestures else {
+      throw CameraControllerError.invalidOperation
+    }
+    guard let device = activeCaptureDevice() else {
+      throw CameraControllerError.captureSessionIsMissing
+    }`;
+
+if (
+  controllerV5.includes(setZoomV4Old) &&
+  !controllerV5.includes("guard !suppressRecordingGestures else {\n      throw CameraControllerError.invalidOperation")
+) {
+  controllerV5 = controllerV5.replace(setZoomV4Old, setZoomV5New);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (setZoom disabled while recording)",
+  );
+}
+
+const diagNeedle =
+  "        activeFormat: \\(dims.width)x\\(dims.height) FOV=\\(device.activeFormat.videoFieldOfView)\n      \"\"\"\n    )\n  }";
+const diagReplacement =
+  "        activeFormat: \\(dims.width)x\\(dims.height) FOV=\\(device.activeFormat.videoFieldOfView)\n        activeVideoMinFrameDuration fps: \\(String(format: \"%.2f\", frameRate(from: device.activeVideoMinFrameDuration)))\n        activeVideoMaxFrameDuration fps: \\(String(format: \"%.2f\", frameRate(from: device.activeVideoMaxFrameDuration)))\n      \"\"\"\n    )\n  }";
+
+if (!controllerV5.includes("activeVideoMinFrameDuration fps:")) {
+  if (controllerV5.includes(diagNeedle)) {
+    controllerV5 = controllerV5.replace(diagNeedle, diagReplacement);
+    console.log(
+      "[patch-camera-preview-ios] CameraController.swift (diagnostics activeVideo frame duration)",
+    );
+  } else {
+    console.warn(
+      "[patch-camera-preview-ios] skip diagnostics fps: logRearCameraDiagnostics pattern not matched",
+    );
+  }
+}
+
+await writeFile(controllerPath, controllerV5, "utf8");
+

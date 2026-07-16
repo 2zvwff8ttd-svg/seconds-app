@@ -501,7 +501,7 @@ export function NativeCameraRecorder({
       <RecordFocusTapLayer
         shape={displayMaskShape}
         cameraReady={cameraReady}
-        disabled={disabled || cameraStarting}
+        disabled={disabled || cameraStarting || isRecording}
       />
 
       <RecordStageControls

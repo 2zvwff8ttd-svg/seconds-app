@@ -297,11 +297,14 @@ extension CameraController {
         currentVideoZoomFactor_raw: \\(device.videoZoomFactor)
         currentDisplayZoom: \\(String(format: "%.2f", display))x
         activeFormat: \\(dims.width)x\\(dims.height) FOV=\\(device.activeFormat.videoFieldOfView)
+        activeVideoMinFrameDuration fps: \\(String(format: "%.2f", frameRate(from: device.activeVideoMinFrameDuration)))
+        activeVideoMaxFrameDuration fps: \\(String(format: "%.2f", frameRate(from: device.activeVideoMaxFrameDuration)))
       """
     )
   }
 
   func setFocusAtNormalizedPoint(x: CGFloat, y: CGFloat, in previewView: UIView) {
+    guard !suppressRecordingGestures else { return }
     guard let device = activeCaptureDevice(), let previewLayer = previewLayer else { return }
 
     let nx = min(1, max(0, x))
@@ -396,6 +399,9 @@ extension CameraController {
 
   /// \`factor\` is display zoom (0.5× = ultra-wide, 1× = wide).
   func setZoomFactor(_ factor: CGFloat) throws {
+    guard !suppressRecordingGestures else {
+      throw CameraControllerError.invalidOperation
+    }
     guard let device = activeCaptureDevice() else {
       throw CameraControllerError.captureSessionIsMissing
     }

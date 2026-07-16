@@ -138,6 +138,51 @@ const checks = [
     fail: "widest-FOV-only format selection still present",
   },
   {
+    label: "locks capture to 30fps CFR",
+    ok:
+      controller.includes("applyLocked30FpsFrameRate") &&
+      controller.includes("activeVideoMinFrameDuration") &&
+      controller.includes("activeVideoMaxFrameDuration") &&
+      controller.includes("targetFrameRate: Int32 = 30"),
+    fail: "30fps CFR lock (applyLocked30FpsFrameRate / activeVideoMin/MaxFrameDuration) missing",
+  },
+  {
+    label: "pickBestCaptureFormat prefers locked-30 formats",
+    ok: controller.includes("formatSupportsLocked30Fps"),
+    fail: "formatSupportsLocked30Fps missing from format picker",
+  },
+  {
+    label: "startRecording prepares device (fps + AE/AF lock)",
+    ok:
+      controller.includes("prepareDeviceForRecording()") &&
+      controller.includes("suppressRecordingGestures = true"),
+    fail: "startRecording must call prepareDeviceForRecording and set suppressRecordingGestures",
+  },
+  {
+    label: "stopRecording restores continuous AE/AF",
+    ok: controller.includes("restoreContinuousFocusAndExposure()"),
+    fail: "restoreContinuousFocusAndExposure missing after stopRecording",
+  },
+  {
+    label: "pinch disabled while recording",
+    ok: /func handlePinch[\s\S]*?guard !suppressRecordingGestures else \{ return \}/.test(
+      controller,
+    ),
+    fail: "handlePinch must early-return when suppressRecordingGestures",
+  },
+  {
+    label: "tap focus disabled while recording",
+    ok: /func setFocusAtNormalizedPoint[\s\S]*?guard !suppressRecordingGestures else \{ return \}/.test(
+      controller,
+    ),
+    fail: "setFocusAtNormalizedPoint must early-return when suppressRecordingGestures",
+  },
+  {
+    label: "diagnostics log activeVideo frame duration fps",
+    ok: controller.includes("activeVideoMinFrameDuration fps:"),
+    fail: "logRearCameraDiagnostics must print activeVideoMin/MaxFrameDuration fps",
+  },
+  {
     label: "builtInWideAngleCamera default device",
     ok:
       controller.includes(
