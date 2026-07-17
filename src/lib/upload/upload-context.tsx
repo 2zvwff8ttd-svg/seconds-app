@@ -3,6 +3,7 @@
 import { bonusDayMessageFromStreak, fetchCurrentStreak } from "@/lib/posting/post-streak";
 import { DAILY_POST_LIMIT_MESSAGE } from "@/lib/posting/daily-post-limit";
 import { postVideo, type PostClipInput } from "@/lib/videos/post";
+import { enqueueSaveCompose } from "@/lib/video/save-compose-worker";
 import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
 import type { PostUploadStage, VideoVisibility } from "@/types/video";
 import {
@@ -97,6 +98,12 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       if (input.onSuccess) {
         await input.onSuccess();
       }
+
+      // Background: circle+starfield save MP4 (does not block post success UI).
+      enqueueSaveCompose({
+        videoId: result.videoId,
+        videoUrl: result.videoUrl,
+      });
 
       setSuccess({
         publishAt: result.publishAt,

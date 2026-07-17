@@ -21,4 +21,6 @@ export type FeedVideo = {
   publishAt?: string;
   videoStatus?: "pending" | "published";
   displayMaskShape?: VideoDisplayMaskShape;
+  /** Circle+starfield MP4 for save/share; fall back to videoUrl when absent. */
+  saveVideoUrl?: string;
 };

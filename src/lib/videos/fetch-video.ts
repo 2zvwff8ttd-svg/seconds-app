@@ -1,6 +1,7 @@
 import {
   BASE_VIDEO_SELECT,
   buildVideoSelect,
+  hasExtendedVideoColumns,
   probeVideoSchema,
 } from "@/lib/supabase/video-schema";
 import { createClient } from "@/lib/supabase/client";
@@ -10,14 +11,9 @@ import type { FeedVideo } from "@/types/feed";
 export async function fetchVideoById(videoId: string): Promise<FeedVideo | null> {
   const supabase = createClient();
   const caps = await probeVideoSchema(supabase);
-  const select =
-    caps.hasStatus ||
-    caps.hasPublishAt ||
-    caps.hasPublishedAt ||
-    caps.hasBgmUrl ||
-    caps.hasClipThumbnailUrls
-      ? buildVideoSelect(caps)
-      : BASE_VIDEO_SELECT;
+  const select = hasExtendedVideoColumns(caps)
+    ? buildVideoSelect(caps)
+    : BASE_VIDEO_SELECT;
 
   const { data, error } = await supabase
     .from("videos")

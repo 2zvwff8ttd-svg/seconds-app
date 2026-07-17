@@ -21,6 +21,7 @@ import {
   releaseVideoUrl,
 } from "@/lib/videos/preload-video";
 import { prefetchVideoForSaveShare } from "@/lib/video/video-file-cache";
+import { resolveSaveShareVideoUrl } from "@/lib/video/save-compose-worker";
 import type { FeedVideo } from "@/types/feed";
 import type { WatchReport } from "@/types/recommendation";
 import { UserIdentity } from "@/components/profile/UserIdentity";
@@ -101,6 +102,9 @@ export function FullscreenPlayer({
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(() =>
     normalizeMediaPublicUrl(video.videoUrl),
   );
+  const [saveShareUrl, setSaveShareUrl] = useState<string>(() =>
+    resolveSaveShareVideoUrl(video.saveVideoUrl, video.videoUrl),
+  );
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
@@ -141,12 +145,18 @@ export function FullscreenPlayer({
 
     const fromProps = normalizeMediaPublicUrl(video.videoUrl);
     setPlaybackUrl(fromProps);
+    setSaveShareUrl(
+      resolveSaveShareVideoUrl(video.saveVideoUrl, video.videoUrl),
+    );
 
     void fetchVideoById(video.id)
       .then((row) => {
         if (cancelled || !row) return;
         const fresh = normalizeMediaPublicUrl(row.videoUrl);
         if (fresh) setPlaybackUrl(fresh);
+        setSaveShareUrl(
+          resolveSaveShareVideoUrl(row.saveVideoUrl, row.videoUrl ?? fresh),
+        );
       })
       .catch(() => {
         /* keep feed URL */
@@ -155,7 +165,7 @@ export function FullscreenPlayer({
     return () => {
       cancelled = true;
     };
-  }, [video.id, video.videoUrl]);
+  }, [video.id, video.videoUrl, video.saveVideoUrl]);
 
   const releaseSlots = useCallback(() => {
     releaseVideoElement(slotARef.current);
@@ -173,8 +183,8 @@ export function FullscreenPlayer({
   }, [video.id, playbackUrl]);
 
   useEffect(() => {
-    prefetchVideoForSaveShare(playbackUrl);
-  }, [playbackUrl]);
+    prefetchVideoForSaveShare(saveShareUrl || playbackUrl);
+  }, [saveShareUrl, playbackUrl]);
 
   // Belt-and-suspenders: whenever this player instance unmounts, tear down both
   // <video> decoders so nothing lingers between open/close cycles (iPhone 13).
@@ -538,7 +548,7 @@ export function FullscreenPlayer({
             </div>
             {playbackUrl && (
               <VideoSaveShareButtons
-                videoUrl={playbackUrl}
+                videoUrl={saveShareUrl || playbackUrl}
                 title={video.title}
                 disabled={isExiting}
                 layout="row"

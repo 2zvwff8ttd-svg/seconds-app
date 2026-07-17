@@ -18,6 +18,7 @@ export type VideoRow = {
   view_count: number;
   created_at: string;
   display_mask_shape?: string | null;
+  save_video_url?: string | null;
   profiles: {
     username: string;
     display_name?: string | null;

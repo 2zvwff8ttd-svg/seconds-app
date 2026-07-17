@@ -5,6 +5,7 @@ import {
   BASE_VIDEO_SELECT,
   buildVideoSelect,
   clearVideoSchemaCache,
+  hasExtendedVideoColumns,
   isSchemaMismatchError,
   probeVideoSchema,
 } from "@/lib/supabase/video-schema";
@@ -93,12 +94,7 @@ export async function fetchHomeFeed(): Promise<{
   const supabase = createClient();
   const countryCode = await detectCountryCode();
   const caps = await probeVideoSchema(supabase);
-  const select =
-    caps.hasStatus ||
-    caps.hasPublishAt ||
-    caps.hasPublishedAt ||
-    caps.hasBgmUrl ||
-    caps.hasClipThumbnailUrls
+  const select = hasExtendedVideoColumns(caps)
     ? buildVideoSelect(caps)
     : BASE_VIDEO_SELECT;
 
@@ -126,14 +122,9 @@ export async function fetchHomeFeed(): Promise<{
     if (isSchemaMismatchError(error.message)) {
       clearVideoSchemaCache();
       const retryCaps = await probeVideoSchema(supabase, { force: true });
-      const retrySelect =
-        retryCaps.hasStatus ||
-        retryCaps.hasPublishAt ||
-        retryCaps.hasPublishedAt ||
-        retryCaps.hasBgmUrl ||
-        retryCaps.hasClipThumbnailUrls
-          ? buildVideoSelect(retryCaps)
-          : BASE_VIDEO_SELECT;
+      const retrySelect = hasExtendedVideoColumns(retryCaps)
+        ? buildVideoSelect(retryCaps)
+        : BASE_VIDEO_SELECT;
       let retryQuery = supabase.from("videos").select(retrySelect);
       retryQuery = applyPublishedFilter(retryQuery, retryCaps);
       if (retryCaps.hasPublishedAt) {

@@ -7,6 +7,7 @@ export type VideoSchemaCapabilities = {
   hasBgmUrl: boolean;
   hasClipThumbnailUrls: boolean;
   hasDisplayMaskShape: boolean;
+  hasSaveVideoUrl: boolean;
   hasInsertRpc: boolean;
 };
 
@@ -82,6 +83,7 @@ export async function probeVideoSchema(
     hasBgmUrl,
     hasClipThumbnailUrls,
     hasDisplayMaskShape,
+    hasSaveVideoUrl,
     hasInsertRpc,
   ] = await Promise.all([
     probeColumn(supabase, "status"),
@@ -90,6 +92,7 @@ export async function probeVideoSchema(
     probeColumn(supabase, "bgm_url"),
     probeColumn(supabase, "clip_thumbnail_urls"),
     probeColumn(supabase, "display_mask_shape"),
+    probeColumn(supabase, "save_video_url"),
     probeInsertRpc(supabase),
   ]);
 
@@ -100,6 +103,7 @@ export async function probeVideoSchema(
     hasBgmUrl,
     hasClipThumbnailUrls,
     hasDisplayMaskShape,
+    hasSaveVideoUrl,
     hasInsertRpc,
   };
 
@@ -153,10 +157,24 @@ export function buildVideoSelect(caps: VideoSchemaCapabilities): string {
   if (caps.hasBgmUrl) extras.push("bgm_url");
   if (caps.hasClipThumbnailUrls) extras.push("clip_thumbnail_urls");
   if (caps.hasDisplayMaskShape) extras.push("display_mask_shape");
+  if (caps.hasSaveVideoUrl) extras.push("save_video_url");
   if (extras.length === 0) return BASE_VIDEO_SELECT;
   return BASE_VIDEO_SELECT.replace(
     "created_at,",
     `created_at, ${extras.join(", ")},`,
+  );
+}
+
+/** True when any optional video column should be selected via buildVideoSelect. */
+export function hasExtendedVideoColumns(caps: VideoSchemaCapabilities): boolean {
+  return (
+    caps.hasStatus ||
+    caps.hasPublishAt ||
+    caps.hasPublishedAt ||
+    caps.hasBgmUrl ||
+    caps.hasClipThumbnailUrls ||
+    caps.hasDisplayMaskShape ||
+    caps.hasSaveVideoUrl
   );
 }
 

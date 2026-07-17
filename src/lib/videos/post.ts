@@ -66,6 +66,8 @@ export type PostVideoResult = {
   publishAt: string;
   /** 投稿直後に更新された連続投稿日数（ボーナス表示用） */
   currentStreak: number;
+  /** Square playback URL — used to enqueue background save-compose. */
+  videoUrl: string;
 };
 
 const DB_FIX_HINT =
@@ -644,5 +646,6 @@ export async function postVideo(input: PostVideoInput): Promise<PostVideoResult>
     videoId: inserted.id,
     publishAt: inserted.publishAt,
     currentStreak,
+    videoUrl,
   };
 }

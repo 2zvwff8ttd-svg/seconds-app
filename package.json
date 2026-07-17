@@ -22,6 +22,7 @@
     "audit:video-retention": "node scripts/audit-video-retention-expiry.mjs",
     "icons:generate": "node scripts/generate-pwa-icons.mjs",
     "icons:ios": "node scripts/sync-ios-app-icon.mjs",
+    "assets:save-mask": "node scripts/generate-save-mask-assets.mjs",
     "cap:sync": "npx cap sync android && node scripts/fix-android-strings.mjs && node scripts/patch-camera-preview-android.mjs",
     "cap:clean": "node scripts/clean-android-build.mjs",
     "cap:open": "npx cap open android",

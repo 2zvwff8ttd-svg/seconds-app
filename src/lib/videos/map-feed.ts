@@ -70,5 +70,6 @@ export function videoRowToFeedVideo(
     publishAt: row.publish_at ?? undefined,
     videoStatus: row.status ?? "published",
     displayMaskShape: parseVideoDisplayMaskShape(row.display_mask_shape),
+    saveVideoUrl: normalizeMediaPublicUrl(row.save_video_url) ?? undefined,
   };
 }
