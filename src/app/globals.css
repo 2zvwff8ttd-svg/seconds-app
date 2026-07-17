@@ -538,6 +538,30 @@ body {
   animation-delay: var(--delay-x, 0s), var(--delay-y, 0s);
 }
 
+.bubble-drag-layer {
+  transform: translate3d(0, 0, 0);
+}
+
+.bubble-drag-layer--moving {
+  will-change: transform;
+  z-index: 20 !important;
+}
+
+.bubble-drag-target {
+  touch-action: none;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.bubble-drag-target:active {
+  cursor: grabbing;
+}
+
+.bubble-float--paused {
+  animation-play-state: paused;
+}
+
 .bubble-float--spawn {
   animation:
     bubble-float-x var(--duration-x, 5s) ease-in-out infinite,

@@ -328,6 +328,7 @@ export function BubbleField({
                   key={`${bubbleSpawnGeneration}-${index}-${video.id}`}
                   video={toBubblePreview(video)}
                   placement={placement}
+                  bounds={size}
                   floatStyle={floatStyle}
                   isHidden={hiddenBubbleId === video.id}
                   spawnAnimate={bubbleSpawnGeneration > 0}
