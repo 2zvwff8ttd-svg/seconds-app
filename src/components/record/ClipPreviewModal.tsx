@@ -2,9 +2,8 @@
 
 import { DisplayMaskMedia } from "@/components/video/DisplayMaskMedia";
 import { DEFAULT_VIDEO_DISPLAY_MASK } from "@/lib/video/display-mask";
-import { formatClipDurationSeconds } from "@/lib/recording/format-clip-duration";
 import type { RecordedClip } from "@/types/recording";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type ClipPreviewModalProps = {
@@ -27,6 +26,18 @@ export function ClipPreviewModal({
 }: ClipPreviewModalProps) {
   const [mounted, setMounted] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const togglePlayback = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused || video.ended) {
+      void video.play().catch(() => setIsPlaying(false));
+    } else {
+      video.pause();
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -41,6 +52,7 @@ export function ClipPreviewModal({
 
   useEffect(() => {
     setConfirmDelete(false);
+    setIsPlaying(false);
   }, [clip.id]);
 
   useEffect(() => {
@@ -71,9 +83,6 @@ export function ClipPreviewModal({
           <p className="text-sm font-semibold text-white">
             クリップ {index + 1}
           </p>
-          <p className="text-[10px] text-white/60">
-            {formatClipDurationSeconds(clip.durationSeconds)}秒
-          </p>
         </div>
         <button
           type="button"
@@ -97,48 +106,68 @@ export function ClipPreviewModal({
       <div className="relative z-0 flex min-h-0 flex-1 items-center justify-center px-2 pb-2">
         <DisplayMaskMedia
           shape={DEFAULT_VIDEO_DISPLAY_MASK}
-          className="clip-preview-mask-stage"
+          className="clip-preview-mask-stage clip-preview-mask-stage--raised"
         >
           <video
+            ref={videoRef}
             key={clip.id}
             src={clip.previewUrl}
-            controls
             playsInline
             autoPlay
+            onClick={togglePlayback}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
           />
+          <button
+            type="button"
+            onClick={togglePlayback}
+            className="clip-preview-play-toggle"
+            aria-label={isPlaying ? "停止" : "再生"}
+          >
+            {isPlaying ? (
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden>
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
+          </button>
         </DisplayMaskMedia>
       </div>
 
       {onRemove && (
         <div className="relative z-[1] shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
           {confirmDelete ? (
-          <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="text-center text-sm font-medium text-white">
-              このクリップを削除しますか？
-            </p>
-            <p className="text-center text-[11px] text-white/55">
-              秒数は戻ります。投稿には残りクリップだけが使われます。
-            </p>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(false)}
-                className="flex-1 rounded-xl bg-white py-3.5 text-sm font-semibold text-black touch-manipulation"
-              >
-                やめる
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  onRemove?.(clip.id);
-                  onClose();
-                }}
-                className="flex-1 rounded-xl border border-red-400/50 bg-transparent py-3.5 text-sm font-medium text-red-300 touch-manipulation"
-              >
-                削除する
-              </button>
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-center text-sm font-medium text-white">
+                このクリップを削除しますか？
+              </p>
+              <p className="text-center text-[11px] text-white/55">
+                秒数は戻ります。投稿には残りクリップだけが使われます。
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  className="flex-1 rounded-xl bg-white py-3.5 text-sm font-semibold text-black touch-manipulation"
+                >
+                  やめる
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onRemove?.(clip.id);
+                    onClose();
+                  }}
+                  className="flex-1 rounded-xl border border-red-400/50 bg-transparent py-3.5 text-sm font-medium text-red-300 touch-manipulation"
+                >
+                  削除する
+                </button>
+              </div>
             </div>
-          </div>
           ) : (
             <button
               type="button"
