@@ -94,7 +94,7 @@ export function ClipPreviewModal({
         </button>
       </div>
 
-      <div className="relative z-0 flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
+      <div className="relative z-0 flex min-h-0 flex-1 items-center justify-center px-2 pb-2">
         <DisplayMaskMedia
           shape={DEFAULT_VIDEO_DISPLAY_MASK}
           className="clip-preview-mask-stage"
@@ -109,8 +109,9 @@ export function ClipPreviewModal({
         </DisplayMaskMedia>
       </div>
 
-      <div className="relative z-[1] shrink-0 space-y-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
-        {confirmDelete ? (
+      {onRemove && (
+        <div className="relative z-[1] shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+          {confirmDelete ? (
           <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="text-center text-sm font-medium text-white">
               このクリップを削除しますか？
@@ -138,27 +139,17 @@ export function ClipPreviewModal({
               </button>
             </div>
           </div>
-        ) : (
-          <>
+          ) : (
             <button
               type="button"
-              onClick={onClose}
-              className="w-full rounded-xl bg-white py-3.5 text-sm font-semibold text-black touch-manipulation"
+              onClick={() => setConfirmDelete(true)}
+              className="w-full rounded-xl border border-red-400/35 bg-red-500/10 py-3 text-sm font-medium text-red-200 touch-manipulation"
             >
-              閉じる
+              このクリップを削除…
             </button>
-            {onRemove && (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(true)}
-                className="w-full rounded-xl border border-white/20 bg-transparent py-3 text-sm font-medium text-white/70 touch-manipulation"
-              >
-                このクリップを削除…
-              </button>
-            )}
-          </>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>,
     document.body,
   );
