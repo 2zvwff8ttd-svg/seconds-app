@@ -1,9 +1,9 @@
 "use client";
 
 import {
+  DEFAULT_VIDEO_DISPLAY_MASK,
   computeRecordHoleRect,
   readRecordViewportMetrics,
-  type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
 import {
   setNativeFocusPoint,
@@ -21,7 +21,6 @@ type FocusRing = {
 };
 
 type RecordFocusTapLayerProps = {
-  shape: VideoDisplayMaskShape;
   cameraReady: boolean;
   disabled?: boolean;
 };
@@ -39,7 +38,6 @@ function pointInHole(clientX: number, clientY: number, hole: HoleRect): boolean 
  * Tap-to-focus via document capture (no overlay — does not block native pinch on WebView).
  */
 export function RecordFocusTapLayer({
-  shape,
   cameraReady,
   disabled = false,
 }: RecordFocusTapLayerProps) {
@@ -66,7 +64,7 @@ export function RecordFocusTapLayer({
         setHole(null);
         return;
       }
-      const rect = computeRecordHoleRect(shape, viewport);
+      const rect = computeRecordHoleRect(DEFAULT_VIDEO_DISPLAY_MASK, viewport);
       setHole({
         x: rect.x + viewport.offsetX,
         y: rect.y + viewport.offsetY,
@@ -87,7 +85,7 @@ export function RecordFocusTapLayer({
       window.visualViewport?.removeEventListener("scroll", measure);
       window.removeEventListener("orientationchange", measure);
     };
-  }, [shape]);
+  }, []);
 
   const clearRingTimer = useCallback(() => {
     if (hideRingTimerRef.current !== null) {

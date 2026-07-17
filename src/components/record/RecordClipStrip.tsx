@@ -8,7 +8,7 @@ import { captureVideoFrameBlob } from "@/lib/video/frame-capture";
 import type { RecordedClip } from "@/types/recording";
 import { useEffect, useState } from "react";
 
-type ClipStripProps = {
+type RecordClipStripProps = {
   clips: RecordedClip[];
   onRemove: (id: string) => void;
   disabled?: boolean;
@@ -48,13 +48,13 @@ function ClipThumbnail({ clip }: { clip: RecordedClip }) {
     return (
       <DisplayMaskMedia
         shape={DEFAULT_VIDEO_DISPLAY_MASK}
-        className="clip-strip-thumb"
+        className="record-clip-strip__thumb"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={thumbUrl}
           alt=""
-          className="clip-strip-thumb__media"
+          className="record-clip-strip__thumb-media"
           draggable={false}
         />
       </DisplayMaskMedia>
@@ -65,11 +65,9 @@ function ClipThumbnail({ clip }: { clip: RecordedClip }) {
     return (
       <DisplayMaskMedia
         shape={DEFAULT_VIDEO_DISPLAY_MASK}
-        className="clip-strip-thumb flex flex-col items-center justify-center bg-surface-elevated px-1 text-center text-[8px] leading-tight text-muted"
+        className="record-clip-strip__thumb record-clip-strip__thumb--empty"
       >
-        サムネ
-        <br />
-        なし
+        <span className="text-[8px] leading-tight text-white/50">…</span>
       </DisplayMaskMedia>
     );
   }
@@ -77,15 +75,22 @@ function ClipThumbnail({ clip }: { clip: RecordedClip }) {
   return (
     <DisplayMaskMedia
       shape={DEFAULT_VIDEO_DISPLAY_MASK}
-      className="clip-strip-thumb flex items-center justify-center bg-surface-elevated"
+      className="record-clip-strip__thumb record-clip-strip__thumb--empty"
     >
-      <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/40 border-t-transparent" />
     </DisplayMaskMedia>
   );
 }
 
-/** Post-details clip strip — tap to preview/delete (no direct ✕). */
-export function ClipStrip({ clips, onRemove, disabled }: ClipStripProps) {
+/**
+ * Dock-level clip strip (replaces shape picker). Tap → preview → confirm delete.
+ * No direct ✕ on thumbnails.
+ */
+export function RecordClipStrip({
+  clips,
+  onRemove,
+  disabled = false,
+}: RecordClipStripProps) {
   const [previewClipId, setPreviewClipId] = useState<string | null>(null);
   const previewClip = clips.find((clip) => clip.id === previewClipId) ?? null;
   const previewIndex = previewClip
@@ -96,27 +101,20 @@ export function ClipStrip({ clips, onRemove, disabled }: ClipStripProps) {
 
   return (
     <>
-      <div className="clip-strip mt-4">
-        <h3 className="mb-2 text-xs font-semibold text-foreground">
-          クリップ ({clips.length})
-        </h3>
-        <p className="mb-2 text-[10px] text-muted">タップで再生・確認・削除</p>
-        <ul className="flex gap-2 overflow-x-auto pb-1">
+      <div className="record-clip-strip" role="list" aria-label="撮ったクリップ">
+        <ul className="record-clip-strip__list">
           {clips.map((clip, index) => (
-            <li
-              key={clip.id}
-              className="relative shrink-0 overflow-visible border-0 bg-transparent"
-            >
+            <li key={clip.id} className="record-clip-strip__item" role="listitem">
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => setPreviewClipId(clip.id)}
-                className="relative block disabled:opacity-40"
-                aria-label={`クリップ ${index + 1} を再生`}
+                className="record-clip-strip__button"
+                aria-label={`クリップ ${index + 1} を再生・確認`}
               >
                 <ClipThumbnail clip={clip} />
-                <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[9px] text-white">
-                  {index + 1} · {formatClipDurationSeconds(clip.durationSeconds)}s
+                <span className="record-clip-strip__badge">
+                  {index + 1}·{formatClipDurationSeconds(clip.durationSeconds)}s
                 </span>
               </button>
             </li>

@@ -1,9 +1,9 @@
 "use client";
 
-import { RecordShapePicker } from "@/components/record/RecordShapePicker";
+import { RecordClipStrip } from "@/components/record/RecordClipStrip";
 import { RecordStagePortal } from "@/components/record/RecordStagePortal";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
-import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
+import type { RecordedClip } from "@/types/recording";
 
 type RecordStageControlsProps = {
   assignedSeconds: number | null;
@@ -16,19 +16,16 @@ type RecordStageControlsProps = {
   canRecord: boolean;
   disabled: boolean;
   error: string | null;
-  clipsCount: number;
-  displayMaskShape: VideoDisplayMaskShape;
-  onDisplayMaskShapeChange: (shape: VideoDisplayMaskShape) => void;
+  clips: RecordedClip[];
+  onClipRemove: (id: string) => void;
   onSwitchCamera: () => void;
   onRecordPress: () => void;
   showLimitMessage: boolean;
 };
 
 /**
- * Fixed record UI on document.body (z-record-dock) — above the scrim cutout.
- *
- * Layer stack (low → high): formContent 50 → scrim 100 → loading 150 → gauge 200
- * → flip 210 → dock 300 → shape picker 310 (all portaled on body for WKWebView)
+ * Fixed record UI on document.body (z-record-dock).
+ * Dock hosts clip strip (replacing shape picker) above the record button.
  */
 export function RecordStageControls({
   assignedSeconds,
@@ -41,9 +38,8 @@ export function RecordStageControls({
   canRecord,
   disabled,
   error,
-  clipsCount,
-  displayMaskShape,
-  onDisplayMaskShapeChange,
+  clips,
+  onClipRemove,
   onSwitchCamera,
   onRecordPress,
   showLimitMessage,
@@ -98,10 +94,12 @@ export function RecordStageControls({
         )}
 
         <div className="record-stage-ui__dock">
-          <RecordShapePicker
-            value={displayMaskShape}
-            onChange={onDisplayMaskShapeChange}
-            disabled={disabled || cameraStarting || recordingStarting}
+          <RecordClipStrip
+            clips={clips}
+            onRemove={onClipRemove}
+            disabled={
+              disabled || cameraStarting || recordingStarting || isRecording
+            }
           />
 
           <div className="record-stage-ui__dock-status" aria-live="polite">

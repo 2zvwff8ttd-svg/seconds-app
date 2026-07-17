@@ -2,11 +2,9 @@
 
 import {
   DEFAULT_VIDEO_DISPLAY_MASK,
-  getVideoDisplayMask,
   getVideoDisplayMaskCssVars,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
-import { BubbleDisplayMembraneRing } from "@/components/video/BubbleDisplayMembraneRing";
 import type { CSSProperties, ReactNode } from "react";
 
 type FullscreenVideoMaskProps = {
@@ -17,17 +15,15 @@ type FullscreenVideoMaskProps = {
 };
 
 /**
- * Fullscreen video viewport with a swappable display mask (circle today; star/heart later).
+ * Fullscreen video viewport with a circle display mask.
  */
 export function FullscreenVideoMask({
-  shape = DEFAULT_VIDEO_DISPLAY_MASK,
+  shape: _shape = DEFAULT_VIDEO_DISPLAY_MASK,
   children,
   className,
   style,
 }: FullscreenVideoMaskProps) {
-  const mask = getVideoDisplayMask(shape);
-  const maskStyle = getVideoDisplayMaskCssVars(shape);
-  const isCircle = shape === "circle";
+  const maskStyle = getVideoDisplayMaskCssVars();
 
   return (
     <div
@@ -36,7 +32,7 @@ export function FullscreenVideoMask({
         {
           ...maskStyle,
           ...style,
-          "--fs-mask-visual-scale": String(mask.visualScale),
+          "--fs-mask-visual-scale": "1",
         } as CSSProperties
       }
     >
@@ -49,17 +45,10 @@ export function FullscreenVideoMask({
             className="display-mask-feather fullscreen-video-mask__feather"
             aria-hidden
           />
-          {isCircle ? (
-            <div
-              className="display-mask-membrane fullscreen-video-mask__membrane"
-              aria-hidden
-            />
-          ) : (
-            <BubbleDisplayMembraneRing
-              shape={shape}
-              className="display-mask-membrane-ring fullscreen-video-mask__membrane-ring"
-            />
-          )}
+          <div
+            className="display-mask-membrane fullscreen-video-mask__membrane"
+            aria-hidden
+          />
         </div>
       </div>
     </div>

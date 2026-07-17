@@ -46,9 +46,8 @@ function nativePreviewOpts(facingMode: "user" | "environment") {
 export function NativeCameraRecorder({
   clips,
   onClipAdded,
+  onClipRemoved,
   disabled = false,
-  displayMaskShape,
-  onDisplayMaskShapeChange,
 }: CameraRecorderProps) {
   const recordingStartRef = useRef<number | null>(null);
   const recordBudgetRef = useRef(0);
@@ -494,12 +493,10 @@ export function NativeCameraRecorder({
 
       <RecordMaskOverlay
         cameraReady={cameraReady}
-        shape={displayMaskShape}
         previewZoomed={previewZoomed}
       />
 
       <RecordFocusTapLayer
-        shape={displayMaskShape}
         cameraReady={cameraReady}
         disabled={disabled || cameraStarting || isRecording}
       />
@@ -515,9 +512,8 @@ export function NativeCameraRecorder({
         canRecord={canRecord}
         disabled={disabled}
         error={error}
-        clipsCount={clips.length}
-        displayMaskShape={displayMaskShape}
-        onDisplayMaskShapeChange={onDisplayMaskShapeChange}
+        clips={clips}
+        onClipRemove={onClipRemoved}
         onSwitchCamera={() => void switchCamera()}
         onRecordPress={invokeRecordPress}
         showLimitMessage={

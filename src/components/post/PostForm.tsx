@@ -356,6 +356,7 @@ export function PostForm() {
       if (target) URL.revokeObjectURL(target.previewUrl);
       return prev.filter((c) => c.id !== id);
     });
+    clipThumbnailCacheRef.current.delete(id);
     setTitleTouched(false);
   }, []);
 
@@ -542,9 +543,8 @@ export function PostForm() {
             <CameraRecorder
               clips={clips}
               onClipAdded={handleClipAdded}
+              onClipRemoved={handleRemoveClip}
               disabled={isUploading}
-              displayMaskShape={displayMaskShape}
-              onDisplayMaskShapeChange={setDisplayMaskShape}
             />
             {hasContent && !isUploading && assignedSeconds !== null && (
               <p className="mt-4 text-center text-xs leading-relaxed text-muted">
@@ -566,7 +566,6 @@ export function PostForm() {
               clips={clips}
               onRemove={handleRemoveClip}
               disabled={isUploading}
-              displayMaskShape={displayMaskShape}
             />
             {clips.length > 0 && (
               <ThumbnailPicker

@@ -17,6 +17,6 @@ export const RECORD_STAGE_Z = {
   flip: 210,
   /** Bottom dock: record button + status (portaled to body) */
   dock: 300,
-  /** Shape picker row — above scrim, grouped with dock */
-  shapePicker: 310,
+  /** Clip strip row — above scrim, grouped with dock */
+  clipStrip: 310,
 } as const;

@@ -1,35 +1,27 @@
 import type { CSSProperties } from "react";
 
-/** Display mask shapes — add definitions in buildMaskDefinitions(). */
-export type VideoDisplayMaskShape =
-  | "circle"
-  | "star"
-  | "square"
-  | "heart"
-  | "diamond";
+/**
+ * Display mask is circle-only.
+ * Legacy DB values (star/heart/square/diamond) normalize to circle on read.
+ */
+export type VideoDisplayMaskShape = "circle";
 
 export const DEFAULT_VIDEO_DISPLAY_MASK: VideoDisplayMaskShape = "circle";
 
-export const MASK_SHAPE_ORDER: VideoDisplayMaskShape[] = [
-  "circle",
-  "star",
-  "square",
-  "heart",
-  "diamond",
-];
+export const MASK_SHAPE_ORDER: VideoDisplayMaskShape[] = ["circle"];
 
-const VALID_MASK_SHAPES = new Set<string>(MASK_SHAPE_ORDER);
-
+/** Always true only for "circle" — kept for callers that still type-narrow. */
 export function isVideoDisplayMaskShape(
   value: unknown,
 ): value is VideoDisplayMaskShape {
-  return typeof value === "string" && VALID_MASK_SHAPES.has(value);
+  return value === "circle";
 }
 
+/** Legacy shapes and unknown values all become circle (compat for existing posts). */
 export function parseVideoDisplayMaskShape(
-  value: unknown,
+  _value?: unknown,
 ): VideoDisplayMaskShape {
-  return isVideoDisplayMaskShape(value) ? value : DEFAULT_VIDEO_DISPLAY_MASK;
+  return DEFAULT_VIDEO_DISPLAY_MASK;
 }
 
 /**
@@ -57,62 +49,6 @@ export const RECORD_LAYOUT = {
   /** Extra gap between dock and bottom nav (px, above safe-area) */
   dockBottomInsetPx: 12,
 } as const;
-
-/** Star polygon percentages — shared by clip-path, rim, and scrim hole. */
-const STAR_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
-  [50, 5],
-  [61, 35],
-  [93, 35],
-  [68, 57],
-  [79, 88],
-  [50, 71],
-  [21, 88],
-  [32, 57],
-  [7, 35],
-  [39, 35],
-];
-
-const STAR_CLIP_PATH = `polygon(${STAR_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
-
-/** SVG <clipPath> id — defs live in DisplayMaskClipDefs (objectBoundingBox, scales with element). */
-export const DISPLAY_MASK_HEART_CLIP_ID = "seconds-display-mask-heart";
-
-/**
- * Emoji-style heart (❤️): two round upper lobes, top cleft, bottom tip.
- * 0–100 design space — shared by record scrim SVG and picker icon.
- *
- * Tune cleft depth via HEART_CLEFT_Y (higher Y = deeper valley between lobes).
- */
-const HEART_CLEFT_Y = 26;
-
-export const HEART_MASK_PATH_D = `M 50 92 C 50 92 8 60 8 34 C 8 14 24 4 50 ${HEART_CLEFT_Y} C 76 4 92 14 92 34 C 92 60 50 92 50 92 Z`;
-
-/** Same heart normalized to objectBoundingBox (0–1) for responsive clip-path. */
-export const HEART_MASK_PATH_OBJECT_BOUNDING_BOX_D = `M 0.5 0.92 C 0.5 0.92 0.08 0.60 0.08 0.34 C 0.08 0.14 0.24 0.04 0.5 ${HEART_CLEFT_Y / 100} C 0.76 0.04 0.92 0.14 0.92 0.34 C 0.92 0.60 0.5 0.92 0.5 0.92 Z`;
-
-const HEART_CLIP_PATH = `url(#${DISPLAY_MASK_HEART_CLIP_ID})`;
-
-/** @deprecated Use HEART_MASK_PATH_D */
-export const HEART_RECORD_PATH_D = HEART_MASK_PATH_D;
-
-/** Diamond (rhombus) — four corners inset slightly from the square viewport. */
-const DIAMOND_POLYGON_PERCENT_POINTS: ReadonlyArray<readonly [number, number]> = [
-  [50, 5],
-  [95, 50],
-  [50, 95],
-  [5, 50],
-];
-
-const DIAMOND_CLIP_PATH = `polygon(${DIAMOND_POLYGON_PERCENT_POINTS.map(([x, y]) => `${x}% ${y}%`).join(", ")})`;
-
-export const RECORD_SCRIM_SQUARE_INSET_RATIO = 0.04;
-export const RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO = 0.14;
-
-const SQUARE_INSET_PERCENT = RECORD_SCRIM_SQUARE_INSET_RATIO * 100;
-const SQUARE_CORNER_RADIUS_PERCENT =
-  RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO * 100;
-const SQUARE_CLIP_PATH = `inset(${SQUARE_INSET_PERCENT}% round ${SQUARE_CORNER_RADIUS_PERCENT}%)`;
-const SQUARE_BORDER_RADIUS = `${SQUARE_CORNER_RADIUS_PERCENT}%`;
 
 /**
  * Shape-agnostic feather + membrane tokens.
@@ -173,7 +109,8 @@ export function getDisplayMaskFeatherCssVars(): Record<string, string> {
     "--display-mask-membrane-band-spread": feather.membraneBandSpread,
     "--display-mask-membrane-filter-blur": feather.membraneFilterBlur,
     "--display-mask-membrane-bottom-shade-color": feather.membraneBottomShadeColor,
-    "--display-mask-membrane-bottom-shade-offset-y": feather.membraneBottomShadeOffsetY,
+    "--display-mask-membrane-bottom-shade-offset-y":
+      feather.membraneBottomShadeOffsetY,
     "--display-mask-membrane-bottom-shade-blur": feather.membraneBottomShadeBlur,
     "--display-mask-membrane-outer-glow-color": feather.membraneOuterGlowColor,
     "--display-mask-membrane-outer-glow-blur": feather.membraneOuterGlowBlur,
@@ -184,22 +121,23 @@ export type VideoDisplayMaskDefinition = {
   id: VideoDisplayMaskShape;
   label: string;
   modifier: VideoDisplayMaskShape;
-  /**
-   * Record / fullscreen hole only — enlarges the capture viewport so the clipped
-   * shape feels similar to a circle. Not applied on home bubbles (no CSS transform).
-   */
   visualScale: number;
-  /**
-   * Clip-path fill vs circle in a unit square (circle = 1). Shapes that fill less
-   * of the bbox need a larger home frame: frameScale ≈ sqrt(1 / bubbleVisualFillRatio).
-   */
   bubbleVisualFillRatio?: number;
-  /** Home bubble layout frame scale (tuned; overrides sqrt formula when set). */
   bubbleFrameScale?: number;
   clipPath: string;
   borderRadius: string;
   recordRimClipPath: string;
-  pickerIconPath: string;
+};
+
+const CIRCLE_MASK: VideoDisplayMaskDefinition = {
+  id: "circle",
+  label: "丸",
+  modifier: "circle",
+  visualScale: 1,
+  bubbleVisualFillRatio: 1,
+  clipPath: "circle(50% at 50% 50%)",
+  borderRadius: "50%",
+  recordRimClipPath: "circle(50% at 50% 50%)",
 };
 
 export type RecordHoleRect = {
@@ -248,10 +186,9 @@ function computeBaseHoleDiameter(viewport: ViewportMetrics): number {
  * Viewport-fixed hole box for scrim + rim (native preview stays fullscreen).
  */
 export function computeRecordHoleRect(
-  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+  _shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
   viewport: ViewportMetrics = readRecordViewportMetrics(),
 ): RecordHoleRect {
-  const mask = getVideoDisplayMask(shape);
   const usableHeight = Math.max(
     180,
     viewport.height -
@@ -261,7 +198,7 @@ export function computeRecordHoleRect(
 
   const baseDiameter = computeBaseHoleDiameter(viewport);
   const scaledDiameter = Math.min(
-    baseDiameter * mask.visualScale,
+    baseDiameter * CIRCLE_MASK.visualScale,
     viewport.width * 0.98,
     usableHeight * 0.98,
   );
@@ -278,57 +215,15 @@ export function computeRecordHoleRect(
   };
 }
 
-export function buildRecordStarHolePolygonPoints(rect: RecordHoleRect): string {
-  return buildRecordPolygonHolePoints(rect, STAR_POLYGON_PERCENT_POINTS);
-}
-
 /** Expand scrim cutout past the nominal hole to hide SVG mask antialiasing fringing. */
 export function getRecordHoleMaskBleedPx(
-  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+  _shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): number {
-  // WKWebView circle luminance masks need extra radius vs polygon shapes.
-  if (shape === "circle") return 3;
-  return 1;
+  return 3;
 }
 
 /** Shrink scrim hole inward while preview is zoomed — hides preview letterbox at the edge. */
 export const RECORD_HOLE_ZOOM_MASK_INSET_PX = 3;
-
-export function buildRecordHeartHolePathProps(
-  rect: RecordHoleRect,
-  shape: VideoDisplayMaskShape = "heart",
-): {
-  d: string;
-  transform: string;
-} {
-  const cx = rect.x + rect.width / 2;
-  const cy = rect.y + rect.height / 2;
-  const bleedPx = getRecordHoleMaskBleedPx(shape);
-  const bleedScale = 1 + (bleedPx * 2) / rect.width;
-  const scaleX = (rect.width / 100) * bleedScale;
-  const scaleY = (rect.height / 100) * bleedScale;
-  return {
-    d: HEART_MASK_PATH_D,
-    transform: `translate(${cx} ${cy}) scale(${scaleX} ${scaleY}) translate(-50 -50)`,
-  };
-}
-
-export function buildRecordDiamondHolePolygonPoints(rect: RecordHoleRect): string {
-  return buildRecordPolygonHolePoints(rect, DIAMOND_POLYGON_PERCENT_POINTS);
-}
-
-function buildRecordPolygonHolePoints(
-  rect: RecordHoleRect,
-  percentPoints: ReadonlyArray<readonly [number, number]>,
-): string {
-  return percentPoints
-    .map(([px, py]) => {
-      const x = rect.x + (px / 100) * rect.width;
-      const y = rect.y + (py / 100) * rect.height;
-      return `${x},${y}`;
-    })
-    .join(" ");
-}
 
 export function buildRecordCircleHoleAttrs(rect: RecordHoleRect): {
   cx: number;
@@ -339,23 +234,6 @@ export function buildRecordCircleHoleAttrs(rect: RecordHoleRect): {
     cx: rect.x + rect.width / 2,
     cy: rect.y + rect.height / 2,
     r: rect.width / 2,
-  };
-}
-
-export function buildRecordSquareHoleRect(rect: RecordHoleRect): RecordHoleRect & {
-  rx: number;
-  ry: number;
-} {
-  const inset = RECORD_SCRIM_SQUARE_INSET_RATIO;
-  const innerWidth = rect.width * (1 - inset * 2);
-  const innerHeight = rect.height * (1 - inset * 2);
-  return {
-    x: rect.x + rect.width * inset,
-    y: rect.y + rect.height * inset,
-    width: innerWidth,
-    height: innerHeight,
-    rx: rect.width * RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO,
-    ry: rect.height * RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO,
   };
 }
 
@@ -373,180 +251,42 @@ export function computeRecordStageMinHeight(
   );
 }
 
-function buildMaskDefinitions(): Record<
-  VideoDisplayMaskShape,
-  VideoDisplayMaskDefinition
-> {
-  return {
-    circle: {
-      id: "circle",
-      label: "丸",
-      modifier: "circle",
-      visualScale: 1,
-      bubbleVisualFillRatio: 1,
-      clipPath: "circle(50% at 50% 50%)",
-      borderRadius: "50%",
-      recordRimClipPath: "circle(50% at 50% 50%)",
-      pickerIconPath: "M 50 8 A 42 42 0 1 1 49.99 8 Z",
-    },
-    star: {
-      id: "star",
-      label: "星",
-      modifier: "star",
-      visualScale: 1.55,
-      bubbleVisualFillRatio: 0.334,
-      bubbleFrameScale: 1.55,
-      clipPath: STAR_CLIP_PATH,
-      borderRadius: "0",
-      recordRimClipPath: STAR_CLIP_PATH,
-      pickerIconPath:
-        "M 0 -1 L 0.224 -0.309 L 0.951 -0.309 L 0.363 0.118 L 0.588 0.809 L 0 0.382 L -0.588 0.809 L -0.363 0.118 L -0.951 -0.309 L -0.224 -0.309 Z",
-    },
-    square: {
-      id: "square",
-      label: "角丸",
-      modifier: "square",
-      visualScale: 1,
-      bubbleVisualFillRatio: 1.077,
-      clipPath: SQUARE_CLIP_PATH,
-      borderRadius: SQUARE_BORDER_RADIUS,
-      recordRimClipPath: SQUARE_CLIP_PATH,
-      pickerIconPath: "M 18 18 H 82 V 82 H 18 Z",
-    },
-    heart: {
-      id: "heart",
-      label: "ハート",
-      modifier: "heart",
-      visualScale: 1.5,
-      // Heart nearly fills its bbox — frame scale must stay ~1.1, not ~1.5 record visualScale.
-      bubbleVisualFillRatio: 0.813,
-      bubbleFrameScale: 1.12,
-      clipPath: HEART_CLIP_PATH,
-      borderRadius: "0",
-      recordRimClipPath: HEART_CLIP_PATH,
-      pickerIconPath: HEART_MASK_PATH_D,
-    },
-    diamond: {
-      id: "diamond",
-      label: "菱形",
-      modifier: "diamond",
-      visualScale: 1.4,
-      bubbleVisualFillRatio: 0.515,
-      bubbleFrameScale: 1.4,
-      clipPath: DIAMOND_CLIP_PATH,
-      borderRadius: "0",
-      recordRimClipPath: DIAMOND_CLIP_PATH,
-      pickerIconPath: "M 50 12 L 84 50 L 50 88 L 16 50 Z",
-    },
-  };
-}
-
-let maskDefinitionsCache: Record<
-  VideoDisplayMaskShape,
-  VideoDisplayMaskDefinition
-> | null = null;
-
-function getMaskDefinitions(): Record<
-  VideoDisplayMaskShape,
-  VideoDisplayMaskDefinition
-> {
-  if (!maskDefinitionsCache) {
-    maskDefinitionsCache = buildMaskDefinitions();
-  }
-  return maskDefinitionsCache;
-}
-
 export function getVideoDisplayMask(
-  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+  _shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): VideoDisplayMaskDefinition {
-  return getMaskDefinitions()[shape];
-}
-
-export type DisplayMaskMembraneSvgOutline =
-  | { type: "polygon"; points: string }
-  | { type: "path"; d: string }
-  | {
-      type: "rect";
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      rx: number;
-      ry: number;
-    };
-
-function formatPolygonPercentPoints(
-  percentPoints: ReadonlyArray<readonly [number, number]>,
-): string {
-  return percentPoints.map(([x, y]) => `${x},${y}`).join(" ");
-}
-
-/** SVG stroke outline matching clip-path geometry — null for circle (CSS membrane). */
-export function getDisplayMaskMembraneSvgOutline(
-  shape: VideoDisplayMaskShape,
-): DisplayMaskMembraneSvgOutline | null {
-  switch (shape) {
-    case "circle":
-      return null;
-    case "star":
-      return {
-        type: "polygon",
-        points: formatPolygonPercentPoints(STAR_POLYGON_PERCENT_POINTS),
-      };
-    case "diamond":
-      return {
-        type: "polygon",
-        points: formatPolygonPercentPoints(DIAMOND_POLYGON_PERCENT_POINTS),
-      };
-    case "heart":
-      return { type: "path", d: HEART_MASK_PATH_D };
-    case "square": {
-      const inset = RECORD_SCRIM_SQUARE_INSET_RATIO * 100;
-      const size = 100 - inset * 2;
-      const rx = RECORD_SCRIM_SQUARE_CORNER_RADIUS_RATIO * 100;
-      return { type: "rect", x: inset, y: inset, width: size, height: size, rx, ry: rx };
-    }
-  }
+  return CIRCLE_MASK;
 }
 
 export function getVideoDisplayMaskCssVars(
-  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+  _shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): Record<string, string> {
-  const mask = getVideoDisplayMask(shape);
   return {
     ...getDisplayMaskFeatherCssVars(),
-    "--video-display-mask-clip": mask.clipPath,
-    "--video-display-mask-radius": mask.borderRadius,
-    "--video-display-mask-visual-scale": String(mask.visualScale),
+    "--video-display-mask-clip": CIRCLE_MASK.clipPath,
+    "--video-display-mask-radius": CIRCLE_MASK.borderRadius,
+    "--video-display-mask-visual-scale": String(CIRCLE_MASK.visualScale),
   };
 }
 
-/**
- * Home layout frame scale — enlarges the square clip viewport so every shape
- * matches circle perceived size. Independent from visualScale (record/fullscreen).
- */
+/** Home layout frame scale — circle fill ratio is 1 → scale 1. */
 export function getBubbleFrameScale(
-  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+  _shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): number {
-  const mask = getVideoDisplayMask(shape);
-  if (mask.bubbleFrameScale != null) return mask.bubbleFrameScale;
-  const fill = mask.bubbleVisualFillRatio ?? 1;
-  return Math.round(Math.sqrt(1 / fill) * 100) / 100;
+  return 1;
 }
 
 export function getRecordViewportMaskCssVars(
-  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+  _shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): Record<string, string> {
-  const mask = getVideoDisplayMask(shape);
   return {
-    ...getVideoDisplayMaskCssVars(shape),
-    "--record-mask-rim-clip": mask.recordRimClipPath,
-    "--record-mask-visual-scale": String(mask.visualScale),
+    ...getVideoDisplayMaskCssVars(),
+    "--record-mask-rim-clip": CIRCLE_MASK.recordRimClipPath,
+    "--record-mask-visual-scale": String(CIRCLE_MASK.visualScale),
   };
 }
 
 export function getRecordViewportOverlayStyle(
-  shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
+  _shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): CSSProperties {
-  return getRecordViewportMaskCssVars(shape) as CSSProperties;
+  return getRecordViewportMaskCssVars() as CSSProperties;
 }

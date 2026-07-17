@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  getVideoDisplayMask,
   getVideoDisplayMaskCssVars,
   type VideoDisplayMaskShape,
 } from "@/lib/video/display-mask";
@@ -12,7 +11,6 @@ import { getBubbleOriginRect } from "@/lib/home/bubble-origin-rect";
 import type { BubblePlacement } from "@/lib/bubble-layout";
 import { resolveBubbleDisplayUrls } from "@/lib/videos/bubble-thumbnail";
 import { BubbleThumbnailSlideshow } from "./BubbleThumbnailSlideshow";
-import { BubbleDisplayMembraneRing } from "@/components/video/BubbleDisplayMembraneRing";
 import { warmVideoUrl } from "@/lib/videos/preload-video";
 import { CrownIcon } from "./CrownIcon";
 
@@ -63,15 +61,10 @@ export function VideoBubble({
       }),
     [video.thumbnailUrl, video.clipThumbnailUrls, video.videoUrl],
   );
-  const mask = useMemo(
-    () => getVideoDisplayMask(video.displayMaskShape),
-    [video.displayMaskShape],
-  );
   const maskStyle = useMemo(
-    () => getVideoDisplayMaskCssVars(video.displayMaskShape) as CSSProperties,
-    [video.displayMaskShape],
+    () => getVideoDisplayMaskCssVars() as CSSProperties,
+    [],
   );
-  const isCircle = mask.modifier === "circle";
 
   const handleClick = useCallback(() => {
     if (isHidden || !wrapperRef.current) return;
@@ -116,7 +109,7 @@ export function VideoBubble({
           style={maskStyle}
         >
           <span
-            className={`bubble-3d bubble-3d--${mask.modifier}${
+            className={`bubble-3d bubble-3d--circle${
               isViral ? " bubble-3d--viral bubble-3d--viral-hero" : ""
             }`}
             style={maskStyle}
@@ -141,23 +134,14 @@ export function VideoBubble({
                   </span>
                 )}
               </span>
-              {isCircle ? (
-                <span
-                  className="display-mask-feather bubble-display-feather"
-                  aria-hidden
-                />
-              ) : null}
-              {isCircle ? (
-                <span
-                  className="display-mask-membrane bubble-display-membrane"
-                  aria-hidden
-                />
-              ) : (
-                <BubbleDisplayMembraneRing
-                  shape={mask.modifier}
-                  className="display-mask-membrane-ring bubble-display-membrane-ring"
-                />
-              )}
+              <span
+                className="display-mask-feather bubble-display-feather"
+                aria-hidden
+              />
+              <span
+                className="display-mask-membrane bubble-display-membrane"
+                aria-hidden
+              />
             </span>
           </span>
         </span>

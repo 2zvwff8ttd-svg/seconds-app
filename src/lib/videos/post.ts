@@ -138,7 +138,7 @@ async function saveVideoRow(
       ? payload.clipThumbnailUrls
       : null;
 
-  const displayMaskShape = payload.displayMaskShape ?? DEFAULT_VIDEO_DISPLAY_MASK;
+  const displayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK;
 
   const baseInsert = {
     id: payload.id,

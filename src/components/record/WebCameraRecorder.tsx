@@ -1,8 +1,8 @@
 "use client";
 
 import type { CameraRecorderProps } from "@/components/record/camera-recorder-types";
-import { RecordShapePicker } from "@/components/record/RecordShapePicker";
-import { getVideoDisplayMask } from "@/lib/video/display-mask";
+import { RecordClipStrip } from "@/components/record/RecordClipStrip";
+import { DEFAULT_VIDEO_DISPLAY_MASK, getVideoDisplayMask } from "@/lib/video/display-mask";
 import {
   canUseInAppMediaRecorder,
   createMediaRecorder,
@@ -46,9 +46,8 @@ function waitMs(ms: number): Promise<void> {
 export function WebCameraRecorder({
   clips,
   onClipAdded,
+  onClipRemoved,
   disabled = false,
-  displayMaskShape,
-  onDisplayMaskShapeChange,
 }: CameraRecorderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const nativeInputRef = useRef<HTMLInputElement>(null);
@@ -553,7 +552,7 @@ export function WebCameraRecorder({
           className="pointer-events-none h-full w-full object-cover"
           style={{
             transform: facingMode === "user" ? "scaleX(-1)" : undefined,
-            clipPath: getVideoDisplayMask(displayMaskShape).clipPath,
+            clipPath: getVideoDisplayMask(DEFAULT_VIDEO_DISPLAY_MASK).clipPath,
           }}
         />
 
@@ -611,11 +610,11 @@ export function WebCameraRecorder({
             ) : null}
           </div>
 
-          <div className="pointer-events-auto mb-3">
-            <RecordShapePicker
-              value={displayMaskShape}
-              onChange={onDisplayMaskShapeChange}
-              disabled={disabled || cameraStarting}
+          <div className="pointer-events-auto mb-3 w-full max-w-sm px-3">
+            <RecordClipStrip
+              clips={clips}
+              onRemove={onClipRemoved}
+              disabled={disabled || cameraStarting || isRecording}
             />
           </div>
 

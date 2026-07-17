@@ -1341,7 +1341,7 @@ body {
   --z-record-gauge: 200;
   --z-record-lens-picker: 205;
   --z-record-flip: 210;
-  --z-record-shape-picker: 310;
+  --z-record-clip-strip: 310;
   --z-record-dock: 300;
   --record-layout-top-reserve: 76px;
   --record-layout-bottom-nav: 88px;
@@ -1789,12 +1789,87 @@ html.record-native-preview-active body {
   pointer-events: none;
 }
 
-.record-stage-ui__dock > .record-shape-picker {
+.record-stage-ui__dock > .record-clip-strip {
   align-self: stretch;
-  z-index: var(--z-record-shape-picker);
+  z-index: var(--z-record-clip-strip, 310);
   width: calc(100% + 2rem);
   max-width: calc(100% + 2rem);
   margin-inline: -1rem;
+  pointer-events: auto;
+}
+
+.record-clip-strip {
+  width: 100%;
+}
+
+.record-clip-strip__list {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding: 0.15rem 1rem 0.35rem;
+  margin: 0;
+  list-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.record-clip-strip__list::-webkit-scrollbar {
+  display: none;
+}
+
+.record-clip-strip__item {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.record-clip-strip__button {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: manipulation;
+}
+
+.record-clip-strip__button:disabled {
+  opacity: 0.4;
+}
+
+.record-clip-strip__thumb {
+  width: 3.25rem;
+  height: 3.25rem;
+  flex-shrink: 0;
+  background: rgb(5 5 8 / 0.9);
+  box-shadow: 0 0 0 1.5px rgb(255 255 255 / 0.35);
+}
+
+.record-clip-strip__thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.record-clip-strip__thumb-media {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.record-clip-strip__badge {
+  position: absolute;
+  bottom: 0.15rem;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 95%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.7);
+  padding: 0.05rem 0.3rem;
+  font-size: 0.5625rem;
+  line-height: 1.2;
+  color: white;
 }
 
 .record-stage-ui__dock > .record-stage-ui__record {
@@ -1888,129 +1963,6 @@ html.record-native-preview-active body {
   height: 1.5rem;
   width: 1.5rem;
   border-radius: 0.125rem;
-}
-
-.record-shape-picker {
-  --record-shape-picker-item-size: 3.75rem;
-  position: relative;
-  margin: 0;
-  width: 100%;
-  max-width: 100%;
-  pointer-events: auto;
-  isolation: isolate;
-}
-
-.record-shape-picker__viewport {
-  overflow-x: auto;
-  overflow-y: hidden;
-  width: 100%;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-  touch-action: pan-x;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  scrollbar-width: none;
-}
-
-.record-shape-picker__viewport::-webkit-scrollbar {
-  display: none;
-}
-
-.record-shape-picker__track {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-  width: max-content;
-  min-width: 100%;
-  padding-left: 1rem;
-  padding-right: max(
-    1rem,
-    calc(50% - var(--record-shape-picker-item-size) / 2)
-  );
-}
-
-.record-shape-picker__edge {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1.75rem;
-  z-index: 1;
-  pointer-events: none;
-}
-
-.record-shape-picker__edge--start {
-  left: 0;
-  background: linear-gradient(
-    to right,
-    rgb(10 10 10 / 0.72),
-    rgb(10 10 10 / 0)
-  );
-}
-
-.record-shape-picker__edge--end {
-  right: 0;
-  background: linear-gradient(
-    to left,
-    rgb(10 10 10 / 0.72),
-    rgb(10 10 10 / 0)
-  );
-}
-
-.record-shape-picker__item {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
-  width: var(--record-shape-picker-item-size);
-  padding: 0.35rem 0.25rem 0.3rem;
-  border-radius: 0.75rem;
-  border: 1px solid rgb(255 255 255 / 0.12);
-  background: rgb(0 0 0 / 0.32);
-  color: rgb(255 255 255 / 0.62);
-  scroll-snap-align: center;
-  scroll-snap-stop: always;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    color 0.15s ease,
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.record-shape-picker__item--selected {
-  border-color: rgb(167 139 250 / 0.9);
-  background: rgb(139 92 246 / 0.28);
-  color: white;
-  transform: scale(1.06);
-  box-shadow:
-    0 0 0 1px rgb(167 139 250 / 0.35),
-    0 4px 14px rgb(88 28 135 / 0.35);
-}
-
-.record-shape-picker__icon-wrap {
-  display: flex;
-  height: 1.75rem;
-  width: 1.75rem;
-  align-items: center;
-  justify-content: center;
-}
-
-.record-shape-picker__item:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.record-shape-picker__icon {
-  width: 1.75rem;
-  height: 1.75rem;
-}
-
-.record-shape-picker__label {
-  font-size: 0.625rem;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
 }
 
 .record-camera-error {
