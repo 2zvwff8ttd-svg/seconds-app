@@ -43,17 +43,21 @@ const forbiddenPatterns = [
 
 const checks = [
   {
-    label: "videoGravity uses resizeAspect at 1x startup",
-    ok: controller.includes("previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspect"),
-    fail: "AVLayerVideoGravity.resizeAspect not found in displayPreview",
+    label: "videoGravity uses resizeAspectFill at startup",
+    ok: controller.includes(
+      "previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill",
+    ),
+    fail: "AVLayerVideoGravity.resizeAspectFill not found in displayPreview",
   },
   {
-    label: "zoom switches preview to resizeAspectFill when display > 1x",
-    ok: controller.includes("displayZoom > 1.01 ? .resizeAspectFill : .resizeAspect"),
-    fail: "syncPreviewVideoGravity must toggle aspect-fill when display zoom > 1x",
+    label: "syncPreviewVideoGravity always aspect-fill",
+    ok:
+      controller.includes("always aspect-fill for circle-hole") &&
+      controller.includes("let gravity: AVLayerVideoGravity = .resizeAspectFill"),
+    fail: "syncPreviewVideoGravity must always use resizeAspectFill (no zoom toggle)",
   },
   {
-    label: "syncPreviewVideoGravity for pinch zoom letterbox",
+    label: "syncPreviewVideoGravity for pinch zoom",
     ok: controller.includes("syncPreviewVideoGravity(forZoomFactor:"),
     fail: "syncPreviewVideoGravity helper missing",
   },
@@ -61,6 +65,28 @@ const checks = [
     label: "pinch handler syncs preview gravity",
     ok: controller.includes("syncPreviewVideoGravity(forZoomFactor: newScaleFactor)"),
     fail: "handlePinch must call syncPreviewVideoGravity when zooming",
+  },
+  {
+    label: "pinch began syncs zoomFactor from device",
+    ok: /case \.began:\s*zoomFactor = device\.videoZoomFactor\s*fallthrough/.test(
+      controller,
+    ),
+    fail: "handlePinch .began must baseline zoomFactor from device.videoZoomFactor",
+  },
+  {
+    label: "pinch minMaxZoom snaps to ultra-wide floor",
+    ok: controller.includes("if clamped <= minZ + 0.05 { return minZ }"),
+    fail: "minMaxZoom must snap near minAvailableVideoZoomFactor for reliable 0.5×",
+  },
+  {
+    label: "ensureUltraWideZoomRange keeps raw ≈ 1.0 reachable",
+    ok: controller.includes("func ensureUltraWideZoomRange(on"),
+    fail: "ensureUltraWideZoomRange helper missing",
+  },
+  {
+    label: "setZoom ramps across optical lens hops",
+    ok: controller.includes("ramp(toVideoZoomFactor:"),
+    fail: "setZoomFactor must use ramp(toVideoZoomFactor:) for lens hops",
   },
   {
     label: "natural preview device settings helper",

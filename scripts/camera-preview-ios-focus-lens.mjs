@@ -173,7 +173,25 @@ export const FOCUS_LENS_CONTROLLER_PATCHES = [
     `        func minMaxZoom(_ factor: CGFloat) -> CGFloat {
             let minZ = device.minAvailableVideoZoomFactor
             let maxZ = min(device.activeFormat.videoMaxZoomFactor, device.maxAvailableVideoZoomFactor)
+            let clamped = max(minZ, min(factor, maxZ))
+            // Snap near the floor so pinch reliably reaches ultra-wide (display 0.5×).
+            if clamped <= minZ + 0.05 { return minZ }
+            return clamped
+        }`,
+  ],
+  [
+    `        func minMaxZoom(_ factor: CGFloat) -> CGFloat {
+            let minZ = device.minAvailableVideoZoomFactor
+            let maxZ = min(device.activeFormat.videoMaxZoomFactor, device.maxAvailableVideoZoomFactor)
             return max(minZ, min(factor, maxZ))
+        }`,
+    `        func minMaxZoom(_ factor: CGFloat) -> CGFloat {
+            let minZ = device.minAvailableVideoZoomFactor
+            let maxZ = min(device.activeFormat.videoMaxZoomFactor, device.maxAvailableVideoZoomFactor)
+            let clamped = max(minZ, min(factor, maxZ))
+            // Snap near the floor so pinch reliably reaches ultra-wide (display 0.5×).
+            if clamped <= minZ + 0.05 { return minZ }
+            return clamped
         }`,
   ],
   [
@@ -196,11 +214,15 @@ export const FOCUS_LENS_CONTROLLER_PATCHES = [
   ],
   [
     `        let gravity: AVLayerVideoGravity = factor > 1.01 ? .resizeAspectFill : .resizeAspect`,
+    `        let gravity: AVLayerVideoGravity = .resizeAspectFill`,
+  ],
+  [
     `        let displayZoom: CGFloat = {
             guard let device = self.activeCaptureDevice() else { return factor }
             return self.displayZoomFactor(fromRaw: factor, device: device)
         }()
         let gravity: AVLayerVideoGravity = displayZoom > 1.01 ? .resizeAspectFill : .resizeAspect`,
+    `        let gravity: AVLayerVideoGravity = .resizeAspectFill`,
   ],
 ];
 
@@ -408,7 +430,12 @@ extension CameraController {
 
     try device.lockForConfiguration()
     defer { device.unlockForConfiguration() }
-    device.videoZoomFactor = raw
+    // Ramp across optical switch-over points; pinch uses direct assignment.
+    if abs(device.videoZoomFactor - raw) > 0.08 {
+      device.ramp(toVideoZoomFactor: raw, withRate: 8.0)
+    } else {
+      device.videoZoomFactor = raw
+    }
     zoomFactor = raw
 
     DispatchQueue.main.async {

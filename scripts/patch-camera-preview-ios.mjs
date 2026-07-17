@@ -189,6 +189,27 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
         movieOutput.setOutputSettings(outputSettings, for: connection)
     }
 
+    /// Prefer a format that keeps ultra-wide (raw ≈ 1.0) reachable when hardware has it.
+    private func ensureUltraWideZoomRange(on device: AVCaptureDevice) {
+        guard device.constituentDevices.contains(where: { $0.deviceType == .builtInUltraWideCamera }),
+              device.minAvailableVideoZoomFactor > 1.05 else { return }
+        let locked = device.formats.filter { formatSupportsLocked30Fps($0) }
+        let pool = locked.isEmpty ? device.formats : locked
+        var restored = false
+        for format in pool {
+            device.activeFormat = format
+            applyLocked30FpsFrameRate(to: device)
+            if device.minAvailableVideoZoomFactor <= 1.05 {
+                restored = true
+                break
+            }
+        }
+        if !restored, let fallback = pickBestCaptureFormat(from: device.formats) {
+            device.activeFormat = fallback
+            applyLocked30FpsFrameRate(to: device)
+        }
+    }
+
     /// seconds-app: reset zoom and pick ~1080p format (long side ≤ 1920), lock 30fps CFR.
     private func applyNaturalPreviewDeviceSettings(to device: AVCaptureDevice) throws {
         try device.lockForConfiguration()
@@ -198,6 +219,7 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
             device.activeFormat = bestFormat
         }
         applyLocked30FpsFrameRate(to: device)
+        ensureUltraWideZoomRange(on: device)
         if device.isFocusModeSupported(.continuousAutoFocus) {
             device.focusMode = .continuousAutoFocus
         }
@@ -927,26 +949,29 @@ await patchFile(
   "CameraPreviewPlugin.swift (preview frame coordinates)",
 );
 
-const videoGravityFillToken = "AVLayerVideoGravity.resizeAspectFill";
-const videoGravityAspectToken = "AVLayerVideoGravity.resizeAspect";
+// Circle-hole preview: always aspect-fill so letterbox never shows through the scrim.
+const videoGravityDisplayAspect =
+  "previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspect";
+const videoGravityDisplayFill =
+  "previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill";
 
 let controllerForGravity = await readFile(controllerPath, "utf8");
-if (controllerForGravity.includes(videoGravityFillToken)) {
+if (controllerForGravity.includes(videoGravityDisplayAspect)) {
   controllerForGravity = controllerForGravity.replaceAll(
-    videoGravityFillToken,
-    videoGravityAspectToken,
+    videoGravityDisplayAspect,
+    videoGravityDisplayFill,
   );
   await writeFile(controllerPath, controllerForGravity, "utf8");
   console.log(
-    "[patch-camera-preview-ios] CameraController.swift (preview aspect-fit)",
+    "[patch-camera-preview-ios] CameraController.swift (preview aspect-fill)",
   );
-} else if (controllerForGravity.includes(videoGravityAspectToken)) {
+} else if (controllerForGravity.includes(videoGravityDisplayFill)) {
   console.log(
-    "[patch-camera-preview-ios] CameraController.swift (preview aspect-fit) already patched",
+    "[patch-camera-preview-ios] CameraController.swift (preview aspect-fill) already patched",
   );
 } else {
   console.warn(
-    "[patch-camera-preview-ios] skip preview aspect-fit: videoGravity assignment not found",
+    "[patch-camera-preview-ios] skip preview aspect-fill: videoGravity assignment not found",
   );
 }
 
@@ -1399,6 +1424,7 @@ const QUALITY_CAPTURE_EXTENSION_WITH_WIDE_ZOOM = QUALITY_CAPTURE_EXTENSION.repla
             device.activeFormat = bestFormat
         }
         applyLocked30FpsFrameRate(to: device)
+        ensureUltraWideZoomRange(on: device)
         if device.isFocusModeSupported(.continuousAutoFocus) {
             device.focusMode = .continuousAutoFocus
         }
@@ -1407,6 +1433,7 @@ const QUALITY_CAPTURE_EXTENSION_WITH_WIDE_ZOOM = QUALITY_CAPTURE_EXTENSION.repla
             device.activeFormat = bestFormat
         }
         applyLocked30FpsFrameRate(to: device)
+        ensureUltraWideZoomRange(on: device)
         device.videoZoomFactor = defaultWideRawZoom(for: device)
         zoomFactor = device.videoZoomFactor
         if device.isFocusModeSupported(.continuousAutoFocus) {
@@ -1476,10 +1503,10 @@ if (controllerForTypoFix.includes(formatPixelCountTypoOld)) {
 const handleTapGravityAnchorOld = `    @objc
     func handleTap(_ tap: UITapGestureRecognizer) {`;
 
-const handleTapGravityAnchorNew = `    /// seconds-app: aspect-fit at 1×; aspect-fill when zoomed so letterbox never shows through scrim holes.
-    func syncPreviewVideoGravity(forZoomFactor factor: CGFloat) {
+const handleTapGravityAnchorNew = `    /// seconds-app: always aspect-fill for circle-hole preview (letterbox must not show through scrim).
+    func syncPreviewVideoGravity(forZoomFactor _factor: CGFloat) {
         guard let layer = self.previewLayer else { return }
-        let gravity: AVLayerVideoGravity = factor > 1.01 ? .resizeAspectFill : .resizeAspect
+        let gravity: AVLayerVideoGravity = .resizeAspectFill
         if layer.videoGravity != gravity {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
@@ -1514,8 +1541,22 @@ const handlePinchGravityOld = `        switch pinch.state {
         default: break
         }`;
 
-const handlePinchGravityNew = `        switch pinch.state {
+const handlePinchGravityMid = `        switch pinch.state {
         case .began: fallthrough
+        case .changed:
+            let newScaleFactor = minMaxZoom(pinch.scale * zoomFactor)
+            update(scale: newScaleFactor)
+            syncPreviewVideoGravity(forZoomFactor: newScaleFactor)
+        case .ended:
+            zoomFactor = device.videoZoomFactor
+            syncPreviewVideoGravity(forZoomFactor: device.videoZoomFactor)
+        default: break
+        }`;
+
+const handlePinchGravityNew = `        switch pinch.state {
+        case .began:
+            zoomFactor = device.videoZoomFactor
+            fallthrough
         case .changed:
             let newScaleFactor = minMaxZoom(pinch.scale * zoomFactor)
             update(scale: newScaleFactor)
@@ -1528,8 +1569,11 @@ const handlePinchGravityNew = `        switch pinch.state {
 
 await patchFile(
   controllerPath,
-  [[handlePinchGravityOld, handlePinchGravityNew]],
-  "CameraController.swift (pinch sync preview gravity)",
+  [
+    [handlePinchGravityOld, handlePinchGravityNew],
+    [handlePinchGravityMid, handlePinchGravityNew],
+  ],
+  "CameraController.swift (pinch sync preview gravity + began baseline)",
 );
 
 const {
@@ -1640,6 +1684,38 @@ const duplicatePublicGravityOld = `    /// seconds-app: aspect-fit at 1×; aspec
 
 `;
 
+const duplicatePublicGravityDisplayZoomOld = `    /// seconds-app: aspect-fit at 1×; aspect-fill when zoomed so letterbox never shows through scrim holes.
+    func syncPreviewVideoGravity(forZoomFactor factor: CGFloat) {
+        guard let layer = self.previewLayer else { return }
+        let displayZoom: CGFloat = {
+            guard let device = self.activeCaptureDevice() else { return factor }
+            return self.displayZoomFactor(fromRaw: factor, device: device)
+        }()
+        let gravity: AVLayerVideoGravity = displayZoom > 1.01 ? .resizeAspectFill : .resizeAspect
+        if layer.videoGravity != gravity {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.videoGravity = gravity
+            CATransaction.commit()
+        }
+    }
+
+`;
+
+const syncPreviewVideoGravityAlwaysFill = `    /// seconds-app: always aspect-fill for circle-hole preview (letterbox must not show through scrim).
+    func syncPreviewVideoGravity(forZoomFactor _factor: CGFloat) {
+        guard let layer = self.previewLayer else { return }
+        let gravity: AVLayerVideoGravity = .resizeAspectFill
+        if layer.videoGravity != gravity {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.videoGravity = gravity
+            CATransaction.commit()
+        }
+    }
+
+`;
+
 let controllerDedup = await readFile(controllerPath, "utf8");
 let dedupChanged = false;
 if (controllerDedup.includes(duplicatePrivateGravityOld)) {
@@ -1647,6 +1723,43 @@ if (controllerDedup.includes(duplicatePrivateGravityOld)) {
   dedupChanged = true;
   console.log(
     "[patch-camera-preview-ios] removed duplicate private syncPreviewVideoGravity",
+  );
+}
+if (controllerDedup.includes(duplicatePublicGravityDisplayZoomOld)) {
+  controllerDedup = controllerDedup.replace(
+    duplicatePublicGravityDisplayZoomOld,
+    syncPreviewVideoGravityAlwaysFill,
+  );
+  dedupChanged = true;
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (always aspect-fill gravity)",
+  );
+} else if (
+  controllerDedup.includes(duplicatePublicGravityOld) &&
+  !controllerDedup.includes("always aspect-fill for circle-hole")
+) {
+  controllerDedup = controllerDedup.replace(
+    duplicatePublicGravityOld,
+    syncPreviewVideoGravityAlwaysFill,
+  );
+  dedupChanged = true;
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (always aspect-fill gravity)",
+  );
+}
+while (controllerDedup.split(syncPreviewVideoGravityAlwaysFill).length > 2) {
+  const first = controllerDedup.indexOf(syncPreviewVideoGravityAlwaysFill);
+  const second = controllerDedup.indexOf(
+    syncPreviewVideoGravityAlwaysFill,
+    first + syncPreviewVideoGravityAlwaysFill.length,
+  );
+  if (second < 0) break;
+  controllerDedup =
+    controllerDedup.slice(0, second) +
+    controllerDedup.slice(second + syncPreviewVideoGravityAlwaysFill.length);
+  dedupChanged = true;
+  console.log(
+    "[patch-camera-preview-ios] removed duplicate public syncPreviewVideoGravity",
   );
 }
 while (controllerDedup.split(duplicatePublicGravityOld).length > 2) {
@@ -1880,6 +1993,150 @@ if (!controllerV5.includes("activeVideoMinFrameDuration fps:")) {
   } else {
     console.warn(
       "[patch-camera-preview-ios] skip diagnostics fps: logRearCameraDiagnostics pattern not matched",
+    );
+  }
+}
+
+// ── Always-fill + ultra-wide pinch floor + ramp setZoom (circle-hole / 0.5×) ─
+
+const ensureUltraWideHelper = `    /// Prefer a format that keeps ultra-wide (raw ≈ 1.0) reachable when hardware has it.
+    private func ensureUltraWideZoomRange(on device: AVCaptureDevice) {
+        guard device.constituentDevices.contains(where: { $0.deviceType == .builtInUltraWideCamera }),
+              device.minAvailableVideoZoomFactor > 1.05 else { return }
+        let locked = device.formats.filter { formatSupportsLocked30Fps($0) }
+        let pool = locked.isEmpty ? device.formats : locked
+        var restored = false
+        for format in pool {
+            device.activeFormat = format
+            applyLocked30FpsFrameRate(to: device)
+            if device.minAvailableVideoZoomFactor <= 1.05 {
+                restored = true
+                break
+            }
+        }
+        if !restored, let fallback = pickBestCaptureFormat(from: device.formats) {
+            device.activeFormat = fallback
+            applyLocked30FpsFrameRate(to: device)
+        }
+    }
+
+    /// seconds-app: reset zoom and pick ~1080p format (long side ≤ 1920), lock 30fps CFR.`;
+
+if (
+  !controllerV5.includes("func ensureUltraWideZoomRange(on") &&
+  controllerV5.includes(
+    "/// seconds-app: reset zoom and pick ~1080p format (long side ≤ 1920), lock 30fps CFR.",
+  )
+) {
+  controllerV5 = controllerV5.replace(
+    "    /// seconds-app: reset zoom and pick ~1080p format (long side ≤ 1920), lock 30fps CFR.",
+    ensureUltraWideHelper,
+  );
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (ensureUltraWideZoomRange helper)",
+  );
+}
+
+const applyNaturalZoomWithoutEnsure = `        applyLocked30FpsFrameRate(to: device)
+        device.videoZoomFactor = defaultWideRawZoom(for: device)
+        zoomFactor = device.videoZoomFactor`;
+
+const applyNaturalZoomWithEnsure = `        applyLocked30FpsFrameRate(to: device)
+        ensureUltraWideZoomRange(on: device)
+        device.videoZoomFactor = defaultWideRawZoom(for: device)
+        zoomFactor = device.videoZoomFactor`;
+
+if (
+  controllerV5.includes(applyNaturalZoomWithoutEnsure) &&
+  !controllerV5.includes("ensureUltraWideZoomRange(on: device)")
+) {
+  controllerV5 = controllerV5.replace(
+    applyNaturalZoomWithoutEnsure,
+    applyNaturalZoomWithEnsure,
+  );
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (ensure ultra-wide zoom range on start)",
+  );
+}
+
+const setZoomDirectAssign = `    let raw = clampRawZoom(rawZoomFactor(fromDisplay: factor, device: device), device: device)
+
+    try device.lockForConfiguration()
+    defer { device.unlockForConfiguration() }
+    device.videoZoomFactor = raw
+    zoomFactor = raw
+
+    DispatchQueue.main.async {
+      self.syncPreviewVideoGravity(forZoomFactor: raw)
+    }
+  }`;
+
+const setZoomRampAssign = `    let raw = clampRawZoom(rawZoomFactor(fromDisplay: factor, device: device), device: device)
+
+    try device.lockForConfiguration()
+    defer { device.unlockForConfiguration() }
+    // Ramp across optical switch-over points; pinch uses direct assignment.
+    if abs(device.videoZoomFactor - raw) > 0.08 {
+      device.ramp(toVideoZoomFactor: raw, withRate: 8.0)
+    } else {
+      device.videoZoomFactor = raw
+    }
+    zoomFactor = raw
+
+    DispatchQueue.main.async {
+      self.syncPreviewVideoGravity(forZoomFactor: raw)
+    }
+  }`;
+
+if (
+  controllerV5.includes(setZoomDirectAssign) &&
+  !controllerV5.includes("ramp(toVideoZoomFactor:")
+) {
+  controllerV5 = controllerV5.replace(setZoomDirectAssign, setZoomRampAssign);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (ramp setZoom across lens hops)",
+  );
+} else if (controllerV5.includes("ramp(toVideoZoomFactor:")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (ramp setZoom) already patched",
+  );
+}
+
+if (
+  controllerV5.includes("func syncPreviewVideoGravity") &&
+  !controllerV5.includes("always aspect-fill for circle-hole")
+) {
+  const gravityFnStart = controllerV5.indexOf(
+    "    func syncPreviewVideoGravity(forZoomFactor",
+  );
+  if (gravityFnStart >= 0) {
+    const braceOpen = controllerV5.indexOf("{", gravityFnStart);
+    let depth = 0;
+    let i = braceOpen;
+    for (; i < controllerV5.length; i++) {
+      const ch = controllerV5[i];
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          i++;
+          break;
+        }
+      }
+    }
+    // Include leading doc comment if present.
+    let commentStart = gravityFnStart;
+    const maybeComment = controllerV5.lastIndexOf("    /// seconds-app:", gravityFnStart);
+    if (maybeComment >= 0 && gravityFnStart - maybeComment < 200) {
+      commentStart = maybeComment;
+    }
+    controllerV5 =
+      controllerV5.slice(0, commentStart) +
+      syncPreviewVideoGravityAlwaysFill.trimEnd() +
+      "\n\n" +
+      controllerV5.slice(i);
+    console.log(
+      "[patch-camera-preview-ios] CameraController.swift (force always aspect-fill gravity)",
     );
   }
 }
