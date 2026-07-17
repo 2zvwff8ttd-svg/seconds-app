@@ -432,7 +432,7 @@ extension CameraController {
     defer { device.unlockForConfiguration() }
     // Ramp across optical switch-over points; pinch uses direct assignment.
     if abs(device.videoZoomFactor - raw) > 0.08 {
-      device.ramp(toVideoZoomFactor: raw, withRate: 8.0)
+      device.ramp(toVideoZoomFactor: raw, withRate: 8)
     } else {
       device.videoZoomFactor = raw
     }

@@ -44,10 +44,12 @@ const forbiddenPatterns = [
 const checks = [
   {
     label: "videoGravity uses resizeAspectFill at startup",
-    ok: controller.includes(
-      "previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill",
-    ),
-    fail: "AVLayerVideoGravity.resizeAspectFill not found in displayPreview",
+    ok:
+      controller.includes(
+        "previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill",
+      ) && !controller.includes("resizeAspectFillFill"),
+    fail:
+      "AVLayerVideoGravity.resizeAspectFill not found in displayPreview (or FillFill corruption)",
   },
   {
     label: "syncPreviewVideoGravity always aspect-fill",
@@ -85,8 +87,12 @@ const checks = [
   },
   {
     label: "setZoom ramps across optical lens hops",
-    ok: controller.includes("ramp(toVideoZoomFactor:"),
-    fail: "setZoomFactor must use ramp(toVideoZoomFactor:) for lens hops",
+    ok:
+      controller.includes("ramp(toVideoZoomFactor:") &&
+      controller.includes("withRate: 8)") &&
+      !controller.includes("withRate: 8.0)"),
+    fail:
+      "setZoomFactor must use ramp(toVideoZoomFactor:withRate:) with Float rate (use 8, not 8.0)",
   },
   {
     label: "natural preview device settings helper",

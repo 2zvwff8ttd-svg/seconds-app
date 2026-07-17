@@ -15,6 +15,7 @@ cd "$ROOT"
 mkdir -p /tmp/xcodebuild_logs
 
 echo "[compile-check-ios] building $SCHEME (iphonesimulator, unsigned)"
+set +e
 xcodebuild build \
   -project "$ROOT/$PROJECT" \
   -scheme "$SCHEME" \
@@ -25,5 +26,15 @@ xcodebuild build \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO \
   2>&1 | tee /tmp/xcodebuild_logs/compile-check.log
+status=${PIPESTATUS[0]}
+set -e
+
+if [[ "$status" -ne 0 ]]; then
+  echo "[compile-check-ios] FAILED (exit $status). Swift/compiler errors:"
+  grep -E 'error:|warning:.*CameraController\.swift|CameraController\.swift:[0-9]+:[0-9]+:' \
+    /tmp/xcodebuild_logs/compile-check.log \
+    | head -n 80 || true
+  exit "$status"
+fi
 
 echo "[compile-check-ios] success"

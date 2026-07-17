@@ -950,17 +950,27 @@ await patchFile(
 );
 
 // Circle-hole preview: always aspect-fill so letterbox never shows through the scrim.
-const videoGravityDisplayAspect =
-  "previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspect";
+// IMPORTANT: "resizeAspect" is a prefix of "resizeAspectFill" — never replaceAll the short token.
 const videoGravityDisplayFill =
   "previewLayer?.videoGravity = AVLayerVideoGravity.resizeAspectFill";
 
 let controllerForGravity = await readFile(controllerPath, "utf8");
-if (controllerForGravity.includes(videoGravityDisplayAspect)) {
+const gravityBefore = controllerForGravity;
+
+// Repair accidental FillFill… from a previous prefix-replace bug.
+while (controllerForGravity.includes("AVLayerVideoGravity.resizeAspectFillFill")) {
   controllerForGravity = controllerForGravity.replaceAll(
-    videoGravityDisplayAspect,
-    videoGravityDisplayFill,
+    "AVLayerVideoGravity.resizeAspectFillFill",
+    "AVLayerVideoGravity.resizeAspectFill",
   );
+}
+
+controllerForGravity = controllerForGravity.replace(
+  /previewLayer\?\.videoGravity = AVLayerVideoGravity\.resizeAspect(?!Fill)/g,
+  videoGravityDisplayFill,
+);
+
+if (controllerForGravity !== gravityBefore) {
   await writeFile(controllerPath, controllerForGravity, "utf8");
   console.log(
     "[patch-camera-preview-ios] CameraController.swift (preview aspect-fill)",
@@ -2077,7 +2087,7 @@ const setZoomRampAssign = `    let raw = clampRawZoom(rawZoomFactor(fromDisplay:
     defer { device.unlockForConfiguration() }
     // Ramp across optical switch-over points; pinch uses direct assignment.
     if abs(device.videoZoomFactor - raw) > 0.08 {
-      device.ramp(toVideoZoomFactor: raw, withRate: 8.0)
+      device.ramp(toVideoZoomFactor: raw, withRate: 8)
     } else {
       device.videoZoomFactor = raw
     }
@@ -2099,6 +2109,13 @@ if (
 } else if (controllerV5.includes("ramp(toVideoZoomFactor:")) {
   console.log(
     "[patch-camera-preview-ios] CameraController.swift (ramp setZoom) already patched",
+  );
+}
+
+if (controllerV5.includes("withRate: 8.0)")) {
+  controllerV5 = controllerV5.replaceAll("withRate: 8.0)", "withRate: 8)");
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (withRate Float literal fix)",
   );
 }
 
