@@ -2084,6 +2084,15 @@ html.record-native-preview-active body {
 
 .global-upload-bar__panel--success {
   border-color: rgb(74 222 128 / 0.35);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s ease;
+}
+
+.global-upload-bar__panel--fading {
+  opacity: 0;
+  transform: translateY(-0.5rem);
+  pointer-events: none;
 }
 
 .global-upload-bar__panel--error {
