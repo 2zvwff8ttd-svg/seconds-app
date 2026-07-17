@@ -222,7 +222,8 @@ const controllerPropertiesNew = `    var zoomFactor: CGFloat = 1.0
     private var startRecordingCompletion: ((Error?) -> Void)?
     private var stopRecordingCompletion: ((URL?, Error?) -> Void)?
     private var _rotationCoordinator: Any?
-    /// When true, ignore tap-focus / pinch / setZoom (Phase B during MovieFileOutput recording).
+    /// When true, ignore tap-focus during MovieFileOutput recording (AE/AF stay locked).
+    /// Pinch / setZoom remain allowed — zoom is a brief load vs continuous AF hunting.
     private var suppressRecordingGestures = false
 }`;
 
@@ -1676,7 +1677,8 @@ if (!controllerV5.includes("suppressRecordingGestures")) {
     controllerV5 = controllerV5.replace(
       "private var _rotationCoordinator: Any?\n}",
       `private var _rotationCoordinator: Any?
-    /// When true, ignore tap-focus / pinch / setZoom (Phase B during MovieFileOutput recording).
+    /// When true, ignore tap-focus during MovieFileOutput recording (AE/AF stay locked).
+    /// Pinch / setZoom remain allowed — zoom is a brief load vs continuous AF hunting.
     private var suppressRecordingGestures = false
 }`,
     );
@@ -1684,6 +1686,20 @@ if (!controllerV5.includes("suppressRecordingGestures")) {
       "[patch-camera-preview-ios] CameraController.swift (suppressRecordingGestures property)",
     );
   }
+} else if (
+  controllerV5.includes(
+    "ignore tap-focus / pinch / setZoom (Phase B during MovieFileOutput recording)",
+  )
+) {
+  controllerV5 = controllerV5.replace(
+    "/// When true, ignore tap-focus / pinch / setZoom (Phase B during MovieFileOutput recording).\n    private var suppressRecordingGestures = false",
+    `/// When true, ignore tap-focus during MovieFileOutput recording (AE/AF stay locked).
+    /// Pinch / setZoom remain allowed — zoom is a brief load vs continuous AF hunting.
+    private var suppressRecordingGestures = false`,
+  );
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (suppressRecordingGestures comment: focus-only)",
+  );
 }
 
 if (!controllerV5.includes("applyLocked30FpsFrameRate")) {
@@ -1780,18 +1796,25 @@ const handlePinchV4Old = `    @objc
     private func handlePinch(_ pinch: UIPinchGestureRecognizer) {
         guard let device = self.currentCameraPosition == .rear ? rearCamera : frontCamera else { return }`;
 
-const handlePinchV5New = `    @objc
+// v5 briefly blocked pinch while recording; v6 keeps pinch enabled (AE/AF lock is enough for fps).
+if (
+  controllerV5.includes(
+    "guard !suppressRecordingGestures else { return }\n        guard let device = self.currentCameraPosition == .rear ? rearCamera : frontCamera else { return }",
+  )
+) {
+  controllerV5 = controllerV5.replace(
+    `    @objc
     private func handlePinch(_ pinch: UIPinchGestureRecognizer) {
         guard !suppressRecordingGestures else { return }
-        guard let device = self.currentCameraPosition == .rear ? rearCamera : frontCamera else { return }`;
-
-if (
-  controllerV5.includes(handlePinchV4Old) &&
-  !controllerV5.includes("guard !suppressRecordingGestures else { return }\n        guard let device = self.currentCameraPosition")
-) {
-  controllerV5 = controllerV5.replace(handlePinchV4Old, handlePinchV5New);
+        guard let device = self.currentCameraPosition == .rear ? rearCamera : frontCamera else { return }`,
+    handlePinchV4Old,
+  );
   console.log(
-    "[patch-camera-preview-ios] CameraController.swift (pinch disabled while recording)",
+    "[patch-camera-preview-ios] CameraController.swift (v6: pinch zoom allowed while recording)",
+  );
+} else if (controllerV5.includes(handlePinchV4Old)) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (pinch zoom while recording) already allowed",
   );
 }
 
@@ -1814,13 +1837,7 @@ if (
   );
 }
 
-const setZoomV4Old = `  /// \`factor\` is display zoom (0.5× = ultra-wide, 1× = wide).
-  func setZoomFactor(_ factor: CGFloat) throws {
-    guard let device = activeCaptureDevice() else {
-      throw CameraControllerError.captureSessionIsMissing
-    }`;
-
-const setZoomV5New = `  /// \`factor\` is display zoom (0.5× = ultra-wide, 1× = wide).
+const setZoomBlockedWhileRecording = `  /// \`factor\` is display zoom (0.5× = ultra-wide, 1× = wide).
   func setZoomFactor(_ factor: CGFloat) throws {
     guard !suppressRecordingGestures else {
       throw CameraControllerError.invalidOperation
@@ -1829,13 +1846,23 @@ const setZoomV5New = `  /// \`factor\` is display zoom (0.5× = ultra-wide, 1× 
       throw CameraControllerError.captureSessionIsMissing
     }`;
 
-if (
-  controllerV5.includes(setZoomV4Old) &&
-  !controllerV5.includes("guard !suppressRecordingGestures else {\n      throw CameraControllerError.invalidOperation")
-) {
-  controllerV5 = controllerV5.replace(setZoomV4Old, setZoomV5New);
+const setZoomAllowedWhileRecording = `  /// \`factor\` is display zoom (0.5× = ultra-wide, 1× = wide).
+  func setZoomFactor(_ factor: CGFloat) throws {
+    guard let device = activeCaptureDevice() else {
+      throw CameraControllerError.captureSessionIsMissing
+    }`;
+
+if (controllerV5.includes(setZoomBlockedWhileRecording)) {
+  controllerV5 = controllerV5.replace(
+    setZoomBlockedWhileRecording,
+    setZoomAllowedWhileRecording,
+  );
   console.log(
-    "[patch-camera-preview-ios] CameraController.swift (setZoom disabled while recording)",
+    "[patch-camera-preview-ios] CameraController.swift (v6: setZoom allowed while recording)",
+  );
+} else if (controllerV5.includes(setZoomAllowedWhileRecording)) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (setZoom while recording) already allowed",
   );
 }
 

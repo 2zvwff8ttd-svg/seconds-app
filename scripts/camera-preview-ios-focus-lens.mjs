@@ -398,10 +398,8 @@ extension CameraController {
   }
 
   /// \`factor\` is display zoom (0.5× = ultra-wide, 1× = wide).
+  /// Allowed during recording — AE/AF stay locked; pinch zoom is a brief load.
   func setZoomFactor(_ factor: CGFloat) throws {
-    guard !suppressRecordingGestures else {
-      throw CameraControllerError.invalidOperation
-    }
     guard let device = activeCaptureDevice() else {
       throw CameraControllerError.captureSessionIsMissing
     }

@@ -164,11 +164,20 @@ const checks = [
     fail: "restoreContinuousFocusAndExposure missing after stopRecording",
   },
   {
-    label: "pinch disabled while recording",
-    ok: /func handlePinch[\s\S]*?guard !suppressRecordingGestures else \{ return \}/.test(
+    label: "pinch zoom allowed while recording",
+    ok:
+      controller.includes("func handlePinch") &&
+      !/func handlePinch[\s\S]*?guard !suppressRecordingGestures else \{ return \}/.test(
+        controller,
+      ),
+    fail: "handlePinch must NOT block on suppressRecordingGestures (zoom allowed while recording)",
+  },
+  {
+    label: "setZoom allowed while recording",
+    ok: !/func setZoomFactor[\s\S]*?guard !suppressRecordingGestures else \{/.test(
       controller,
     ),
-    fail: "handlePinch must early-return when suppressRecordingGestures",
+    fail: "setZoomFactor must NOT block on suppressRecordingGestures",
   },
   {
     label: "tap focus disabled while recording",
