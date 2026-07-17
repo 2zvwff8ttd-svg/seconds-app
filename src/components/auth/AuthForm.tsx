@@ -47,6 +47,7 @@ export function AuthForm() {
     [searchParams],
   );
   const urlError = searchParams.get("error");
+  const resetDone = searchParams.get("reset") === "1";
 
   const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
@@ -54,11 +55,17 @@ export function AuthForm() {
   const [username, setUsername] = useState("");
   const [loading, setLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(
+    resetDone
+      ? "パスワードを更新しました。アプリを開き、新しいパスワードでログインしてください。"
+      : null,
+  );
   const [error, setError] = useState<string | null>(
     urlError === "auth_callback_failed"
       ? "認証に失敗しました。もう一度お試しください。"
-      : null,
+      : urlError === "reset_link_invalid"
+        ? "リセット用のリンクが無効か期限切れです。もう一度お試しください。"
+        : null,
   );
 
   const supabase = createClient();
@@ -302,6 +309,16 @@ export function AuthForm() {
                 placeholder="6文字以上"
                 className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder:text-muted/60 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
               />
+              {mode === "signin" && (
+                <p className="mt-2 text-right">
+                  <Link
+                    href="/login/forgot"
+                    className="text-xs text-violet-300 hover:text-violet-200 hover:underline"
+                  >
+                    パスワードを忘れた場合
+                  </Link>
+                </p>
+              )}
             </div>
 
             {error && (

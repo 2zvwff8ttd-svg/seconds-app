@@ -2,10 +2,14 @@
 export const PUBLIC_ROUTES = [
   "/login",
   "/auth/callback",
+  "/auth/reset-password",
   "/privacy",
   "/terms",
   "/guidelines",
 ] as const;
+
+/** Where recovery email links land after /auth/callback exchanges the code. */
+export const PASSWORD_RESET_PATH = "/auth/reset-password";
 
 /** Default redirect after successful login */
 export const DEFAULT_AUTH_REDIRECT = "/";

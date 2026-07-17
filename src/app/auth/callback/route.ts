@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { sanitizeAuthRedirectPath } from "@/lib/auth/routes";
+import {
+  PASSWORD_RESET_PATH,
+  sanitizeAuthRedirectPath,
+} from "@/lib/auth/routes";
 import { NextResponse } from "next/server";
 
 export async function GET(request: Request) {
@@ -8,6 +11,7 @@ export async function GET(request: Request) {
   const safeNext = sanitizeAuthRedirectPath(
     searchParams.get("next") ?? searchParams.get("redirect"),
   );
+  const isPasswordReset = safeNext === PASSWORD_RESET_PATH;
 
   if (code) {
     const supabase = await createClient();
@@ -15,6 +19,12 @@ export async function GET(request: Request) {
     if (!error) {
       return NextResponse.redirect(`${origin}${safeNext}`);
     }
+  }
+
+  if (isPasswordReset) {
+    return NextResponse.redirect(
+      `${origin}/login?error=reset_link_invalid`,
+    );
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth_callback_failed`);
