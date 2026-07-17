@@ -8,7 +8,8 @@ import { useState } from "react";
 
 /**
  * Request a Supabase password-recovery email.
- * The link opens in the system browser (Web完結); Deep Link is out of scope.
+ * redirectTo points at the reset page so default ConfirmationURL hash/code
+ * tokens are handled in the browser (server /auth/callback cannot read hashes).
  */
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -23,7 +24,9 @@ export default function ForgotPasswordPage() {
 
     const supabase = createClient();
     const origin = window.location.origin;
-    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(PASSWORD_RESET_PATH)}`;
+    // Land on the client reset page (not /auth/callback). Hash fragments and
+    // PKCE `code` are recoverable there; a server redirect would strip hashes.
+    const redirectTo = `${origin}${PASSWORD_RESET_PATH}`;
 
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(
       email.trim(),
@@ -37,7 +40,6 @@ export default function ForgotPasswordPage() {
       return;
     }
 
-    // Same success copy whether or not the address exists (avoid account enumeration).
     setSent(true);
   };
 

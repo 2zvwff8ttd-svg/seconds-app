@@ -8,7 +8,10 @@ export const PUBLIC_ROUTES = [
   "/guidelines",
 ] as const;
 
-/** Where recovery email links land after /auth/callback exchanges the code. */
+/**
+ * Where recovery email `redirectTo` should land.
+ * Client page can read hash tokens; server /auth/callback cannot.
+ */
 export const PASSWORD_RESET_PATH = "/auth/reset-password";
 
 /** Default redirect after successful login */
