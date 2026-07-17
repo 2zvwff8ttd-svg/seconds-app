@@ -16,6 +16,7 @@ type ClipPreviewModalProps = {
 
 /**
  * Fullscreen clip playback. Delete requires an explicit confirm step.
+ * Tap the video to play/pause — no chrome controls or play button overlay.
  * Stacks above post-nav sheet (z=410) via --z-modal (500) and hides nav while open.
  */
 export function ClipPreviewModal({
@@ -26,14 +27,13 @@ export function ClipPreviewModal({
 }: ClipPreviewModalProps) {
   const [mounted, setMounted] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const togglePlayback = () => {
     const video = videoRef.current;
     if (!video) return;
     if (video.paused || video.ended) {
-      void video.play().catch(() => setIsPlaying(false));
+      void video.play().catch(() => {});
     } else {
       video.pause();
     }
@@ -52,7 +52,6 @@ export function ClipPreviewModal({
 
   useEffect(() => {
     setConfirmDelete(false);
-    setIsPlaying(false);
   }, [clip.id]);
 
   useEffect(() => {
@@ -115,26 +114,8 @@ export function ClipPreviewModal({
             playsInline
             autoPlay
             onClick={togglePlayback}
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-            onEnded={() => setIsPlaying(false)}
+            aria-label="タップで再生または停止"
           />
-          <button
-            type="button"
-            onClick={togglePlayback}
-            className="clip-preview-play-toggle"
-            aria-label={isPlaying ? "停止" : "再生"}
-          >
-            {isPlaying ? (
-              <svg viewBox="0 0 24 24" aria-hidden>
-                <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" aria-hidden>
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            )}
-          </button>
         </DisplayMaskMedia>
       </div>
 

@@ -1616,31 +1616,7 @@ html.record-native-preview-active body {
   object-fit: cover;
   background: #050508;
   cursor: pointer;
-}
-
-.clip-preview-play-toggle {
-  position: absolute;
-  left: 50%;
-  bottom: 9%;
-  display: flex;
-  width: 3.25rem;
-  height: 3.25rem;
-  align-items: center;
-  justify-content: center;
-  transform: translateX(-50%);
-  border: 1px solid rgb(255 255 255 / 0.45);
-  border-radius: 999px;
-  background: rgb(0 0 0 / 0.62);
-  color: white;
-  box-shadow: 0 4px 18px rgb(0 0 0 / 0.35);
-  backdrop-filter: blur(8px);
   touch-action: manipulation;
-}
-
-.clip-preview-play-toggle svg {
-  width: 1.4rem;
-  height: 1.4rem;
-  fill: currentColor;
 }
 
 .record-mask-overlay__rim {
