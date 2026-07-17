@@ -4,7 +4,8 @@ import { getNativeZoomFactor } from "@/lib/recording/native-camera-controls";
 import { useEffect, useState } from "react";
 
 const ZOOMED_THRESHOLD = 1.02;
-const NATIVE_ZOOM_POLL_MS = 400;
+/** Poll often enough that hole inset tracks pinch without a visible lag. */
+const NATIVE_ZOOM_POLL_MS = 100;
 
 async function readNativeZoomed(): Promise<boolean | null> {
   try {
@@ -46,7 +47,16 @@ export function useNativePreviewZoomed(active: boolean): boolean {
     const pollId = window.setInterval(() => void syncNativeZoom(), NATIVE_ZOOM_POLL_MS);
 
     const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length >= 2) setPinchLatched(true);
+      if (event.touches.length >= 2) {
+        setPinchLatched(true);
+        void syncNativeZoom();
+      }
+    };
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (event.touches.length >= 2) {
+        void syncNativeZoom();
+      }
     };
 
     const onTouchEnd = () => {
@@ -54,6 +64,10 @@ export function useNativePreviewZoomed(active: boolean): boolean {
     };
 
     document.addEventListener("touchstart", onTouchStart, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener("touchmove", onTouchMove, {
       capture: true,
       passive: true,
     });
@@ -70,6 +84,7 @@ export function useNativePreviewZoomed(active: boolean): boolean {
       cancelled = true;
       window.clearInterval(pollId);
       document.removeEventListener("touchstart", onTouchStart, true);
+      document.removeEventListener("touchmove", onTouchMove, true);
       document.removeEventListener("touchend", onTouchEnd, true);
       document.removeEventListener("touchcancel", onTouchEnd, true);
     };

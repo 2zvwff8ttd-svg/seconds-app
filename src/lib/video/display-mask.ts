@@ -219,7 +219,7 @@ export function computeRecordHoleRect(
 export function getRecordHoleMaskBleedPx(
   _shape: VideoDisplayMaskShape = DEFAULT_VIDEO_DISPLAY_MASK,
 ): number {
-  return 3;
+  return 6;
 }
 
 /** Shrink scrim hole inward while preview is zoomed — hides preview letterbox at the edge. */

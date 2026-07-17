@@ -1363,7 +1363,6 @@ body {
   --z-record-focus-ring: 120;
   --z-record-loading: 150;
   --z-record-gauge: 200;
-  --z-record-lens-picker: 205;
   --z-record-flip: 210;
   --z-record-clip-strip: 310;
   --z-record-dock: 300;
@@ -1777,46 +1776,6 @@ html.record-native-preview-active body {
     opacity: 0;
     transform: scale(1.08);
   }
-}
-
-.record-lens-picker {
-  position: fixed;
-  left: 1rem;
-  top: var(--record-layout-flip-top);
-  z-index: var(--z-record-lens-picker);
-  display: flex;
-  gap: 0.35rem;
-  padding: 0.2rem;
-  border-radius: 9999px;
-  background: rgb(0 0 0 / 0.5);
-  backdrop-filter: blur(12px);
-  pointer-events: auto;
-}
-
-.record-lens-picker__btn {
-  min-width: 2.5rem;
-  padding: 0.35rem 0.55rem;
-  border-radius: 9999px;
-  border: none;
-  background: transparent;
-  color: rgb(255 255 255 / 0.78);
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.record-lens-picker__btn--active {
-  background: rgb(255 255 255 / 0.22);
-  color: white;
-}
-
-.record-lens-picker__btn:disabled {
-  opacity: 0.45;
-}
-
-.record-lens-picker__btn:not(:disabled):hover {
-  background: rgb(255 255 255 / 0.12);
 }
 
 .record-stage-ui__dock {
