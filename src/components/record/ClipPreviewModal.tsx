@@ -17,7 +17,7 @@ type ClipPreviewModalProps = {
 
 /**
  * Fullscreen clip playback. Delete requires an explicit confirm step.
- * Close (primary, top-right + bottom) vs Delete (secondary, muted destructive) are visually distinct.
+ * Stacks above post-nav sheet (z=410) via --z-modal (500) and hides nav while open.
  */
 export function ClipPreviewModal({
   clip,
@@ -32,8 +32,10 @@ export function ClipPreviewModal({
     setMounted(true);
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    document.documentElement.classList.add("clip-preview-open");
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.documentElement.classList.remove("clip-preview-open");
     };
   }, []);
 
@@ -59,12 +61,12 @@ export function ClipPreviewModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[400] flex flex-col bg-black"
+      className="clip-preview-modal fixed inset-0 z-modal flex flex-col bg-black"
       role="dialog"
       aria-modal="true"
       aria-label={`クリップ ${index + 1} のプレビュー`}
     >
-      <div className="relative z-[410] flex shrink-0 items-center justify-between gap-3 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <div className="relative z-[1] flex shrink-0 items-center justify-between gap-3 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white">
             クリップ {index + 1}
@@ -92,7 +94,7 @@ export function ClipPreviewModal({
         </button>
       </div>
 
-      <div className="relative z-[405] flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
+      <div className="relative z-0 flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
         <DisplayMaskMedia
           shape={DEFAULT_VIDEO_DISPLAY_MASK}
           className="clip-preview-mask-stage"
@@ -107,7 +109,7 @@ export function ClipPreviewModal({
         </DisplayMaskMedia>
       </div>
 
-      <div className="relative z-[410] shrink-0 space-y-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+      <div className="relative z-[1] shrink-0 space-y-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
         {confirmDelete ? (
           <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
             <p className="text-center text-sm font-medium text-white">

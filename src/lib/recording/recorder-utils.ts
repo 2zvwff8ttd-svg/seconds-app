@@ -319,6 +319,8 @@ export function getNativeCaptureAccept(): string {
   return isIOSDevice() ? "video/*" : "video/*";
 }
 
+import { roundClipDurationSeconds } from "@/lib/recording/format-clip-duration";
+
 /** カメラアプリ撮影（input capture）の File から秒数を取得 */
 export async function probeCapturedClipDuration(
   file: File,
@@ -329,7 +331,7 @@ export async function probeCapturedClipDuration(
   try {
     const raw = await getVideoDuration(file, { timeoutMs: 15_000 });
     if (raw > 0) {
-      return Math.min(budget, Math.max(0.1, Math.round(raw * 10) / 10));
+      return Math.min(budget, roundClipDurationSeconds(raw));
     }
   } catch {
     // iOS カメラ撮影はメタデータ取得に失敗することがある
@@ -338,7 +340,7 @@ export async function probeCapturedClipDuration(
   if (isIOSDevice()) {
     const iosDuration = await probeIOSVideoDurationFromFile(file);
     if (iosDuration > 0) {
-      return Math.min(budget, Math.max(0.1, Math.round(iosDuration * 10) / 10));
+      return Math.min(budget, roundClipDurationSeconds(iosDuration));
     }
   }
 

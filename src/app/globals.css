@@ -1463,6 +1463,18 @@ html.post-nav-collapsed .post-nav-sheet--expanded .post-nav-sheet__nav {
   pointer-events: auto;
 }
 
+/* Clip preview must sit above post-nav handle (z=410) and steal all taps. */
+html.clip-preview-open .post-nav-sheet,
+html.clip-preview-open .post-nav-scrim {
+  pointer-events: none !important;
+  visibility: hidden;
+}
+
+.clip-preview-modal {
+  /* Ensure above --z-post-nav-sheet (410) even if utility order shifts */
+  z-index: var(--z-modal);
+}
+
 
 html.record-native-preview-active,
 html.record-native-preview-active body {

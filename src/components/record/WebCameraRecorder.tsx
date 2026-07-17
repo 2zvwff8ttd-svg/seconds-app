@@ -25,6 +25,7 @@ import {
 import { normalizeStorageContentType } from "@/lib/video/media";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
+import { roundClipDurationSeconds } from "@/lib/recording/format-clip-duration";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -240,7 +241,7 @@ export function WebCameraRecorder({
 
     const durationSeconds = Math.min(
       budget,
-      Math.max(0.1, Math.round(elapsed * 10) / 10),
+      roundClipDurationSeconds(elapsed),
     );
 
     const mime = recordedMime;

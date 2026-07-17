@@ -1,4 +1,5 @@
 import { getPostingDayDateString } from "@/lib/posting/day-boundary";
+import { roundClipDurationSeconds } from "@/lib/recording/format-clip-duration";
 import {
   DEFAULT_VIDEO_DISPLAY_MASK,
   parseVideoDisplayMaskShape,
@@ -158,7 +159,7 @@ export async function recordedClipFromStoredDraft(
     id: clip.id,
     file,
     previewUrl: URL.createObjectURL(file),
-    durationSeconds: clip.durationSeconds,
+    durationSeconds: roundClipDurationSeconds(clip.durationSeconds),
   };
 }
 

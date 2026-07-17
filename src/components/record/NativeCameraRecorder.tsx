@@ -22,6 +22,7 @@ import { debounceAsync } from "@/lib/recording/native-preview-scheduler";
 import { useNativePreviewZoomed } from "@/lib/recording/use-native-preview-zoomed";
 import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
 import { nativeVideoSourceToFile } from "@/lib/recording/native-recording-file";
+import { roundClipDurationSeconds } from "@/lib/recording/format-clip-duration";
 import {
   measureRecordingSeconds,
   scheduleRecordingAutoStop,
@@ -260,7 +261,7 @@ export function NativeCameraRecorder({
       const file = await nativeVideoSourceToFile(recording);
       const durationSeconds = Math.min(
         budget,
-        Math.max(0.1, Math.floor(elapsed * 10) / 10),
+        roundClipDurationSeconds(elapsed),
       );
 
       addRecordedClip(file, durationSeconds);
