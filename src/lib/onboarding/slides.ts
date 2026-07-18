@@ -22,17 +22,10 @@ export const ONBOARDING_SLIDES: OnboardingSlide[] = [
     visualLabel: "Tap",
   },
   {
-    id: "record",
-    title: "撮影して投稿",
-    description:
-      "毎日届く秒数の中でクリップを撮影。動画は丸いシャボン玉になって、あなたの一日を映します。",
-    visualLabel: "REC",
-  },
-  {
     id: "publish",
     title: "翌朝7時に公開",
     description:
-      "投稿は翌朝7時に公開され、10日間だけシャボン玉に残ります。消えていくから、今日の瞬間が少し特別になります。",
+      "投稿は翌朝7時に公開され、丸いシャボン玉として10日間だけ残ります。消えていくから、今日の瞬間が少し特別になります。",
     visualLabel: "公開",
   },
   {

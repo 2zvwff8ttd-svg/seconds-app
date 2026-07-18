@@ -32,23 +32,6 @@ export function OnboardingSlideVisual({ slide }: OnboardingSlideVisualProps) {
           </div>
         </div>
       );
-    case "record":
-      return (
-        <div className="relative flex h-44 w-44 flex-col items-center justify-center">
-          <div className="absolute inset-0 rounded-full bg-violet-500/15 blur-2xl" />
-          <div className="relative flex h-32 w-32 flex-col items-center justify-center rounded-full border-2 border-violet-400/50 bg-gradient-to-br from-violet-500/20 to-fuchsia-500/10 shadow-[0_0_28px_rgba(167,139,250,0.25)]">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-red-500/80 bg-red-500/15">
-              <span className="h-6 w-6 rounded-full bg-red-500" />
-            </div>
-            <span className="mt-3 text-xs font-semibold tracking-widest text-red-400">
-              {slide.visualLabel}
-            </span>
-          </div>
-          <span className="relative mt-3 rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-0.5 text-[10px] font-medium text-violet-200/90">
-            丸いシャボン玉
-          </span>
-        </div>
-      );
     case "publish":
       return (
         <div className="flex h-44 w-52 flex-col items-center gap-3">
