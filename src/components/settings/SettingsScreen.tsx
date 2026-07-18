@@ -2,6 +2,7 @@ import { AppFooter } from "@/components/layout/AppFooter";
 import { BlockedUsersSection } from "@/components/settings/BlockedUsersSection";
 import { DeleteAccountSection } from "@/components/settings/DeleteAccountSection";
 import { PushNotificationSettingsSection } from "@/components/settings/PushNotificationSettingsSection";
+import { SignOutSection } from "@/components/settings/SignOutSection";
 import { LEGAL_DOCUMENTS, SUPPORT_EMAIL } from "@/lib/legal/documents";
 import Link from "next/link";
 
@@ -59,6 +60,8 @@ export function SettingsScreen() {
         <PushNotificationSettingsSection />
 
         <BlockedUsersSection />
+
+        <SignOutSection />
 
         <DeleteAccountSection />
 

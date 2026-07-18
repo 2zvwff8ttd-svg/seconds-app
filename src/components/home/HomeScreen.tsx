@@ -1,6 +1,5 @@
 "use client";
 
-import { SignOutButton } from "@/components/auth/SignOutButton";
 import { CrownCelebrationModal } from "@/components/crown/CrownCelebrationModal";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import {
@@ -109,7 +108,6 @@ export function HomeScreen() {
             {countryCode} #1
           </span>
           <NotificationBell />
-          <SignOutButton />
         </div>
       </header>
 
