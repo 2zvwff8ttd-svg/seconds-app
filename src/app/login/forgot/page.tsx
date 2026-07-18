@@ -67,7 +67,7 @@ export default function ForgotPasswordPage() {
                   入力されたメールアドレスに、再設定用のリンクを送信しました。メール内のリンクを開いて、新しいパスワードを設定してください。
                 </p>
                 <p className="text-xs leading-relaxed text-muted">
-                  届かない場合は迷惑メールフォルダも確認してください。Googleのみで登録している場合は、ログイン画面の「Googleで続ける」を使ってください。
+                  届かない場合は迷惑メールフォルダも確認してください。
                 </p>
                 <Link
                   href="/login"
