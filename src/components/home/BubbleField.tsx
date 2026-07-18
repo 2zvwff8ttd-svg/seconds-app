@@ -233,6 +233,15 @@ export function BubbleField({
     applySessionCommentSignal(sessionPrefRef.current, selection.video);
   }, [selection]);
 
+  const handleVideoDeleted = useCallback((videoId: string) => {
+    const removeDeleted = (videos: FeedVideo[]) =>
+      videos.filter((video) => video.id !== videoId);
+
+    setFeedPool((prev) => removeDeleted(prev));
+    feedPoolRef.current = removeDeleted(feedPoolRef.current);
+    setActiveBubbles((prev) => removeDeleted(prev));
+  }, []);
+
   const handleUserBlocked = useCallback((userId: string) => {
     const removeBlocked = (videos: FeedVideo[]) =>
       videos.filter((video) => video.creatorId !== userId);
@@ -352,6 +361,7 @@ export function BubbleField({
           onLikeEngagement={handleLikeEngagement}
           onCommentEngagement={handleCommentEngagement}
           onUserBlocked={handleUserBlocked}
+          onVideoDeleted={handleVideoDeleted}
         />
       )}
     </>

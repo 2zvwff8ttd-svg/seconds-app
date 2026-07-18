@@ -359,7 +359,15 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
       </div>
 
       {selected && (
-        <FullscreenPlayer video={selected} onClose={() => setSelected(null)} />
+        <FullscreenPlayer
+          video={selected}
+          onClose={() => setSelected(null)}
+          onVideoDeleted={(videoId) => {
+            setUserVideos((prev) => prev.filter((v) => v.id !== videoId));
+            setLikedVideos((prev) => prev.filter((v) => v.id !== videoId));
+            void load({ silent: true });
+          }}
+        />
       )}
 
       {followListKind && profile && (

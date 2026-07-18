@@ -15,6 +15,8 @@ import {
 } from "@/lib/home/bubble-origin-rect";
 import { FULLSCREEN_EXIT_MS } from "@/lib/home/fullscreen-transition";
 import { createClient } from "@/lib/supabase/client";
+import { deleteOwnVideo } from "@/lib/videos/delete";
+import { ConfirmDeleteVideoDialog } from "@/components/profile/ConfirmDeleteVideoDialog";
 import { fetchVideoById } from "@/lib/videos/fetch-video";
 import { normalizeMediaPublicUrl } from "@/lib/videos/normalize-media-url";
 import {
@@ -40,6 +42,8 @@ type FullscreenPlayerProps = {
   onLikeEngagement?: () => void;
   onCommentEngagement?: () => void;
   onUserBlocked?: (userId: string) => void;
+  /** 自分の動画を削除したとき（クローズ前）に呼ばれる。フィード側でリストから除去する用途。 */
+  onVideoDeleted?: (videoId: string) => void;
 };
 
 function setVideoSource(el: HTMLVideoElement, url: string): boolean {
@@ -96,6 +100,7 @@ export function FullscreenPlayer({
   onLikeEngagement,
   onCommentEngagement,
   onUserBlocked,
+  onVideoDeleted,
 }: FullscreenPlayerProps) {
   const slotARef = useRef<HTMLVideoElement>(null);
   const slotBRef = useRef<HTMLVideoElement>(null);
@@ -106,6 +111,9 @@ export function FullscreenPlayer({
     resolveSaveShareVideoUrl(video.saveVideoUrl, video.videoUrl),
   );
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const [maskDiameter, setMaskDiameter] = useState(0);
@@ -339,6 +347,34 @@ export function FullscreenPlayer({
     setIsExiting(true);
   }, []);
 
+  const isOwnVideo =
+    currentUserId != null && currentUserId === video.creatorId;
+
+  const handleDeleteRequest = useCallback(() => {
+    const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
+    el?.pause();
+    if (video.bgmUrl) pauseBgm();
+    setDeleteError(null);
+    setConfirmDeleteOpen(true);
+  }, [video.bgmUrl, pauseBgm]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteOwnVideo(video.id);
+      setConfirmDeleteOpen(false);
+      onVideoDeleted?.(video.id);
+      requestClose();
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "削除に失敗しました",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }, [video.id, onVideoDeleted, requestClose]);
+
   useEffect(() => {
     if (!isExiting) return;
     const el = getSlotRef(activeSlotRef.current, slotARef, slotBRef).current;
@@ -546,14 +582,48 @@ export function FullscreenPlayer({
                 {video.title}
               </p>
             </div>
-            {playbackUrl && (
-              <VideoSaveShareButtons
-                videoUrl={saveShareUrl || playbackUrl}
-                title={video.title}
-                disabled={isExiting}
-                layout="row"
-              />
-            )}
+            <div className="flex shrink-0 items-start gap-2">
+              {playbackUrl && (
+                <VideoSaveShareButtons
+                  videoUrl={saveShareUrl || playbackUrl}
+                  title={video.title}
+                  disabled={isExiting}
+                  layout="row"
+                />
+              )}
+              {isOwnVideo && (
+                <button
+                  type="button"
+                  onClick={handleDeleteRequest}
+                  disabled={isExiting || deleting}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-red-400 backdrop-blur-md transition hover:bg-black/65 hover:text-red-300 disabled:pointer-events-none disabled:opacity-40 sm:h-10 sm:w-10"
+                  aria-label="この投稿を削除"
+                  title="削除"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    aria-hidden
+                  >
+                    <path d="M4 7h16" strokeLinecap="round" />
+                    <path
+                      d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M6.5 7l.8 12.1a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path d="M10 11v6M14 11v6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
+            </div>
           </div>
           <UserIdentity
             username={video.creatorName}
@@ -590,6 +660,18 @@ export function FullscreenPlayer({
           />
         </div>
       </div>
+
+      {confirmDeleteOpen && (
+        <ConfirmDeleteVideoDialog
+          title={video.title}
+          deleting={deleting}
+          error={deleteError}
+          onCancel={() => {
+            if (!deleting) setConfirmDeleteOpen(false);
+          }}
+          onConfirm={() => void handleDeleteConfirm()}
+        />
+      )}
     </div>
   );
 }

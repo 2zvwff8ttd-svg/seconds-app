@@ -5,6 +5,7 @@ type ConfirmDeleteVideoDialogProps = {
   onConfirm: () => void;
   onCancel: () => void;
   deleting?: boolean;
+  error?: string | null;
 };
 
 export function ConfirmDeleteVideoDialog({
@@ -12,6 +13,7 @@ export function ConfirmDeleteVideoDialog({
   onConfirm,
   onCancel,
   deleting = false,
+  error = null,
 }: ConfirmDeleteVideoDialogProps) {
   return (
     <div
@@ -34,6 +36,11 @@ export function ConfirmDeleteVideoDialog({
         <p className="mt-2 text-sm text-muted">
           「{title}」を削除します。動画ファイルも完全に削除され、元に戻せません。
         </p>
+        {error && (
+          <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
+            {error}
+          </p>
+        )}
         <div className="mt-5 flex gap-2">
           <button
             type="button"
