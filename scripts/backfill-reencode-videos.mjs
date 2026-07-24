@@ -33,7 +33,8 @@ const root = join(__dirname, "..");
 const MEDIA_BUCKET = "media";
 const OUTPUT_STORAGE_NAME = "video-reencoded.mp4";
 /** Bump when ffmpeg recipe changes; recorded in apply manifests for traceability. */
-const ENCODE_RECIPE_ID = "ios-baseline-v3-framecheck";
+/** Bump: level 3.1 → 4.0 for 1080×1920@30 (Safari / VideoToolbox). */
+const ENCODE_RECIPE_ID = "ios-baseline-v4-level40";
 const IOS_MAX_VIDEO_WIDTH = 1080;
 const MIN_OUTPUT_BYTES = 1024;
 /** ~24fps floor; partial HEVC copy-concat sources often land near 16fps and still freeze on iOS. */
@@ -68,7 +69,7 @@ const FFMPEG_ENCODE_VIDEO = [
   "-profile:v",
   "baseline",
   "-level",
-  "3.1",
+  "4.0",
   "-preset",
   "fast",
   "-crf",

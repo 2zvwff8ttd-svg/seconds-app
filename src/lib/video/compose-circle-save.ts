@@ -3,7 +3,10 @@ import {
   safeDeleteFile,
   writeFileFromBlob,
 } from "@/lib/video/ffmpeg-client";
-import { IOS_MP4_MUX_ARGS } from "@/lib/video/ios-mp4-encode";
+import {
+  IOS_MP4_MUX_ARGS,
+  iosMp4VideoEncodeArgs,
+} from "@/lib/video/ios-mp4-encode";
 
 export const SAVE_MASK_SIZE = 720;
 export const STARFIELD_ASSET_URL = "/save-mask/starfield.png";
@@ -43,28 +46,18 @@ async function execWithLogs(
   }
 }
 
-const ENCODE_VIDEO_ARGS = [
-  "-c:v",
-  "libx264",
-  "-profile:v",
-  "baseline",
-  "-level",
-  "3.1",
-  "-preset",
-  "ultrafast",
-  "-crf",
-  "29",
-  "-pix_fmt",
-  "yuv420p",
-  "-g",
-  "30",
-  "-keyint_min",
-  "30",
-  "-sc_threshold",
-  "0",
-  "-tag:v",
-  "avc1",
-] as const;
+/** 720×720@30 → level 3.1 via shared resolver (not hardcoded). */
+const ENCODE_VIDEO_ARGS = (() => {
+  const args = iosMp4VideoEncodeArgs({
+    preset: "ultrafast",
+    width: SAVE_MASK_SIZE,
+    height: SAVE_MASK_SIZE,
+  });
+  // Slightly higher CRF for the small save/share asset.
+  const crfIdx = args.indexOf("-crf");
+  if (crfIdx >= 0 && args[crfIdx + 1]) args[crfIdx + 1] = "29";
+  return args;
+})();
 
 /**
  * Compose a 720p circle-masked MP4 on #010102 starfield for save/share.

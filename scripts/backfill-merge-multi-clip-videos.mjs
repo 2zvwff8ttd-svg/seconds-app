@@ -131,7 +131,7 @@ const FFMPEG_ENCODE_VIDEO = [
   "-profile:v",
   "baseline",
   "-level",
-  "3.1",
+  "4.0",
   "-preset",
   "fast",
   "-crf",
