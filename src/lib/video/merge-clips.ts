@@ -5,6 +5,10 @@ import {
   writeFileFromBlob,
 } from "@/lib/video/ffmpeg-client";
 import {
+  assertClipsAvDurationOk,
+  assertMergedAvDurationOk,
+} from "@/lib/video/av-duration-guard";
+import {
   iosMp4OutputEncodeArgs,
   iosMp4ScaleFilterArgs,
   type IosMp4EncodePreset,
@@ -266,6 +270,9 @@ export async function transcodeClipForPost(
   const probe = await probeClipForPostUpload(file);
   const encodePath = probe.encodePath;
 
+  onProgress?.(0.06, "映像と音声の長さを確認中…");
+  await assertClipsAvDurationOk([file]);
+
   const inputExt = outputExtension(container);
   const runId = crypto.randomUUID().slice(0, 8);
   const inputName = `single_in_${runId}.${inputExt}`;
@@ -309,6 +316,8 @@ export async function transcodeClipForPost(
       "video/mp4",
       "video.mp4",
     );
+    onProgress?.(0.97, "結合結果の長さを確認中…");
+    await assertMergedAvDurationOk(encoded);
     onProgress?.(1, "動画の最適化が完了しました");
     return {
       file: encoded,
@@ -317,6 +326,12 @@ export async function transcodeClipForPost(
     };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    if (
+      detail.includes("映像と音声の長さ") ||
+      detail.includes("撮り直して")
+    ) {
+      throw err instanceof Error ? err : new Error(detail);
+    }
     throw new Error(`動画の最適化に失敗しました（${detail}）`);
   } finally {
     ffmpeg.off("progress", onFfmpegProgress);
@@ -361,6 +376,9 @@ export async function mergeClipsForPost(
   const { worstPath } = await probeClipsForMergeEncode(files);
   const preset = encodePresetForPath(worstPath);
 
+  onProgress?.(0.08, "映像と音声の長さを確認中…");
+  await assertClipsAvDurationOk(files);
+
   const inputExt = outputExtension(assessment.container);
   const encodeOutName = `merged_enc_${crypto.randomUUID().slice(0, 8)}.mp4`;
 
@@ -384,6 +402,8 @@ export async function mergeClipsForPost(
       "video/mp4",
       "merged.mp4",
     );
+    onProgress?.(0.96, "結合結果の長さを確認中…");
+    await assertMergedAvDurationOk(merged);
     onProgress?.(1, "クリップの結合が完了しました");
     return {
       file: merged,
@@ -391,6 +411,12 @@ export async function mergeClipsForPost(
     };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    if (
+      detail.includes("映像と音声の長さ") ||
+      detail.includes("撮り直して")
+    ) {
+      throw err instanceof Error ? err : new Error(detail);
+    }
     throw new Error(`クリップの結合に失敗しました（${detail}）`);
   } finally {
     if (ctx) {
