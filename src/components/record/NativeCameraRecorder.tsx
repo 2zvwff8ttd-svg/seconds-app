@@ -27,6 +27,7 @@ import {
   measureRecordingSeconds,
   scheduleRecordingAutoStop,
 } from "@/lib/recording/recording-timer";
+import { logRecordedClipAvDurations } from "@/lib/video/av-duration-guard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function waitMs(ms: number): Promise<void> {
@@ -272,8 +273,15 @@ export function NativeCameraRecorder({
       console.info(
         `[NativeCameraRecorder] clip added: ${durationSeconds}s (${file.size} bytes)`,
       );
+      // Evidence for A/V mismatch: probe streams async (do not block UI).
+      void logRecordedClipAvDurations(file, {
+        source: "native",
+        wallClockSec: durationSeconds,
+        clipIndex: clips.length,
+        fileBytes: file.size,
+      });
     },
-    [addRecordedClip],
+    [addRecordedClip, clips.length],
   );
 
   const finishRecording = useCallback(async () => {
@@ -360,7 +368,15 @@ export function NativeCameraRecorder({
   }, [isRecording]);
 
   const beginRecording = useCallback(async () => {
-    if (assignedSeconds === null || isRecording || disabled) return;
+    if (
+      assignedSeconds === null ||
+      isRecording ||
+      disabled ||
+      finishingRef.current ||
+      recordingStarting
+    ) {
+      return;
+    }
     const budget = assignedSeconds - usedClipSeconds - pendingRecordedSeconds;
     if (budget <= 0) return;
 
@@ -377,7 +393,6 @@ export function NativeCameraRecorder({
     }
 
     setError(null);
-    finishingRef.current = false;
     recordBudgetRef.current = budget;
     setRecordingStarting(true);
 
@@ -420,6 +435,7 @@ export function NativeCameraRecorder({
     isRecording,
     discardFailedClip,
     pendingRecordedSeconds,
+    recordingStarting,
     usedClipSeconds,
   ]);
 

@@ -2160,3 +2160,162 @@ if (
 
 await writeFile(controllerPath, controllerV5, "utf8");
 
+// =============================================================================
+// v7: Prevent V<<A recordings — lock multi-cam switching + pause VideoDataOutput
+// while MovieFileOutput is writing. Pinch zoom across dual/triple switch-over
+// points can interrupt the video track while mic audio continues.
+// =============================================================================
+
+let controllerV7 = await readFile(controllerPath, "utf8");
+
+const lockHelpersOld = `    private func configureMovieFileOutput(_ movieOutput: AVCaptureMovieFileOutput) {
+        guard let connection = movieOutput.connection(with: .video) else { return }`;
+
+const lockHelpersNew = `    /// Lock virtual multi-cam constituent switching for the duration of a take.
+    /// Without this, pinch zoom across switch-over factors can change the active
+    /// physical camera mid-recording and stall/end the video track while audio continues.
+    private func lockConstituentSwitchingForRecording(on movieOutput: AVCaptureMovieFileOutput) {
+        guard #available(iOS 15.0, *) else { return }
+        // Default recording behavior is .restricted (switch-overs still allowed under
+        // some conditions). Lock to the active physical camera for the whole take so
+        // pinch zoom cannot interrupt the video track while mic audio continues.
+        movieOutput.isPrimaryConstituentDeviceSwitchingBehaviorForRecordingEnabled = true
+        movieOutput.setPrimaryConstituentDeviceSwitchingBehaviorForRecording(
+            .locked,
+            restrictedSwitchingBehaviorConditions: []
+        )
+        print("[seconds-app-camera] locked constituent switching for recording")
+    }
+
+    /// VideoDataOutput competes with MovieFileOutput for the video pipeline.
+    /// Disable its connections for the duration of a take (re-enable afterwards).
+    private func setVideoDataOutputEnabled(_ enabled: Bool) {
+        guard let dataOutput = self.dataOutput else { return }
+        for connection in dataOutput.connections {
+            connection.isEnabled = enabled
+        }
+        print("[seconds-app-camera] videoDataOutput connections enabled=\\(enabled)")
+    }
+
+    private func configureMovieFileOutput(_ movieOutput: AVCaptureMovieFileOutput) {
+        guard let connection = movieOutput.connection(with: .video) else { return }`;
+
+if (
+  !controllerV7.includes("lockConstituentSwitchingForRecording") &&
+  controllerV7.includes(lockHelpersOld)
+) {
+  controllerV7 = controllerV7.replace(lockHelpersOld, lockHelpersNew);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v7: lock multi-cam + dataOutput helpers)",
+  );
+} else if (controllerV7.includes("lockConstituentSwitchingForRecording")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v7 helpers) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v7 helpers: configureMovieFileOutput anchor not found",
+  );
+}
+
+const startRecV6 = `        updateVideoOrientation()
+        prepareDeviceForRecording()
+        suppressRecordingGestures = true
+
+        self.startRecordingCompletion = completion
+        movieOutput.startRecording(to: fileUrl, recordingDelegate: self)`;
+
+const startRecV7 = `        updateVideoOrientation()
+        prepareDeviceForRecording()
+        suppressRecordingGestures = true
+        lockConstituentSwitchingForRecording(on: movieOutput)
+        setVideoDataOutputEnabled(false)
+
+        self.startRecordingCompletion = completion
+        movieOutput.startRecording(to: fileUrl, recordingDelegate: self)`;
+
+if (
+  controllerV7.includes(startRecV6) &&
+  !controllerV7.includes("lockConstituentSwitchingForRecording(on: movieOutput)")
+) {
+  controllerV7 = controllerV7.replace(startRecV6, startRecV7);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v7: startRecording lock + pause dataOutput)",
+  );
+} else if (controllerV7.includes("lockConstituentSwitchingForRecording(on: movieOutput)")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v7 startRecording) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v7 startRecording: pattern not found",
+  );
+}
+
+const finishRecV6 = `        suppressRecordingGestures = false
+        restoreContinuousFocusAndExposure()
+        if let device = activeCaptureDevice() {
+            logActiveFrameRate(context: "after stopRecording", device: device)
+        }`;
+
+const finishRecV7 = `        suppressRecordingGestures = false
+        setVideoDataOutputEnabled(true)
+        restoreContinuousFocusAndExposure()
+        if let device = activeCaptureDevice() {
+            logActiveFrameRate(context: "after stopRecording", device: device)
+        }`;
+
+if (
+  controllerV7.includes(finishRecV6) &&
+  !controllerV7.includes(
+    "setVideoDataOutputEnabled(true)\n        restoreContinuousFocusAndExposure()",
+  )
+) {
+  controllerV7 = controllerV7.replace(finishRecV6, finishRecV7);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v7: stopRecording re-enable dataOutput)",
+  );
+} else if (
+  controllerV7.includes(
+    "setVideoDataOutputEnabled(true)\n        restoreContinuousFocusAndExposure()",
+  )
+) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v7 stopRecording) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v7 stopRecording: pattern not found",
+  );
+}
+
+// Log pinch zoom while recording (evidence for next kai-class failure).
+const pinchBeganOld = `        case .began:
+            zoomFactor = device.videoZoomFactor
+            fallthrough
+        case .changed:`;
+
+const pinchBeganNew = `        case .began:
+            zoomFactor = device.videoZoomFactor
+            if suppressRecordingGestures {
+                print("[seconds-app-camera] pinch began during recording rawZoom=\\(device.videoZoomFactor)")
+            }
+            fallthrough
+        case .changed:`;
+
+if (
+  controllerV7.includes(pinchBeganOld) &&
+  !controllerV7.includes("pinch began during recording")
+) {
+  controllerV7 = controllerV7.replace(pinchBeganOld, pinchBeganNew);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v7: log pinch during recording)",
+  );
+} else if (controllerV7.includes("pinch began during recording")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v7 pinch log) already patched",
+  );
+}
+
+await writeFile(controllerPath, controllerV7, "utf8");
+

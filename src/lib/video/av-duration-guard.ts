@@ -225,3 +225,52 @@ export async function assertMergedAvDurationOk(
   }
   return probe;
 }
+
+export type ClipAvLogMeta = {
+  source: "native" | "web" | "web-file";
+  /** Wall-clock / budget duration stored on the clip (seconds). */
+  wallClockSec: number;
+  clipIndex?: number;
+  fileBytes?: number;
+};
+
+/**
+ * Probe A/V durations right after a clip is captured and emit a structured log.
+ * Fire-and-forget from recorders — never throw (evidence only).
+ */
+export async function logRecordedClipAvDurations(
+  file: File,
+  meta: ClipAvLogMeta,
+): Promise<AvDurationProbe | null> {
+  try {
+    const probe = await probeAvDurations(file);
+    const wallMinusVideo =
+      probe.videoDurationSec != null
+        ? round3(meta.wallClockSec - probe.videoDurationSec)
+        : null;
+    const payload = {
+      ...meta,
+      fileName: file.name,
+      mimeType: file.type || null,
+      fileBytes: meta.fileBytes ?? file.size,
+      videoDurationSec: probe.videoDurationSec,
+      audioDurationSec: probe.audioDurationSec,
+      signedDiffSec: probe.signedDiffSec,
+      absDiffSec: probe.absDiffSec,
+      wallMinusVideoSec: wallMinusVideo,
+      mismatchOverThreshold:
+        probe.absDiffSec != null &&
+        probe.absDiffSec > AV_CLIP_MISMATCH_THRESHOLD_SEC,
+    };
+    console.info("[clip-av]", JSON.stringify(payload));
+    return probe;
+  } catch (err) {
+    console.warn("[clip-av] probe failed", {
+      source: meta.source,
+      wallClockSec: meta.wallClockSec,
+      fileName: file.name,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}

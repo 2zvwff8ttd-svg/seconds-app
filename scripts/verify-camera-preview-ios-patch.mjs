@@ -70,7 +70,7 @@ const checks = [
   },
   {
     label: "pinch began syncs zoomFactor from device",
-    ok: /case \.began:\s*zoomFactor = device\.videoZoomFactor\s*fallthrough/.test(
+    ok: /case \.began:\s*zoomFactor = device\.videoZoomFactor[\s\S]*?fallthrough/.test(
       controller,
     ),
     fail: "handlePinch .began must baseline zoomFactor from device.videoZoomFactor",
@@ -297,6 +297,30 @@ const checks = [
     label: "plugin does not assign previewLayer.frame directly",
     ok: !/cameraController\.previewLayer\?\.frame\s*=/.test(plugin),
     fail: "CameraPreviewPlugin must not set previewLayer.frame directly (use syncPreviewLayerFrame)",
+  },
+  {
+    label: "locks multi-cam constituent switching while recording",
+    ok:
+      controller.includes("lockConstituentSwitchingForRecording(on: movieOutput)") &&
+      controller.includes(
+        "setPrimaryConstituentDeviceSwitchingBehaviorForRecording",
+      ) &&
+      controller.includes(".locked"),
+    fail:
+      "startRecording must lock primaryConstituentDeviceSwitchingBehaviorForRecording to .locked",
+  },
+  {
+    label: "pauses VideoDataOutput while recording",
+    ok:
+      controller.includes("setVideoDataOutputEnabled(false)") &&
+      controller.includes("setVideoDataOutputEnabled(true)"),
+    fail:
+      "VideoDataOutput connections must be disabled during recording and re-enabled after",
+  },
+  {
+    label: "logs pinch during recording",
+    ok: controller.includes("pinch began during recording"),
+    fail: "handlePinch must log when pinch begins during recording",
   },
 ];
 

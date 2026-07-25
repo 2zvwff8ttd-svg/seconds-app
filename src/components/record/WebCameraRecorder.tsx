@@ -27,6 +27,7 @@ import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { roundClipDurationSeconds } from "@/lib/recording/format-clip-duration";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
+import { logRecordedClipAvDurations } from "@/lib/video/av-duration-guard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 function isStreamLive(stream: MediaStream | null): boolean {
@@ -270,12 +271,25 @@ export function WebCameraRecorder({
     });
 
     addRecordedClip(file, durationSeconds);
+    void logRecordedClipAvDurations(file, {
+      source: "web",
+      wallClockSec: durationSeconds,
+      clipIndex: clips.length,
+      fileBytes: file.size,
+    });
     setPendingRecordedSeconds(0);
     setError(null);
     finishingRef.current = false;
     clearTimer();
     await ensurePreview();
-  }, [addRecordedClip, clearStopFallback, clearTickInterval, clearTimer, ensurePreview]);
+  }, [
+    addRecordedClip,
+    clearStopFallback,
+    clearTickInterval,
+    clearTimer,
+    clips.length,
+    ensurePreview,
+  ]);
 
   const finishRecordingRef = useRef(finishRecording);
   finishRecordingRef.current = finishRecording;
@@ -442,6 +456,12 @@ export function WebCameraRecorder({
       try {
         const durationSeconds = await probeCapturedClipDuration(file, budget);
         addRecordedClip(file, durationSeconds);
+        void logRecordedClipAvDurations(file, {
+          source: "web-file",
+          wallClockSec: durationSeconds,
+          clipIndex: clips.length,
+          fileBytes: file.size,
+        });
         setError(null);
       } catch (err) {
         setError(
@@ -449,7 +469,7 @@ export function WebCameraRecorder({
         );
       }
     },
-    [addRecordedClip, assignedSeconds, usedClipSeconds],
+    [addRecordedClip, assignedSeconds, clips.length, usedClipSeconds],
   );
 
   const openNativeCapture = useCallback(() => {
