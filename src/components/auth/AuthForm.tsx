@@ -2,6 +2,10 @@
 
 import { AppFooter } from "@/components/layout/AppFooter";
 import {
+  normalizeSignupBirthDate,
+  validateSignupBirthDate,
+} from "@/lib/auth/age";
+import {
   sanitizeSignupUsername,
   validateSignupUsername,
 } from "@/lib/auth/username";
@@ -23,6 +27,13 @@ export function AuthForm() {
     () => sanitizeAuthRedirectPath(searchParams.get("redirect")),
     [searchParams],
   );
+  const todayIsoLocal = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
   const urlError = searchParams.get("error");
   const resetDone = searchParams.get("reset") === "1";
 
@@ -30,6 +41,7 @@ export function AuthForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [message, setMessage] = useState<string | null>(
@@ -60,6 +72,20 @@ export function AuthForm() {
         return;
       }
 
+      const birthDateError = validateSignupBirthDate(birthDate);
+      if (birthDateError) {
+        setError(birthDateError);
+        setLoading(false);
+        return;
+      }
+
+      const normalizedBirthDate = normalizeSignupBirthDate(birthDate);
+      if (!normalizedBirthDate) {
+        setError("生年月日を入力してください");
+        setLoading(false);
+        return;
+      }
+
       const usernameError = validateSignupUsername(username);
       if (usernameError) {
         setError(usernameError);
@@ -76,12 +102,22 @@ export function AuthForm() {
           data: {
             username: sanitizedUsername || undefined,
             country: "JP",
+            birth_date: normalizedBirthDate,
           },
         },
       });
 
       if (signUpError) {
-        setError(signUpError.message);
+        const raw = signUpError.message.toLowerCase();
+        if (
+          raw.includes("under 13") ||
+          raw.includes("birth_date") ||
+          raw.includes("check_violation")
+        ) {
+          setError("13歳未満の方は本サービスをご利用いただけません");
+        } else {
+          setError(signUpError.message);
+        }
         setLoading(false);
         return;
       }
@@ -152,6 +188,7 @@ export function AuthForm() {
               onClick={() => {
                 setMode("signin");
                 setAcceptedTerms(false);
+                setBirthDate("");
                 setError(null);
                 setMessage(null);
               }}
@@ -199,6 +236,30 @@ export function AuthForm() {
                   placeholder="yuki_tokyo（英数字と_、2〜30文字）"
                   className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder:text-muted/60 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
                 />
+              </div>
+            )}
+
+            {mode === "signup" && (
+              <div>
+                <label
+                  htmlFor="birthDate"
+                  className="mb-1.5 block text-xs font-medium text-muted"
+                >
+                  生年月日
+                </label>
+                <input
+                  id="birthDate"
+                  type="date"
+                  required
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  autoComplete="bday"
+                  max={todayIsoLocal}
+                  className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
+                />
+                <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
+                  本サービスは13歳以上の方が対象です。生年月日は年齢確認のみに使用します。
+                </p>
               </div>
             )}
 
