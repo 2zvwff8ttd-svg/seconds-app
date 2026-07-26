@@ -1,23 +1,27 @@
-/** Supabase Storage `media` bucket allowed video types (no codec suffix). */
+/** Supabase Storage `media` bucket allowed types (no codec suffix). */
 import { captureVideoFrameBlob } from "@/lib/video/frame-capture";
 import { materializeVideoBlob } from "@/lib/video/playable-blob";
 
-const STORAGE_VIDEO_TYPES = new Set([
+const STORAGE_MEDIA_TYPES = new Set([
   "video/mp4",
   "video/webm",
   "video/quicktime",
   "video/x-msvideo",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
 ]);
 
 /**
  * Strip codec parameters (e.g. `video/webm;codecs=vp9,opus` → `video/webm`)
  * so Storage accepts the Content-Type header.
+ * Unknown types are rejected (no remap to video/webm).
  */
 export function normalizeStorageContentType(mimeType: string): string {
   const base = mimeType.split(";")[0].trim().toLowerCase();
-  if (STORAGE_VIDEO_TYPES.has(base)) return base;
-  if (base.startsWith("video/")) return "video/webm";
-  return base || "video/webm";
+  if (!base) return "video/webm";
+  if (STORAGE_MEDIA_TYPES.has(base)) return base;
+  throw new Error(`対応していないファイル形式です（${base}）`);
 }
 
 export async function getVideoDuration(

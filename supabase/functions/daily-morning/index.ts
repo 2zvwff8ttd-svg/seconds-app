@@ -34,7 +34,7 @@ const JST = "Asia/Tokyo";
  *   npm run functions:deploy-daily-morning
  *
  * シークレット（自動注入）: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
- * 任意: CRON_SECRET（手動呼び出し時に x-cron-secret ヘッダ）
+ * 必須: CRON_SECRET（呼び出し時に x-cron-secret ヘッダ。未設定だと 500）
  * プッシュ: APNS_KEY_ID, APNS_TEAM_ID, APNS_PRIVATE_KEY, APNS_BUNDLE_ID, APNS_ENVIRONMENT
  * デバッグ: APNS_DEBUG_JWT=true（既定）で [apns-jwt-debug] を Logs に出力。終了後 false
  */
@@ -50,11 +50,13 @@ Deno.serve(async (req) => {
   }
 
   const cronSecret = Deno.env.get("CRON_SECRET");
-  if (cronSecret) {
-    const provided = req.headers.get("x-cron-secret");
-    if (provided !== cronSecret) {
-      return json({ error: "Unauthorized" }, 401);
-    }
+  if (!cronSecret) {
+    console.error("[daily-morning] CRON_SECRET is not set");
+    return json({ error: "Server misconfigured: CRON_SECRET required" }, 500);
+  }
+  const provided = req.headers.get("x-cron-secret");
+  if (provided !== cronSecret) {
+    return json({ error: "Unauthorized" }, 401);
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");

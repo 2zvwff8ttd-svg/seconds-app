@@ -26,6 +26,8 @@
 *.pem
 key.pem
 key_base64.txt
+*.p8
+AuthKey*.p8
 *.mp4
 *.MP4
 *.mov

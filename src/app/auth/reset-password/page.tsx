@@ -1,6 +1,10 @@
 "use client";
 
 import { AppFooter } from "@/components/layout/AppFooter";
+import {
+  MIN_PASSWORD_LENGTH,
+  validatePassword,
+} from "@/lib/auth/password";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -105,8 +109,9 @@ function ResetPasswordForm() {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 6) {
-      setError("パスワードは6文字以上にしてください。");
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
     if (password !== confirm) {
@@ -169,11 +174,11 @@ function ResetPasswordForm() {
               id="new-password"
               type="password"
               required
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
-              placeholder="6文字以上"
+              placeholder={`${MIN_PASSWORD_LENGTH}文字以上`}
               className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder:text-muted/60 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
             />
           </div>
@@ -189,7 +194,7 @@ function ResetPasswordForm() {
               id="confirm-password"
               type="password"
               required
-              minLength={6}
+              minLength={MIN_PASSWORD_LENGTH}
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               autoComplete="new-password"

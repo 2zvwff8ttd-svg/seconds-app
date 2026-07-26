@@ -6,6 +6,7 @@ import {
   normalizeSignupBirthDate,
   validateSignupBirthDate,
 } from "@/lib/auth/age";
+import { validatePassword, MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
 import {
   sanitizeSignupUsername,
   validateSignupUsername,
@@ -62,6 +63,13 @@ export function AuthForm() {
     if (mode === "signup") {
       if (!acceptedTerms) {
         setError("利用規約とプライバシーポリシーへの同意が必要です");
+        setLoading(false);
+        return;
+      }
+
+      const passwordError = validatePassword(password);
+      if (passwordError) {
+        setError(passwordError);
         setLoading(false);
         return;
       }
@@ -283,13 +291,13 @@ export function AuthForm() {
                 id="password"
                 type="password"
                 required
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={
                   mode === "signup" ? "new-password" : "current-password"
                 }
-                placeholder="6文字以上"
+                placeholder={`${MIN_PASSWORD_LENGTH}文字以上`}
                 className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder:text-muted/60 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
               />
               {mode === "signin" && (
