@@ -1349,7 +1349,6 @@ body {
      50  form content (banners)
     100  scrim cutout
     101  shape rim
-    150  loading overlay
     200  time gauge
     210  flip camera
     300  bottom dock (record button + status)
@@ -1361,7 +1360,6 @@ body {
   --z-record-scrim: 100;
   --z-record-rim: 101;
   --z-record-focus-ring: 120;
-  --z-record-loading: 150;
   --z-record-gauge: 200;
   --z-record-flip: 210;
   --z-record-clip-strip: 310;
@@ -1681,27 +1679,6 @@ html.record-native-preview-active body {
 .record-stage-ui__gauge > div {
   position: relative;
   inset: auto;
-}
-
-.record-stage-ui__loading {
-  position: fixed;
-  left: 50%;
-  top: 42%;
-  transform: translate(-50%, -50%);
-  z-index: var(--z-record-loading);
-  max-width: min(78vw, 320px);
-  padding: 1.25rem;
-  border-radius: 1rem;
-  background: rgb(0 0 0 / 0.72);
-  text-align: center;
-  pointer-events: none;
-}
-
-.record-stage-ui__loading--dim {
-  width: auto;
-  padding: 0.75rem 1.25rem;
-  font-size: 0.875rem;
-  color: var(--muted);
 }
 
 .record-stage-ui__flip {

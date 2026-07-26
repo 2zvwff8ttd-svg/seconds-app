@@ -15,7 +15,6 @@ type RecordStageControlsProps = {
   isRecording: boolean;
   canRecord: boolean;
   disabled: boolean;
-  error: string | null;
   clips: RecordedClip[];
   onClipRemove: (id: string) => void;
   onSwitchCamera: () => void;
@@ -37,7 +36,6 @@ export function RecordStageControls({
   isRecording,
   canRecord,
   disabled,
-  error,
   clips,
   onClipRemove,
   onSwitchCamera,
@@ -54,25 +52,6 @@ export function RecordStageControls({
             recordingElapsed={gaugeRecordingElapsed}
           />
         </div>
-
-        {!cameraReady && !isRecording && !error && (
-          <div className="record-stage-ui__loading">
-            <p className="text-sm font-medium text-foreground">カメラを準備中…</p>
-            <p className="mt-1 text-xs text-muted">アプリ内プレビューで録画します</p>
-          </div>
-        )}
-
-        {cameraStarting && (
-          <div className="record-stage-ui__loading record-stage-ui__loading--dim">
-            カメラを起動中…
-          </div>
-        )}
-
-        {recordingStarting && (
-          <div className="record-stage-ui__loading record-stage-ui__loading--dim">
-            録画を開始しています…
-          </div>
-        )}
 
         <button
           type="button"

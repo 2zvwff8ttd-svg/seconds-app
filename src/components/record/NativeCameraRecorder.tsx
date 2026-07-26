@@ -528,7 +528,6 @@ export function NativeCameraRecorder({
         isRecording={isRecording}
         canRecord={canRecord}
         disabled={disabled}
-        error={error}
         clips={clips}
         onClipRemove={onClipRemoved}
         onSwitchCamera={() => void switchCamera()}
