@@ -1,6 +1,7 @@
 import { generateBackgroundMusic } from "@/lib/ai/music";
 import { getMusicProvider } from "@/lib/ai/env";
 import { consumeRateLimit } from "@/lib/ai/rate-limit";
+import { isCurrentUserBanned } from "@/lib/auth/assert-not-banned";
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
@@ -15,6 +16,13 @@ export async function POST(req: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
+  }
+
+  if (await isCurrentUserBanned(supabase, user.id)) {
+    return NextResponse.json(
+      { error: "このアカウントでは操作できません" },
+      { status: 403 },
+    );
   }
 
   const limited = consumeRateLimit({

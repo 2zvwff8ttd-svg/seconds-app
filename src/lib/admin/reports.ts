@@ -1,5 +1,6 @@
 import { reportReasonLabel } from "@/lib/reports/reasons";
 import { createClient } from "@/lib/supabase/client";
+import { getSupabaseUrl } from "@/lib/supabase/env";
 import type {
   AdminModerationAction,
   AdminReportGroup,
@@ -198,13 +199,62 @@ export async function adminModerationAction(input: {
   action: AdminModerationAction;
 }): Promise<void> {
   const supabase = createClient();
-  const { error } = await supabase.rpc("admin_moderation_action", {
+  const { data, error } = await supabase.rpc("admin_moderation_action", {
     p_target_type: input.targetType,
     p_target_id: input.targetId,
     p_action: input.action,
   });
 
   if (error) throw new Error(error.message);
+
+  if (input.action === "ban") {
+    const row = data as { user_id?: string } | null;
+    const bannedUserId = row?.user_id;
+    if (bannedUserId) {
+      await enforceAuthBan(bannedUserId, true);
+    }
+  }
+}
+
+async function enforceAuthBan(
+  userId: string,
+  banned: boolean,
+): Promise<void> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    console.warn("[admin] missing session for enforce-auth-ban");
+    return;
+  }
+
+  const endpoint = `${getSupabaseUrl()}/functions/v1/enforce-auth-ban`;
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userId, banned }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("[admin] enforce-auth-ban failed", res.status, text);
+      throw new Error(
+        "アカウント停止は記録されましたが、ログイン無効化に失敗しました。再実行するかサポートに連絡してください。",
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("ログイン無効化")) {
+      throw err;
+    }
+    console.error("[admin] enforce-auth-ban network error", err);
+    throw new Error(
+      "アカウント停止は記録されましたが、ログイン無効化に失敗しました。再実行するかサポートに連絡してください。",
+    );
+  }
 }
 
 export function formatReportReasonSummary(reasons: ReportReason[]): string {
