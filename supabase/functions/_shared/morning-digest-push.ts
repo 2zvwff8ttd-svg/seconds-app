@@ -7,6 +7,7 @@ import {
 import { isUserPushEnabled } from "./push-dispatch.ts";
 
 type MorningDigestRow = {
+  id: string;
   user_id: string;
   title: string;
   body: string;
@@ -41,12 +42,13 @@ export async function sendMorningDigestPushes(
       return { skipped: true, reason: "apns_not_configured" };
     }
 
-    const since = new Date(jobStartedAt.getTime() - 5_000).toISOString();
+    const { start, end } = jstDayBounds(jobStartedAt);
     const { data: digests, error: digestError } = await supabase
       .from("notifications")
-      .select("user_id, title, body")
+      .select("id, user_id, title, body")
       .eq("type", "morning_digest")
-      .gte("created_at", since);
+      .gte("created_at", start.toISOString())
+      .lt("created_at", end.toISOString());
 
     if (digestError) {
       throw new Error(digestError.message);
@@ -82,12 +84,22 @@ export async function sendMorningDigestPushes(
       };
     }
 
+    // Same physical device can appear twice in push_device_tokens; send once per APNs token.
+    const uniqueTokens: PushTokenRow[] = [];
+    const seenTokenValues = new Set<string>();
+    for (const row of tokenRows) {
+      const key = row.token.trim();
+      if (!key || seenTokenValues.has(key)) continue;
+      seenTokenValues.add(key);
+      uniqueTokens.push(row);
+    }
+
     let sent = 0;
     let failed = 0;
     let prefSkipped = 0;
     const invalidTokenIds: string[] = [];
 
-    for (const row of tokenRows) {
+    for (const row of uniqueTokens) {
       const digest = digestByUser.get(row.user_id);
       if (!digest) continue;
 
@@ -101,10 +113,25 @@ export async function sendMorningDigestPushes(
         continue;
       }
 
-      const result = await sendApnsPush(config, row.token, digest.title, digest.body);
+      const claimed = await claimMorningDigestDelivery(
+        supabase,
+        digest.id,
+        row.id,
+      );
+      if (!claimed) continue;
+
+      let result;
+      try {
+        result = await sendApnsPush(config, row.token, digest.title, digest.body);
+      } catch (err) {
+        await releaseMorningDigestDelivery(supabase, digest.id, row.id);
+        throw err;
+      }
+
       if (result.ok) {
         sent += 1;
       } else {
+        await releaseMorningDigestDelivery(supabase, digest.id, row.id);
         failed += 1;
         if (result.tokenInvalid) {
           invalidTokenIds.push(row.id);
@@ -137,7 +164,7 @@ export async function sendMorningDigestPushes(
       failed,
       disabled: invalidTokenIds.length,
       digests: digestRows.length,
-      tokens: tokenRows.length,
+      tokens: uniqueTokens.length,
       pref_skipped: prefSkipped,
     };
   } catch (err) {
@@ -154,4 +181,63 @@ async function sendApnsPush(
   body: string,
 ) {
   return sendApnsAlert(config, token, { title, body });
+}
+
+async function claimMorningDigestDelivery(
+  supabase: SupabaseClient,
+  notificationId: string,
+  tokenId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("morning_digest_push_deliveries")
+    .insert({
+      notification_id: notificationId,
+      push_token_id: tokenId,
+    })
+    .select("notification_id");
+
+  if (!error) return (data?.length ?? 0) === 1;
+  if (error.code === "23505") return false;
+  throw new Error(error.message);
+}
+
+async function releaseMorningDigestDelivery(
+  supabase: SupabaseClient,
+  notificationId: string,
+  tokenId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("morning_digest_push_deliveries")
+    .delete()
+    .eq("notification_id", notificationId)
+    .eq("push_token_id", tokenId);
+
+  if (error) {
+    console.warn(
+      "[morning-digest-push] failed to release delivery claim",
+      error.message,
+    );
+  }
+}
+
+function jstDayBounds(date: Date): { start: Date; end: Date } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(date);
+  const value = (type: string): number => {
+    const part = parts.find((item) => item.type === type)?.value;
+    if (!part) throw new Error(`Missing JST date part: ${type}`);
+    return Number(part);
+  };
+
+  const start = new Date(
+    Date.UTC(value("year"), value("month") - 1, value("day")) - 9 * 60 * 60 * 1000,
+  );
+  return {
+    start,
+    end: new Date(start.getTime() + 24 * 60 * 60 * 1000),
+  };
 }
