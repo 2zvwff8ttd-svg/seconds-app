@@ -9,6 +9,7 @@ import {
   assertMergedAvDurationOk,
 } from "@/lib/video/av-duration-guard";
 import {
+  iosMp4MergeNormalizeFilterArgs,
   iosMp4OutputEncodeArgs,
   iosMp4ScaleFilterArgs,
   type IosMp4EncodePreset,
@@ -139,6 +140,30 @@ async function execFfmpegWithLogs(
   }
 }
 
+/**
+ * Re-encode one clip to identical H.264@30 / 1080×1920 (padded) so concat
+ * demuxer cannot drop later video when codec or fps differs across takes.
+ */
+async function execNormalizeClip(
+  ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
+  inputName: string,
+  outName: string,
+  preset: IosMp4EncodePreset,
+): Promise<void> {
+  await execFfmpegWithLogs(ffmpeg, [
+    "-i",
+    inputName,
+    ...iosMp4MergeNormalizeFilterArgs(),
+    ...iosMp4OutputEncodeArgs({
+      preset,
+      width: 1080,
+      height: 1920,
+      fps: 30,
+    }),
+    outName,
+  ]);
+}
+
 async function execConcatEncode(
   ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>,
   listName: string,
@@ -210,7 +235,10 @@ async function readMergedOutput(
 type MergeRunContext = {
   ffmpeg: Awaited<ReturnType<typeof getFfmpeg>>;
   runId: string;
-  virtualNames: string[];
+  /** Raw input virtual files written from Blobs. */
+  rawNames: string[];
+  /** Normalized H.264@30 clips used in the concat list. */
+  normNames: string[];
   listName: string;
   inputExt: string;
 };
@@ -224,31 +252,65 @@ async function prepareMergeRun(
 
   const ffmpeg = await getFfmpeg();
   const runId = crypto.randomUUID().slice(0, 8);
-  const virtualNames: string[] = [];
+  const rawNames: string[] = [];
   const listName = `concat_${runId}.txt`;
 
-  onProgress?.(0.08, "クリップを結合中…");
+  onProgress?.(0.06, "クリップを準備中…");
 
   for (let i = 0; i < files.length; i++) {
-    const virtualName = `clip_${runId}_${i}.${inputExt}`;
-    virtualNames.push(virtualName);
+    const rawName = `clip_${runId}_${i}.${inputExt}`;
+    rawNames.push(rawName);
     onProgress?.(
-      0.1 + (i / files.length) * 0.2,
-      `クリップ ${i + 1}/${files.length} を準備中…`,
+      0.08 + (i / files.length) * 0.12,
+      `クリップ ${i + 1}/${files.length} を読み込み中…`,
     );
-    await writeFileFromBlob(ffmpeg, virtualName, files[i]);
+    await writeFileFromBlob(ffmpeg, rawName, files[i]);
   }
 
-  const listContent = buildConcatListContent(virtualNames);
-  await ffmpeg.writeFile(listName, new TextEncoder().encode(listContent));
-
-  return { ffmpeg, runId, virtualNames, listName, inputExt };
+  return {
+    ffmpeg,
+    runId,
+    rawNames,
+    normNames: [],
+    listName,
+    inputExt,
+  };
 }
 
-async function cleanupMergeRun(ctx: MergeRunContext, outName?: string): Promise<void> {
+async function normalizeMergeClips(
+  ctx: MergeRunContext,
+  preset: IosMp4EncodePreset,
+  onProgress?: (ratio: number, label: string) => void,
+): Promise<void> {
+  const normNames: string[] = [];
+  for (let i = 0; i < ctx.rawNames.length; i++) {
+    const rawName = ctx.rawNames[i]!;
+    const normName = `norm_${ctx.runId}_${i}.mp4`;
+    onProgress?.(
+      0.2 + (i / ctx.rawNames.length) * 0.2,
+      `クリップ ${i + 1}/${ctx.rawNames.length} を正規化中…`,
+    );
+    await execNormalizeClip(ctx.ffmpeg, rawName, normName, preset);
+    normNames.push(normName);
+  }
+  ctx.normNames = normNames;
+  const listContent = buildConcatListContent(normNames);
+  await ctx.ffmpeg.writeFile(
+    ctx.listName,
+    new TextEncoder().encode(listContent),
+  );
+}
+
+async function cleanupMergeRun(
+  ctx: MergeRunContext,
+  outName?: string,
+): Promise<void> {
   await safeDeleteFile(ctx.ffmpeg, ctx.listName);
   if (outName) await safeDeleteFile(ctx.ffmpeg, outName);
-  for (const name of ctx.virtualNames) {
+  for (const name of ctx.rawNames) {
+    await safeDeleteFile(ctx.ffmpeg, name);
+  }
+  for (const name of ctx.normNames) {
     await safeDeleteFile(ctx.ffmpeg, name);
   }
 }
@@ -347,6 +409,8 @@ export type MergeClipsResult = {
 
 /**
  * Merge multiple clips into one File for upload via libx264+aac re-encode only.
+ * Each clip is normalized to H.264@30 / 1080×1920 first so concat demuxer cannot
+ * drop later-clip video when codec or fps differs (e.g. rear H.264 → front HEVC).
  * Copy-concat is avoided — iOS stalls at segment boundaries when keyframes do not
  * align across pasted segments.
  */
@@ -385,7 +449,7 @@ export async function mergeClipsForPost(
   let ctx: MergeRunContext | undefined;
   const onFfmpegProgress = ({ progress }: { progress: number }) => {
     if (typeof progress === "number") {
-      onProgress?.(0.35 + Math.min(0.55, progress * 0.55), "クリップを結合中…");
+      onProgress?.(0.45 + Math.min(0.45, progress * 0.45), "クリップを結合中…");
     }
   };
 
@@ -393,7 +457,10 @@ export async function mergeClipsForPost(
     ctx = await prepareMergeRun(files, inputExt, onProgress);
     ctx.ffmpeg.on("progress", onFfmpegProgress);
 
-    onProgress?.(0.32, "クリップを再エンコードしながら結合中…");
+    onProgress?.(0.2, "クリップを正規化中…");
+    await normalizeMergeClips(ctx, preset, onProgress);
+
+    onProgress?.(0.42, "クリップを再エンコードしながら結合中…");
     await execConcatEncode(ctx.ffmpeg, ctx.listName, encodeOutName, preset);
     onProgress?.(0.92, "結合ファイルを読み込み中…");
     const merged = await readMergedOutput(

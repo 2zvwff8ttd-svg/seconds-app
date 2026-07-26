@@ -5,6 +5,7 @@ import {
   writeFileFromBlob,
 } from "@/lib/video/ffmpeg-client";
 import { getVideoExtension } from "@/lib/video/media";
+import { parseFfmpegProbeLogs } from "@/lib/video/video-post-probe";
 
 /**
  * Per-clip gate before merge/transcode.
@@ -21,6 +22,11 @@ export type AvDurationProbe = {
   /** audio − video when both known; null if either stream missing */
   signedDiffSec: number | null;
   absDiffSec: number | null;
+  /** From ffmpeg banner when available (evidence for codec/fps mismatch). */
+  videoCodec?: string | null;
+  avgFps?: number | null;
+  width?: number | null;
+  height?: number | null;
 };
 
 export type AvMismatchViolation = {
@@ -75,10 +81,18 @@ export function diffAvDurations(
   return { signedDiffSec: signed, absDiffSec: round3(Math.abs(signed)) };
 }
 
+type StreamMeasure = {
+  durationSec: number | null;
+  videoCodec?: string;
+  avgFps?: number;
+  width?: number;
+  height?: number;
+};
+
 async function measureStreamDurationSec(
   file: File,
   mode: "video" | "audio",
-): Promise<number | null> {
+): Promise<StreamMeasure> {
   const inputExt = getVideoExtension(file) || "mp4";
   const runId = crypto.randomUUID().slice(0, 8);
   const inputName = `avdur_${mode}_${runId}.${inputExt}`;
@@ -98,6 +112,7 @@ async function measureStreamDurationSec(
   try {
     await writeFileFromBlob(ffmpeg, inputName, file);
 
+    let identity: ReturnType<typeof parseFfmpegProbeLogs> | null = null;
     for (const mapArgs of attempts) {
       const logs: string[] = [];
       const onLog = ({ message }: { message: string }) => {
@@ -111,12 +126,27 @@ async function measureStreamDurationSec(
       } finally {
         ffmpeg.off("log", onLog);
       }
+      if (!identity?.videoCodec) {
+        identity = parseFfmpegProbeLogs(logs);
+      }
       const measured = parseLastFfmpegTimeSec(logs);
       if (measured != null && measured > 0) {
-        return measured;
+        return {
+          durationSec: measured,
+          videoCodec: identity.videoCodec,
+          avgFps: identity.avgFps,
+          width: identity.width,
+          height: identity.height,
+        };
       }
     }
-    return null;
+    return {
+      durationSec: null,
+      videoCodec: identity?.videoCodec,
+      avgFps: identity?.avgFps,
+      width: identity?.width,
+      height: identity?.height,
+    };
   } finally {
     await safeDeleteFile(ffmpeg, inputName);
   }
@@ -125,19 +155,23 @@ async function measureStreamDurationSec(
 /** Measure video vs audio track durations via ffmpeg.wasm (copy → null). */
 export async function probeAvDurations(file: File): Promise<AvDurationProbe> {
   // Shared ffmpeg.wasm instance is not safe for concurrent exec — run serially.
-  const videoDurationSec = await measureStreamDurationSec(file, "video");
-  const audioDurationSec = await measureStreamDurationSec(file, "audio");
+  const video = await measureStreamDurationSec(file, "video");
+  const audio = await measureStreamDurationSec(file, "audio");
   const { signedDiffSec, absDiffSec } = diffAvDurations(
-    videoDurationSec,
-    audioDurationSec,
+    video.durationSec,
+    audio.durationSec,
   );
   return {
     videoDurationSec:
-      videoDurationSec != null ? round3(videoDurationSec) : null,
+      video.durationSec != null ? round3(video.durationSec) : null,
     audioDurationSec:
-      audioDurationSec != null ? round3(audioDurationSec) : null,
+      audio.durationSec != null ? round3(audio.durationSec) : null,
     signedDiffSec,
     absDiffSec,
+    videoCodec: video.videoCodec ?? null,
+    avgFps: video.avgFps ?? null,
+    width: video.width ?? null,
+    height: video.height ?? null,
   };
 }
 
@@ -262,6 +296,8 @@ export async function logRecordedClipAvDurations(
       probe.videoDurationSec != null
         ? round3(meta.wallClockSec - probe.videoDurationSec)
         : null;
+    const width = probe.width ?? null;
+    const height = probe.height ?? null;
     const payload = {
       ...meta,
       fileName: file.name,
@@ -272,6 +308,12 @@ export async function logRecordedClipAvDurations(
       signedDiffSec: probe.signedDiffSec,
       absDiffSec: probe.absDiffSec,
       wallMinusVideoSec: wallMinusVideo,
+      codec: probe.videoCodec ?? null,
+      avgFps: probe.avgFps ?? null,
+      width,
+      height,
+      resolution:
+        width != null && height != null ? `${width}x${height}` : null,
       mismatchOverThreshold:
         probe.absDiffSec != null &&
         probe.absDiffSec > AV_CLIP_MISMATCH_THRESHOLD_SEC,

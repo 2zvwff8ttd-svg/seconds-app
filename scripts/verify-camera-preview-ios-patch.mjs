@@ -408,6 +408,23 @@ const checks = [
     fail:
       "CameraController must ring-buffer debug lines and CameraPreviewPlugin must expose flushClientDebugLogs",
   },
+  {
+    label: "reconfigures MovieFileOutput H.264 after camera switch",
+    ok:
+      controller.includes("reconfigured MovieFileOutput after camera switch") &&
+      /if let movieOutput = self\.movieFileOutput \{\s*\n\s*self\.configureMovieFileOutput\(movieOutput\)/.test(
+        controller,
+      ),
+    fail:
+      "switchCameras must call configureMovieFileOutput again so front takes stay H.264",
+  },
+  {
+    label: "reconfigures MovieFileOutput H.264 on startRecording",
+    ok: controller.includes(
+      "Belt-and-suspenders: keep H.264 on the current connection every take.",
+    ),
+    fail: "startRecording must call configureMovieFileOutput before each take",
+  },
 ];
 
 let failed = false;

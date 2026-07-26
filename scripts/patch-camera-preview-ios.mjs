@@ -3119,3 +3119,116 @@ if (
 
 await writeFile(pluginPath, pluginV10, "utf8");
 
+// ── v11: re-apply H.264 MovieFileOutput settings after camera switch ─────────
+// concat demuxer drops later-clip video when clip0=H.264 and clip1=HEVC.
+// switchCameras recreates the video connection; setOutputSettings must run again.
+let controllerV11 = await readFile(controllerPath, "utf8");
+
+const switchCamerasReconfigureOld = `        if let device = self.activeCaptureDevice() {
+            try? self.applyNaturalPreviewDeviceSettings(to: device)
+            self.bindSystemPressureObserver(to: device)
+            self.logRecordingHealthSnapshot(context: "afterSwitchCameras")
+        }
+
+        DispatchQueue.main.async {
+            if #available(iOS 17.0, *) {
+                self.refreshRotationCoordinator()
+            }
+            self.updateVideoOrientation()
+        }
+    }
+
+    func captureImage(completion: @escaping (UIImage?, Error?) -> Void) {`;
+
+const switchCamerasReconfigureNew = `        if let device = self.activeCaptureDevice() {
+            try? self.applyNaturalPreviewDeviceSettings(to: device)
+            self.bindSystemPressureObserver(to: device)
+            self.logRecordingHealthSnapshot(context: "afterSwitchCameras")
+        }
+        // Re-bind H.264 output settings — camera flip recreates the video connection
+        // and can fall back to HEVC, which concat demuxer then drops as invalid H.264.
+        if let movieOutput = self.movieFileOutput {
+            self.configureMovieFileOutput(movieOutput)
+            self.secondsAppCameraLog("reconfigured MovieFileOutput after camera switch")
+        }
+
+        DispatchQueue.main.async {
+            if #available(iOS 17.0, *) {
+                self.refreshRotationCoordinator()
+            }
+            self.updateVideoOrientation()
+        }
+    }
+
+    func captureImage(completion: @escaping (UIImage?, Error?) -> Void) {`;
+
+if (
+  controllerV11.includes(switchCamerasReconfigureOld) &&
+  !controllerV11.includes("reconfigured MovieFileOutput after camera switch")
+) {
+  controllerV11 = controllerV11.replace(
+    switchCamerasReconfigureOld,
+    switchCamerasReconfigureNew,
+  );
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v11: reconfigure MovieFileOutput on flip)",
+  );
+} else if (
+  controllerV11.includes("reconfigured MovieFileOutput after camera switch")
+) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v11 flip reconfigure) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v11 flip reconfigure: switchCameras anchor not found",
+  );
+}
+
+const startRecordingReconfigureOld = `        updateVideoOrientation()
+        prepareDeviceForRecording()
+        suppressRecordingGestures = true
+        lockConstituentSwitchingForRecording(on: movieOutput)
+        setVideoDataOutputEnabled(false)
+        logRecordingHealthSnapshot(context: "startRecording")
+        bindSystemPressureObserver(to: activeCaptureDevice())`;
+
+const startRecordingReconfigureNew = `        updateVideoOrientation()
+        prepareDeviceForRecording()
+        // Belt-and-suspenders: keep H.264 on the current connection every take.
+        configureMovieFileOutput(movieOutput)
+        suppressRecordingGestures = true
+        lockConstituentSwitchingForRecording(on: movieOutput)
+        setVideoDataOutputEnabled(false)
+        logRecordingHealthSnapshot(context: "startRecording")
+        bindSystemPressureObserver(to: activeCaptureDevice())`;
+
+if (
+  controllerV11.includes(startRecordingReconfigureOld) &&
+  !controllerV11.includes(
+    "Belt-and-suspenders: keep H.264 on the current connection every take.",
+  )
+) {
+  controllerV11 = controllerV11.replace(
+    startRecordingReconfigureOld,
+    startRecordingReconfigureNew,
+  );
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v11: reconfigure MovieFileOutput on startRecording)",
+  );
+} else if (
+  controllerV11.includes(
+    "Belt-and-suspenders: keep H.264 on the current connection every take.",
+  )
+) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v11 startRecording reconfigure) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v11 startRecording reconfigure: prepareDeviceForRecording anchor not found",
+  );
+}
+
+await writeFile(controllerPath, controllerV11, "utf8");
+

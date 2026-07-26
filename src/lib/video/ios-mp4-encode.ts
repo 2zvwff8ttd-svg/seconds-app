@@ -16,6 +16,19 @@ export const IOS_TARGET_FPS = 30;
 /** Downscale tall phone captures (e.g. 3024×4032) for iOS compositor + upload limits. */
 export const IOS_MP4_SCALE_FILTER = `scale='min(${IOS_MAX_VIDEO_WIDTH},iw)':-2`;
 
+/**
+ * Per-clip normalize before concat demuxer.
+ * Forces identical H.264-ready geometry + 30fps CFR so codec/fps mismatches
+ * (e.g. rear H.264 → front HEVC) cannot drop later-clip video while audio continues.
+ */
+export const IOS_MERGE_NORMALIZE_FILTER = [
+  `scale=${IOS_MAX_VIDEO_WIDTH}:${IOS_MAX_VIDEO_HEIGHT}:force_original_aspect_ratio=decrease`,
+  `pad=${IOS_MAX_VIDEO_WIDTH}:${IOS_MAX_VIDEO_HEIGHT}:(ow-iw)/2:(oh-ih)/2`,
+  "setsar=1",
+  `fps=${IOS_TARGET_FPS}`,
+  "format=yuv420p",
+].join(",");
+
 export type IosMp4EncodePreset = "veryfast" | "ultrafast";
 
 const DEFAULT_POST_ENCODE_PRESET: IosMp4EncodePreset = "veryfast";
@@ -125,6 +138,11 @@ export const IOS_MP4_MUX_ARGS = ["-movflags", "+faststart"] as const;
 /** Scale + libx264 (use before iosMp4VideoEncodeArgs / iosMp4OutputEncodeArgs). */
 export function iosMp4ScaleFilterArgs(): string[] {
   return ["-vf", IOS_MP4_SCALE_FILTER];
+}
+
+/** Normalize filter args for per-clip prep before concat. */
+export function iosMp4MergeNormalizeFilterArgs(): string[] {
+  return ["-vf", IOS_MERGE_NORMALIZE_FILTER];
 }
 
 /** Full video+audio re-encode with faststart (concat / full remux). */

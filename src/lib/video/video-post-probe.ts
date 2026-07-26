@@ -14,6 +14,7 @@ export type ClipProbeResult = {
   height?: number;
   pixelFormat?: string;
   videoProfile?: string;
+  avgFps?: number;
   hasAudio: boolean;
   audioCodec?: string;
 };
@@ -62,12 +63,15 @@ function detectContainer(file: File): "mp4" | "webm" | "unknown" {
   return "unknown";
 }
 
-function parseFfmpegProbeLogs(logs: string[]): {
+/** Parse ffmpeg `-i` / demuxer banner lines for stream identity (exported for [clip-av]). */
+export function parseFfmpegProbeLogs(logs: string[]): {
   videoCodec?: string;
   width?: number;
   height?: number;
   pixelFormat?: string;
   videoProfile?: string;
+  /** Nominal fps from banner (`30 fps` / `29.97 fps`), when present. */
+  avgFps?: number;
   hasAudio: boolean;
   audioCodec?: string;
 } {
@@ -77,22 +81,32 @@ function parseFfmpegProbeLogs(logs: string[]): {
   let height: number | undefined;
   let pixelFormat: string | undefined;
   let videoProfile: string | undefined;
+  let avgFps: number | undefined;
   let hasAudio = false;
   let audioCodec: string | undefined;
 
-  const videoMatch = joined.match(
-    /Stream #\d+:\d+(?:\([^)]*\))?: Video: ([^,\n]+)(?: \(([^)]+)\))?(?:, ([^,\n]+))?/i,
+  const videoLineMatch = joined.match(
+    /Stream #\d+:\d+(?:\([^)]*\))?: Video: ([^\n]+)/i,
   );
-  if (videoMatch) {
-    videoCodec = videoMatch[1]?.trim();
-    videoProfile = videoMatch[2]?.trim().toLowerCase();
-    const tail = videoMatch[3] ?? videoMatch[2] ?? "";
-    const dimMatch = tail.match(/(\d{2,5})x(\d{2,5})/);
+  if (videoLineMatch) {
+    const line = videoLineMatch[1] ?? "";
+    const codecMatch = line.match(/^([^,(]+)/);
+    videoCodec = codecMatch?.[1]?.trim();
+    const profileMatch = line.match(/\(([^)]+)\)/);
+    if (profileMatch) {
+      videoProfile = profileMatch[1]?.trim().toLowerCase();
+    }
+    const dimMatch = line.match(/\b(\d{2,5})x(\d{2,5})\b/);
     if (dimMatch) {
       width = Number(dimMatch[1]);
       height = Number(dimMatch[2]);
     }
-    const pixMatch = joined.match(/Video:[^\n]*?(yuv\w+)/i);
+    const fpsMatch = line.match(/\b(\d+(?:\.\d+)?)\s*fps\b/i);
+    if (fpsMatch) {
+      const n = Number(fpsMatch[1]);
+      if (Number.isFinite(n) && n > 0) avgFps = n;
+    }
+    const pixMatch = line.match(/\b(yuv\w+)\b/i);
     if (pixMatch) {
       pixelFormat = pixMatch[1]?.toLowerCase();
     }
@@ -117,6 +131,7 @@ function parseFfmpegProbeLogs(logs: string[]): {
     height,
     pixelFormat,
     videoProfile,
+    avgFps,
     hasAudio,
     audioCodec,
   };
@@ -193,6 +208,7 @@ function assessProbe(
     height: height || undefined,
     pixelFormat,
     videoProfile,
+    avgFps: parsed.avgFps,
     hasAudio: parsed.hasAudio,
     audioCodec: parsed.audioCodec,
   };
