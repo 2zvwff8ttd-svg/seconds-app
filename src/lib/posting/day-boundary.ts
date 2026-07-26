@@ -1,3 +1,6 @@
+/** 投稿日・1日1投稿の正: Asia/Tokyo（朝 7:00 区切り） */
+export const POSTING_TIME_ZONE = "Asia/Tokyo";
+
 /** デバイスの IANA タイムゾーン（例: Asia/Tokyo） */
 export function getDeviceTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";

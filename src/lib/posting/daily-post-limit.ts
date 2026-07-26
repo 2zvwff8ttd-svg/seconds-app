@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/client";
 import {
   formatLocalDateTime,
-  getDeviceTimeZone,
   getPostingPeriodBounds,
+  POSTING_TIME_ZONE,
 } from "@/lib/posting/day-boundary";
 
 export const DAILY_POST_LIMIT_MESSAGE =
@@ -17,10 +17,29 @@ export type DailyPostLimitResult =
       nextPostingLabel: string;
     };
 
+/** DB unique index / Postgres 23505 for one-post-per-day */
+export function isDailyPostLimitDbError(error: {
+  code?: string;
+  message?: string;
+}): boolean {
+  const code = error.code ?? "";
+  const message = (error.message ?? "").toLowerCase();
+  if (code === "23505") {
+    return (
+      message.includes("videos_one_per_posting_day") ||
+      message.includes("one_per_posting_day")
+    );
+  }
+  return (
+    message.includes("videos_one_per_posting_day") ||
+    message.includes("one_per_posting_day_idx")
+  );
+}
+
 export async function checkDailyPostLimit(
   now: Date = new Date(),
 ): Promise<DailyPostLimitResult> {
-  const timeZone = getDeviceTimeZone();
+  const timeZone = POSTING_TIME_ZONE;
   const { start, end } = getPostingPeriodBounds(now, timeZone);
 
   const supabase = createClient();

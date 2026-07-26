@@ -1,5 +1,9 @@
 import { detectCountryCode } from "@/lib/country/detect";
-import { assertCanPostToday } from "@/lib/posting/daily-post-limit";
+import {
+  assertCanPostToday,
+  DAILY_POST_LIMIT_MESSAGE,
+  isDailyPostLimitDbError,
+} from "@/lib/posting/daily-post-limit";
 import { recordPostStreakForNow } from "@/lib/posting/post-streak";
 import {
   clearVideoSchemaCache,
@@ -209,6 +213,9 @@ async function saveVideoRow(
   const { error } = await supabase.from("videos").insert(baseInsert);
 
   if (error) {
+    if (isDailyPostLimitDbError(error)) {
+      throw new Error(DAILY_POST_LIMIT_MESSAGE);
+    }
     if (!retrying && isSchemaMismatchError(error.message)) {
       clearVideoSchemaCache();
       return saveVideoRow(supabase, payload, true);
