@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { mapSocialWriteError } from "@/lib/social/write-errors";
 import type { ReportReason, ReportTargetType } from "@/types/report";
 
 export async function submitReport(input: {
@@ -22,6 +23,6 @@ export async function submitReport(input: {
     if (error.message.includes("Cannot report your own")) {
       throw new Error("自分のコンテンツは通報できません");
     }
-    throw new Error(error.message);
+    throw new Error(mapSocialWriteError(error.message));
   }
 }
