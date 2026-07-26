@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { mapSocialWriteError } from "@/lib/social/write-errors";
 import type { DmMessage, DmThreadStatus } from "@/types/dm";
 
 export async function fetchDmMessages(threadId: string): Promise<DmMessage[]> {
@@ -30,13 +31,21 @@ export async function sendDmMessage(
   recipientId: string,
   body: string,
 ): Promise<{ threadId: string; status: DmThreadStatus }> {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    throw new Error("メッセージを入力してください");
+  }
+  if (trimmed.length > 2000) {
+    throw new Error("メッセージは2000文字以内にしてください");
+  }
+
   const supabase = createClient();
   const { data, error } = await supabase.rpc("send_dm_message", {
     p_recipient_id: recipientId,
-    p_body: body,
+    p_body: trimmed,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(mapSocialWriteError(error.message));
 
   const row = data as {
     thread_id?: string;

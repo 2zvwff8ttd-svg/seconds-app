@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { fetchBlockedUserIds } from "@/lib/blocks/list";
 import { filterCommentsByBlocked } from "@/lib/blocks/filter";
+import { mapSocialWriteError } from "@/lib/social/write-errors";
 import type { CommentItem } from "@/types/social";
 
 function mapComment(row: Record<string, unknown>): CommentItem {
@@ -67,21 +68,33 @@ export async function postComment(
   if (!trimmed) {
     throw new Error("コメントを入力してください");
   }
+  if (trimmed.length > 500) {
+    throw new Error("コメントは500文字以内にしてください");
+  }
 
-  const { data, error } = await supabase
-    .from("comments")
-    .insert({
-      video_id: videoId,
-      user_id: user.id,
-      content: trimmed,
-    })
-    .select(
-      "id, content, created_at, user_id, profiles!user_id(username, display_name, avatar_url)",
-    )
-    .single();
+  const { data, error } = await supabase.rpc("post_comment", {
+    p_video_id: videoId,
+    p_content: trimmed,
+  });
 
-  if (error) throw new Error(error.message);
-  return mapComment(data as unknown as Record<string, unknown>);
+  if (error) {
+    throw new Error(mapSocialWriteError(error.message));
+  }
+
+  const row = data as Record<string, unknown> | null;
+  if (!row?.id) {
+    throw new Error("コメントの投稿に失敗しました");
+  }
+
+  return {
+    id: row.id as string,
+    content: row.content as string,
+    createdAt: row.created_at as string,
+    userId: row.user_id as string,
+    username: (row.username as string) ?? "unknown",
+    displayName: (row.display_name as string | null) ?? null,
+    avatarUrl: (row.avatar_url as string | null) ?? null,
+  };
 }
 
 export function subscribeCommentUpdates(

@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { mapSocialWriteError } from "@/lib/social/write-errors";
 import type { FollowListUser, FollowStats } from "@/types/profile";
 
 function mapFollowProfile(
@@ -155,18 +156,15 @@ export async function toggleFollow(
   }
 
   if (currentlyFollowing) {
-    const { error } = await supabase
-      .from("follows")
-      .delete()
-      .eq("follower_id", user.id)
-      .eq("following_id", targetUserId);
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await supabase.from("follows").insert({
-      follower_id: user.id,
-      following_id: targetUserId,
+    const { error } = await supabase.rpc("unfollow_user", {
+      p_target_user_id: targetUserId,
     });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(mapSocialWriteError(error.message));
+  } else {
+    const { error } = await supabase.rpc("follow_user", {
+      p_target_user_id: targetUserId,
+    });
+    if (error) throw new Error(mapSocialWriteError(error.message));
   }
 
   return fetchFollowStats(targetUserId);

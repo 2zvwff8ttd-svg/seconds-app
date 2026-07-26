@@ -41,6 +41,7 @@ export function MessageComposer({
           }
         }}
         rows={1}
+        maxLength={2000}
         disabled={disabled || sending}
         placeholder={placeholder}
         className="max-h-28 min-h-[2.5rem] flex-1 resize-none rounded-2xl border border-border bg-surface-elevated px-4 py-2.5 text-sm text-foreground placeholder:text-muted focus:border-violet-400/50 focus:outline-none disabled:opacity-50"
