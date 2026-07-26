@@ -398,6 +398,16 @@ const checks = [
     ok: plugin.includes("teardownSessionHealthObservers()"),
     fail: "CameraPreviewPlugin.stop must call teardownSessionHealthObservers()",
   },
+  {
+    label: "exposes flushClientDebugLogs for Supabase evidence upload",
+    ok:
+      controller.includes("func drainClientDebugLogs()") &&
+      controller.includes("clientDebugLogBuffer") &&
+      plugin.includes('CAPPluginMethod(name: "flushClientDebugLogs"') &&
+      plugin.includes("func flushClientDebugLogs"),
+    fail:
+      "CameraController must ring-buffer debug lines and CameraPreviewPlugin must expose flushClientDebugLogs",
+  },
 ];
 
 let failed = false;

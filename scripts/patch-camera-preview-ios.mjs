@@ -2946,3 +2946,176 @@ if (controllerV9.includes(constituentSwitchingUnsafe)) {
   );
 }
 
+// =============================================================================
+// v10: Client debug log ring buffer + flush API (Windows/Supabase evidence path)
+// =============================================================================
+
+let controllerV10 = await readFile(controllerPath, "utf8");
+
+const debugPropsOld = `    /// NotificationCenter tokens for session interruption / runtimeError / thermal.
+    private var sessionHealthObserverTokens: [NSObjectProtocol] = []
+    /// KVO on active camera systemPressureState (iOS 11+).
+    private var systemPressureObservation: NSKeyValueObservation?
+}`;
+
+const debugPropsNew = `    /// NotificationCenter tokens for session interruption / runtimeError / thermal.
+    private var sessionHealthObserverTokens: [NSObjectProtocol] = []
+    /// KVO on active camera systemPressureState (iOS 11+).
+    private var systemPressureObservation: NSKeyValueObservation?
+    /// Ring buffer of [clip-av-native] / [seconds-app-camera] lines for JS→Supabase upload.
+    private var clientDebugLogBuffer: [String] = []
+    private let clientDebugLogBufferLimit = 100
+}`;
+
+if (
+  controllerV10.includes(debugPropsOld) &&
+  !controllerV10.includes("clientDebugLogBuffer")
+) {
+  controllerV10 = controllerV10.replace(debugPropsOld, debugPropsNew);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v10: client debug buffer props)",
+  );
+} else if (controllerV10.includes("clientDebugLogBuffer")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v10 debug buffer props) already patched",
+  );
+}
+
+const clipAvNativeLogOld = `    private func clipAvNativeLog(_ message: String) {
+        print("[clip-av-native] \\(message)")
+    }`;
+
+const clipAvNativeLogNew = `    private func recordClientDebugLine(_ line: String) {
+        clientDebugLogBuffer.append(line)
+        if clientDebugLogBuffer.count > clientDebugLogBufferLimit {
+            clientDebugLogBuffer.removeFirst(clientDebugLogBuffer.count - clientDebugLogBufferLimit)
+        }
+    }
+
+    func drainClientDebugLogs() -> [String] {
+        let lines = clientDebugLogBuffer
+        clientDebugLogBuffer.removeAll(keepingCapacity: true)
+        return lines
+    }
+
+    private func clipAvNativeLog(_ message: String) {
+        let line = "[clip-av-native] \\(message)"
+        print(line)
+        recordClientDebugLine(line)
+    }
+
+    private func secondsAppCameraLog(_ message: String) {
+        let line = "[seconds-app-camera] \\(message)"
+        print(line)
+        recordClientDebugLine(line)
+    }`;
+
+if (
+  controllerV10.includes(clipAvNativeLogOld) &&
+  !controllerV10.includes("func drainClientDebugLogs()")
+) {
+  controllerV10 = controllerV10.replace(clipAvNativeLogOld, clipAvNativeLogNew);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v10: drainClientDebugLogs)",
+  );
+} else if (controllerV10.includes("func drainClientDebugLogs()")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v10 drainClientDebugLogs) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v10 drainClientDebugLogs: clipAvNativeLog pattern not found",
+  );
+}
+
+// Route key seconds-app-camera prints through buffered logger (best-effort replaces).
+const secondsPrintPairs = [
+  [
+    `print("[seconds-app-camera] skipped constituent switching lock: unsupported active camera")`,
+    `secondsAppCameraLog("skipped constituent switching lock: unsupported active camera")`,
+  ],
+  [
+    `print("[seconds-app-camera] locked constituent switching for recording")`,
+    `secondsAppCameraLog("locked constituent switching for recording")`,
+  ],
+  [
+    `print("[seconds-app-camera] videoDataOutput connections enabled=\\(enabled)")`,
+    `secondsAppCameraLog("videoDataOutput connections enabled=\\(enabled)")`,
+  ],
+  [
+    `print("[seconds-app-camera] session health observers installed")`,
+    `secondsAppCameraLog("session health observers installed")`,
+  ],
+];
+
+let secondsPrintPatched = 0;
+for (const [from, to] of secondsPrintPairs) {
+  if (controllerV10.includes(from)) {
+    controllerV10 = controllerV10.replace(from, to);
+    secondsPrintPatched += 1;
+  }
+}
+if (secondsPrintPatched > 0) {
+  console.log(
+    `[patch-camera-preview-ios] CameraController.swift (v10: buffered ${secondsPrintPatched} seconds-app-camera lines)`,
+  );
+}
+
+await writeFile(controllerPath, controllerV10, "utf8");
+
+let pluginV10 = await readFile(pluginPath, "utf8");
+
+const flushMethodOld = `        CAPPluginMethod(name: "getZoom", returnType: CAPPluginReturnPromise)
+    ]`;
+
+const flushMethodNew = `        CAPPluginMethod(name: "getZoom", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "flushClientDebugLogs", returnType: CAPPluginReturnPromise)
+    ]`;
+
+if (
+  pluginV10.includes(flushMethodOld) &&
+  !pluginV10.includes('CAPPluginMethod(name: "flushClientDebugLogs"')
+) {
+  pluginV10 = pluginV10.replace(flushMethodOld, flushMethodNew);
+  console.log(
+    "[patch-camera-preview-ios] CameraPreviewPlugin.swift (v10: register flushClientDebugLogs)",
+  );
+} else if (pluginV10.includes('CAPPluginMethod(name: "flushClientDebugLogs"')) {
+  console.log(
+    "[patch-camera-preview-ios] CameraPreviewPlugin.swift (v10 method register) already patched",
+  );
+}
+
+const flushHandlerAnchor = `    @objc func getZoom(_ call: CAPPluginCall) {
+        call.resolve(["factor": self.cameraController.currentZoomFactor()])
+    }`;
+
+const flushHandlerBlock = `    @objc func getZoom(_ call: CAPPluginCall) {
+        call.resolve(["factor": self.cameraController.currentZoomFactor()])
+    }
+
+    @objc func flushClientDebugLogs(_ call: CAPPluginCall) {
+        let lines = self.cameraController.drainClientDebugLogs()
+        call.resolve(["lines": lines])
+    }`;
+
+if (
+  pluginV10.includes(flushHandlerAnchor) &&
+  !pluginV10.includes("func flushClientDebugLogs")
+) {
+  pluginV10 = pluginV10.replace(flushHandlerAnchor, flushHandlerBlock);
+  console.log(
+    "[patch-camera-preview-ios] CameraPreviewPlugin.swift (v10: flushClientDebugLogs handler)",
+  );
+} else if (pluginV10.includes("func flushClientDebugLogs")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraPreviewPlugin.swift (v10 flush handler) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v10 flush handler: getZoom anchor not found",
+  );
+}
+
+await writeFile(pluginPath, pluginV10, "utf8");
+

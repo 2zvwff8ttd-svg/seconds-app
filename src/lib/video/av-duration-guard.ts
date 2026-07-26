@@ -1,3 +1,4 @@
+import { scheduleClientDebugUploadForAvGuard, scheduleClientDebugUploadForClipProbe } from "@/lib/debug/client-debug-logs";
 import {
   getFfmpeg,
   safeDeleteFile,
@@ -197,7 +198,20 @@ export async function assertClipsAvDurationOk(
   }
 
   if (violations.length > 0) {
-    throw new Error(formatAvMismatchMessage(violations, "clip"));
+    const message = formatAvMismatchMessage(violations, "clip");
+    scheduleClientDebugUploadForAvGuard({
+      phase: "clip",
+      message,
+      violations: violations.map((v) => ({
+        index: v.index,
+        label: v.label,
+        videoDurationSec: v.videoDurationSec,
+        audioDurationSec: v.audioDurationSec,
+        absDiffSec: v.absDiffSec,
+        thresholdSec: v.thresholdSec,
+      })),
+    });
+    throw new Error(message);
   }
 }
 
@@ -207,21 +221,21 @@ export async function assertMergedAvDurationOk(
 ): Promise<AvDurationProbe> {
   const probe = await probeAvDurations(file);
   if (isAvMismatch(probe, thresholdSec) && probe.absDiffSec != null) {
-    throw new Error(
-      formatAvMismatchMessage(
-        [
-          {
-            index: 0,
-            label: "結合結果",
-            videoDurationSec: probe.videoDurationSec,
-            audioDurationSec: probe.audioDurationSec,
-            absDiffSec: probe.absDiffSec,
-            thresholdSec,
-          },
-        ],
-        "merged",
-      ),
-    );
+    const violation = {
+      index: 0,
+      label: "結合結果",
+      videoDurationSec: probe.videoDurationSec,
+      audioDurationSec: probe.audioDurationSec,
+      absDiffSec: probe.absDiffSec,
+      thresholdSec,
+    };
+    const message = formatAvMismatchMessage([violation], "merged");
+    scheduleClientDebugUploadForAvGuard({
+      phase: "merged",
+      message,
+      violations: [violation],
+    });
+    throw new Error(message);
   }
   return probe;
 }
@@ -263,6 +277,11 @@ export async function logRecordedClipAvDurations(
         probe.absDiffSec > AV_CLIP_MISMATCH_THRESHOLD_SEC,
     };
     console.info("[clip-av]", JSON.stringify(payload));
+    scheduleClientDebugUploadForClipProbe({
+      mismatch: Boolean(payload.mismatchOverThreshold),
+      clipIndex: meta.clipIndex ?? null,
+      payload,
+    });
     return probe;
   } catch (err) {
     console.warn("[clip-av] probe failed", {
@@ -270,6 +289,16 @@ export async function logRecordedClipAvDurations(
       wallClockSec: meta.wallClockSec,
       fileName: file.name,
       error: err instanceof Error ? err.message : String(err),
+    });
+    scheduleClientDebugUploadForClipProbe({
+      mismatch: true,
+      clipIndex: meta.clipIndex ?? null,
+      payload: {
+        ...meta,
+        fileName: file.name,
+        probeFailed: true,
+        error: err instanceof Error ? err.message : String(err),
+      },
     });
     return null;
   }
