@@ -190,11 +190,18 @@ const QUALITY_CAPTURE_EXTENSION = `extension CameraController {
     }
 
     /// Prefer a format that keeps ultra-wide (raw ≈ 1.0) reachable when hardware has it.
+    /// Stay within maxLongSide (same ~1080p cap as pickBestCaptureFormat) so unlocking 0.5×
+    /// never re-selects 4K / multi-thousand-pixel formats.
     private func ensureUltraWideZoomRange(on device: AVCaptureDevice) {
         guard device.constituentDevices.contains(where: { $0.deviceType == .builtInUltraWideCamera }),
               device.minAvailableVideoZoomFactor > 1.05 else { return }
+        let maxLong = SecondsAppCaptureSettings.maxLongSide
         let locked = device.formats.filter { formatSupportsLocked30Fps($0) }
-        let pool = locked.isEmpty ? device.formats : locked
+        let lockedCapped = locked.filter { formatLongSide(for: $0) <= maxLong }
+        let allCapped = device.formats.filter { formatLongSide(for: $0) <= maxLong }
+        // Prefer locked-30 within cap; then any capped format. Never uncapped 4K just for 0.5×.
+        let pool = !lockedCapped.isEmpty ? lockedCapped : allCapped
+        guard !pool.isEmpty else { return }
         var restored = false
         for format in pool {
             device.activeFormat = format
@@ -436,9 +443,10 @@ const pluginStartRecordNew = `    @objc func startRecordVideo(_ call: CAPPluginC
                     "videoFilePath": url.path,
                     "videoFileName": url.lastPathComponent,
                 ]
-                if let data = try? Data(contentsOf: url), !data.isEmpty {
-                    payload["videoBase64"] = data.base64EncodedString()
-                    payload["videoFileSize"] = data.count
+                // Path + size only — JS reads via Filesystem / WebView (no bridge base64).
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+                   let fileSize = attrs[.size] as? NSNumber {
+                    payload["videoFileSize"] = fileSize.intValue
                 }
                 call.resolve(payload)
             }
@@ -451,11 +459,24 @@ const stopRecordVideoPathOnlyNew = `                var payload: [String: Any] =
                     "videoFilePath": url.path,
                     "videoFileName": url.lastPathComponent,
                 ]
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+                   let fileSize = attrs[.size] as? NSNumber {
+                    payload["videoFileSize"] = fileSize.intValue
+                }
+                call.resolve(payload)`;
+
+/** Previously shipped stopRecordVideo that inlined the whole MP4 as base64. */
+const stopRecordVideoWithBase64 = `                var payload: [String: Any] = [
+                    "videoFilePath": url.path,
+                    "videoFileName": url.lastPathComponent,
+                ]
                 if let data = try? Data(contentsOf: url), !data.isEmpty {
                     payload["videoBase64"] = data.base64EncodedString()
                     payload["videoFileSize"] = data.count
                 }
                 call.resolve(payload)`;
+
+const stopRecordVideoPathAndSize = stopRecordVideoPathOnlyNew;
 
 /** Stock plugin (no movieFileOutput line) */
 const updateVideoOrientationStockOld = `    func updateVideoOrientation() {
@@ -935,7 +956,13 @@ await patchFile(
 await patchFile(
   pluginPath,
   [[stopRecordVideoPathOnlyOld, stopRecordVideoPathOnlyNew]],
-  "CameraPreviewPlugin.swift (stopRecordVideo base64)",
+  "CameraPreviewPlugin.swift (stopRecordVideo path + size)",
+);
+
+await patchFile(
+  pluginPath,
+  [[stopRecordVideoWithBase64, stopRecordVideoPathAndSize]],
+  "CameraPreviewPlugin.swift (drop stopRecordVideo base64)",
 );
 
 await patchFile(
@@ -2010,11 +2037,18 @@ if (!controllerV5.includes("activeVideoMinFrameDuration fps:")) {
 // ── Always-fill + ultra-wide pinch floor + ramp setZoom (circle-hole / 0.5×) ─
 
 const ensureUltraWideHelper = `    /// Prefer a format that keeps ultra-wide (raw ≈ 1.0) reachable when hardware has it.
+    /// Stay within maxLongSide (same ~1080p cap as pickBestCaptureFormat) so unlocking 0.5×
+    /// never re-selects 4K / multi-thousand-pixel formats.
     private func ensureUltraWideZoomRange(on device: AVCaptureDevice) {
         guard device.constituentDevices.contains(where: { $0.deviceType == .builtInUltraWideCamera }),
               device.minAvailableVideoZoomFactor > 1.05 else { return }
+        let maxLong = SecondsAppCaptureSettings.maxLongSide
         let locked = device.formats.filter { formatSupportsLocked30Fps($0) }
-        let pool = locked.isEmpty ? device.formats : locked
+        let lockedCapped = locked.filter { formatLongSide(for: $0) <= maxLong }
+        let allCapped = device.formats.filter { formatLongSide(for: $0) <= maxLong }
+        // Prefer locked-30 within cap; then any capped format. Never uncapped 4K just for 0.5×.
+        let pool = !lockedCapped.isEmpty ? lockedCapped : allCapped
+        guard !pool.isEmpty else { return }
         var restored = false
         for format in pool {
             device.activeFormat = format
@@ -2032,6 +2066,35 @@ const ensureUltraWideHelper = `    /// Prefer a format that keeps ultra-wide (ra
 
     /// seconds-app: reset zoom and pick ~1080p format (long side ≤ 1920), lock 30fps CFR.`;
 
+const ensureUltraWideUncappedBody = `        let locked = device.formats.filter { formatSupportsLocked30Fps($0) }
+        let pool = locked.isEmpty ? device.formats : locked
+        var restored = false
+        for format in pool {
+            device.activeFormat = format
+            applyLocked30FpsFrameRate(to: device)
+            if device.minAvailableVideoZoomFactor <= 1.05 {
+                restored = true
+                break
+            }
+        }`;
+
+const ensureUltraWideCappedBody = `        let maxLong = SecondsAppCaptureSettings.maxLongSide
+        let locked = device.formats.filter { formatSupportsLocked30Fps($0) }
+        let lockedCapped = locked.filter { formatLongSide(for: $0) <= maxLong }
+        let allCapped = device.formats.filter { formatLongSide(for: $0) <= maxLong }
+        // Prefer locked-30 within cap; then any capped format. Never uncapped 4K just for 0.5×.
+        let pool = !lockedCapped.isEmpty ? lockedCapped : allCapped
+        guard !pool.isEmpty else { return }
+        var restored = false
+        for format in pool {
+            device.activeFormat = format
+            applyLocked30FpsFrameRate(to: device)
+            if device.minAvailableVideoZoomFactor <= 1.05 {
+                restored = true
+                break
+            }
+        }`;
+
 if (
   !controllerV5.includes("func ensureUltraWideZoomRange(on") &&
   controllerV5.includes(
@@ -2044,6 +2107,27 @@ if (
   );
   console.log(
     "[patch-camera-preview-ios] CameraController.swift (ensureUltraWideZoomRange helper)",
+  );
+}
+
+// Cap ultra-wide format search at maxLongSide so 0.5× never re-selects 4K (undoes 0c5f3de).
+if (controllerV5.includes(ensureUltraWideUncappedBody)) {
+  controllerV5 = controllerV5.replace(
+    ensureUltraWideUncappedBody,
+    ensureUltraWideCappedBody,
+  );
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (ensureUltraWideZoomRange maxLongSide cap)",
+  );
+} else if (
+  controllerV5.includes("let lockedCapped = locked.filter { formatLongSide(for: $0) <= maxLong }")
+) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (ensureUltraWideZoomRange maxLongSide cap) already patched",
+  );
+} else if (controllerV5.includes("func ensureUltraWideZoomRange(on")) {
+  console.warn(
+    "[patch-camera-preview-ios] skip ensureUltraWideZoomRange cap: unexpected body",
   );
 }
 

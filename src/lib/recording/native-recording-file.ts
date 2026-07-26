@@ -189,20 +189,7 @@ async function readNativeVideoBlob(source: NativeVideoSource): Promise<Blob> {
 
   // Capacitor ネイティブ専用（Safari ブラウザの MediaRecorder 経路とは無関係）
   if (Capacitor.isNativePlatform()) {
-    try {
-      const fromBase64 = await blobFromNativeBase64(source);
-      if (fromBase64) {
-        console.info(
-          `[native-recording-file] loaded via native base64 (${fromBase64.size} bytes)`,
-        );
-        return fromBase64;
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      errors.push(`native-base64: ${message}`);
-      console.warn("[native-recording-file] native base64 failed:", message);
-    }
-
+    // Path-first: stopRecordVideo resolves videoFilePath (+ size), not bridge base64.
     try {
       const fromFilesystem = await readBlobViaFilesystem(source);
       console.info(
@@ -225,6 +212,23 @@ async function readNativeVideoBlob(source: NativeVideoSource): Promise<Blob> {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`webview: ${message}`);
       console.warn("[native-recording-file] WebView failed:", message);
+    }
+
+    // Legacy fallback only if an older native binary still inlines videoBase64.
+    if (source.videoBase64?.trim()) {
+      try {
+        const fromBase64 = await blobFromNativeBase64(source);
+        if (fromBase64) {
+          console.info(
+            `[native-recording-file] loaded via native base64 (${fromBase64.size} bytes)`,
+          );
+          return fromBase64;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push(`native-base64: ${message}`);
+        console.warn("[native-recording-file] native base64 failed:", message);
+      }
     }
   } else {
     try {

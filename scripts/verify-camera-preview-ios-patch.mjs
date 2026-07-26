@@ -86,6 +86,28 @@ const checks = [
     fail: "ensureUltraWideZoomRange helper missing",
   },
   {
+    label: "ensureUltraWideZoomRange respects maxLongSide ≤ 1920",
+    ok:
+      controller.includes("func ensureUltraWideZoomRange(on") &&
+      controller.includes(
+        "let lockedCapped = locked.filter { formatLongSide(for: $0) <= maxLong }",
+      ) &&
+      !/func ensureUltraWideZoomRange[\s\S]*?let pool = locked\.isEmpty \? device\.formats : locked/.test(
+        controller,
+      ),
+    fail:
+      "ensureUltraWideZoomRange must filter by maxLongSide (must not search uncapped device.formats)",
+  },
+  {
+    label: "stopRecordVideo does not inline videoBase64",
+    ok:
+      !plugin.includes('payload["videoBase64"]') &&
+      !plugin.includes("data.base64EncodedString()") &&
+      plugin.includes("attributesOfItem(atPath: url.path)"),
+    fail:
+      "stopRecordVideo must resolve path + file size only (no Data→base64 bridge payload)",
+  },
+  {
     label: "setZoom ramps across optical lens hops",
     ok:
       controller.includes("ramp(toVideoZoomFactor:") &&
