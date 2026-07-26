@@ -2470,7 +2470,10 @@ const healthHelpersBlock = `    // MARK: - Session health evidence ([clip-av-nat
         if factors.contains(.systemTemperature) { parts.append("systemTemperature") }
         if factors.contains(.peakPower) { parts.append("peakPower") }
         if factors.contains(.depthModuleTemperature) { parts.append("depthModuleTemperature") }
-        if factors.contains(.cameraTemperature) { parts.append("cameraTemperature") }
+        // .cameraTemperature is iOS 17+; deployment target is 15.0.
+        if #available(iOS 17.0, *) {
+            if factors.contains(.cameraTemperature) { parts.append("cameraTemperature") }
+        }
         return parts.isEmpty ? "none" : parts.joined(separator: ",")
     }
 
@@ -2635,6 +2638,37 @@ if (
 } else {
   console.warn(
     "[patch-camera-preview-ios] skip v8 health helpers: lockConstituent anchor missing",
+  );
+}
+
+// Fix: .cameraTemperature is iOS 17+ only (deployment target 15.0).
+const cameraTempUnguarded = `        if factors.contains(.depthModuleTemperature) { parts.append("depthModuleTemperature") }
+        if factors.contains(.cameraTemperature) { parts.append("cameraTemperature") }
+        return parts.isEmpty ? "none" : parts.joined(separator: ",")`;
+
+const cameraTempGuarded = `        if factors.contains(.depthModuleTemperature) { parts.append("depthModuleTemperature") }
+        // .cameraTemperature is iOS 17+; deployment target is 15.0.
+        if #available(iOS 17.0, *) {
+            if factors.contains(.cameraTemperature) { parts.append("cameraTemperature") }
+        }
+        return parts.isEmpty ? "none" : parts.joined(separator: ",")`;
+
+if (controllerV8.includes(cameraTempUnguarded)) {
+  controllerV8 = controllerV8.replace(cameraTempUnguarded, cameraTempGuarded);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8: guard cameraTemperature for iOS 17+)",
+  );
+} else if (
+  controllerV8.includes("func systemPressureFactorsLabel") &&
+  controllerV8.includes("if #available(iOS 17.0, *)") &&
+  controllerV8.includes(".cameraTemperature")
+) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8 cameraTemperature guard) already patched",
+  );
+} else if (controllerV8.includes("factors.contains(.cameraTemperature)")) {
+  console.warn(
+    "[patch-camera-preview-ios] skip cameraTemperature guard: unexpected factors body",
   );
 }
 

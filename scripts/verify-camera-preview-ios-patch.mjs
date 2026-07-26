@@ -357,6 +357,24 @@ const checks = [
       "CameraController must observe session interruption, runtimeError, thermalState, systemPressure and log as [clip-av-native]",
   },
   {
+    label: "cameraTemperature factor gated to iOS 17+",
+    ok: (() => {
+      if (!controller.includes(".cameraTemperature")) return true;
+      // Old unguarded form (depthModule line immediately followed by cameraTemperature if).
+      const unguardedPair =
+        /depthModuleTemperature"\)\s*\}\s*\n\s*if factors\.contains\(\.cameraTemperature\)/.test(
+          controller,
+        );
+      const gated =
+        /if #available\(iOS 17\.0, \*\) \{\s*\n\s*if factors\.contains\(\.cameraTemperature\)/.test(
+          controller,
+        );
+      return gated && !unguardedPair;
+    })(),
+    fail:
+      ".cameraTemperature must only be referenced inside if #available(iOS 17.0, *)",
+  },
+  {
     label: "logs full MovieFileOutput delegate NSError evidence",
     ok:
       controller.includes("movieFileOutputDidFinish") &&
