@@ -344,6 +344,30 @@ const checks = [
     ok: controller.includes("pinch began during recording"),
     fail: "handlePinch must log when pinch begins during recording",
   },
+  {
+    label: "installs session health observers (interruption/runtimeError/thermal/pressure)",
+    ok:
+      controller.includes("func installSessionHealthObservers()") &&
+      controller.includes("AVCaptureSession.wasInterruptedNotification") &&
+      controller.includes("AVCaptureSession.runtimeErrorNotification") &&
+      controller.includes("ProcessInfo.thermalStateDidChangeNotification") &&
+      controller.includes("observe(\\AVCaptureDevice.systemPressureState") &&
+      controller.includes("[clip-av-native]"),
+    fail:
+      "CameraController must observe session interruption, runtimeError, thermalState, systemPressure and log as [clip-av-native]",
+  },
+  {
+    label: "logs full MovieFileOutput delegate NSError evidence",
+    ok:
+      controller.includes("movieFileOutputDidFinish") &&
+      controller.includes("nsErrorEvidence"),
+    fail: "didFinishRecording must log full domain/code/userInfo via nsErrorEvidence",
+  },
+  {
+    label: "tears down session health observers on preview stop",
+    ok: plugin.includes("teardownSessionHealthObservers()"),
+    fail: "CameraPreviewPlugin.stop must call teardownSessionHealthObservers()",
+  },
 ];
 
 let failed = false;

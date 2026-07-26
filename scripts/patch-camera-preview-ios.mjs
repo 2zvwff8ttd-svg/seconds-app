@@ -2403,3 +2403,450 @@ if (
 
 await writeFile(controllerPath, controllerV7, "utf8");
 
+// =============================================================================
+// v8: Session health evidence logs — interruption / runtimeError / systemPressure /
+// thermalState / full MovieFileOutput delegate errors. Correlate with JS [clip-av].
+// =============================================================================
+
+let controllerV8 = await readFile(controllerPath, "utf8");
+
+const healthPropsOld = `    /// Pinch / setZoom remain allowed — zoom is a brief load vs continuous AF hunting.
+    private var suppressRecordingGestures = false
+}`;
+
+const healthPropsNew = `    /// Pinch / setZoom remain allowed — zoom is a brief load vs continuous AF hunting.
+    private var suppressRecordingGestures = false
+    /// NotificationCenter tokens for session interruption / runtimeError / thermal.
+    private var sessionHealthObserverTokens: [NSObjectProtocol] = []
+    /// KVO on active camera systemPressureState (iOS 11+).
+    private var systemPressureObservation: NSKeyValueObservation?
+}`;
+
+if (
+  controllerV8.includes(healthPropsOld) &&
+  !controllerV8.includes("sessionHealthObserverTokens")
+) {
+  controllerV8 = controllerV8.replace(healthPropsOld, healthPropsNew);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8: session health properties)",
+  );
+} else if (controllerV8.includes("sessionHealthObserverTokens")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8 health properties) already patched",
+  );
+}
+
+const healthHelpersAnchor = `    /// Lock virtual multi-cam constituent switching for the duration of a take.`;
+
+const healthHelpersBlock = `    // MARK: - Session health evidence ([clip-av-native] ↔ JS [clip-av])
+
+    private func clipAvNativeLog(_ message: String) {
+        print("[clip-av-native] \\(message)")
+    }
+
+    private func thermalStateLabel(_ state: ProcessInfo.ThermalState) -> String {
+        switch state {
+        case .nominal: return "nominal"
+        case .fair: return "fair"
+        case .serious: return "serious"
+        case .critical: return "critical"
+        @unknown default: return "unknown(\\(state.rawValue))"
+        }
+    }
+
+    private func systemPressureLevelLabel(_ level: AVCaptureDevice.SystemPressureState.Level) -> String {
+        switch level {
+        case .nominal: return "nominal"
+        case .fair: return "fair"
+        case .serious: return "serious"
+        case .critical: return "critical"
+        case .shutdown: return "shutdown"
+        default: return String(describing: level)
+        }
+    }
+
+    private func systemPressureFactorsLabel(_ factors: AVCaptureDevice.SystemPressureState.Factors) -> String {
+        var parts: [String] = []
+        if factors.contains(.systemTemperature) { parts.append("systemTemperature") }
+        if factors.contains(.peakPower) { parts.append("peakPower") }
+        if factors.contains(.depthModuleTemperature) { parts.append("depthModuleTemperature") }
+        if factors.contains(.cameraTemperature) { parts.append("cameraTemperature") }
+        return parts.isEmpty ? "none" : parts.joined(separator: ",")
+    }
+
+    private func interruptionReasonLabel(_ reason: AVCaptureSession.InterruptionReason) -> String {
+        switch reason {
+        case .videoDeviceNotAvailableInBackground: return "videoDeviceNotAvailableInBackground"
+        case .audioDeviceInUseByAnotherClient: return "audioDeviceInUseByAnotherClient"
+        case .videoDeviceInUseByAnotherClient: return "videoDeviceInUseByAnotherClient"
+        case .videoDeviceNotAvailableWithMultipleForegroundApps: return "videoDeviceNotAvailableWithMultipleForegroundApps"
+        case .videoDeviceNotAvailableDueToSystemPressure: return "videoDeviceNotAvailableDueToSystemPressure"
+        default: return "raw(\\(reason.rawValue))"
+        }
+    }
+
+    private func nsErrorEvidence(_ error: Error) -> String {
+        let ns = error as NSError
+        var userInfoSummary: [String] = []
+        for (key, value) in ns.userInfo {
+            let keyStr = String(describing: key)
+            let valStr: String
+            if let nested = value as? NSError {
+                valStr = "{domain=\\(nested.domain) code=\\(nested.code)}"
+            } else {
+                valStr = String(describing: value)
+            }
+            userInfoSummary.append("\\(keyStr)=\\(valStr)")
+        }
+        userInfoSummary.sort()
+        return "domain=\\(ns.domain) code=\\(ns.code) desc=\\(ns.localizedDescription) userInfo={\\(userInfoSummary.joined(separator: "; "))}"
+    }
+
+    /// Snapshot thermal + system pressure + whether a take is in progress.
+    func logRecordingHealthSnapshot(context: String) {
+        let thermal = ProcessInfo.processInfo.thermalState
+        var pressure = "n/a"
+        var factors = "n/a"
+        if let device = activeCaptureDevice() {
+            let state = device.systemPressureState
+            pressure = systemPressureLevelLabel(state.level)
+            factors = systemPressureFactorsLabel(state.factors)
+        }
+        clipAvNativeLog(
+            "health context=\\(context) recording=\\(suppressRecordingGestures) thermal=\\(thermalStateLabel(thermal)) systemPressure=\\(pressure) factors=\\(factors)"
+        )
+    }
+
+    private func bindSystemPressureObserver(to device: AVCaptureDevice?) {
+        systemPressureObservation?.invalidate()
+        systemPressureObservation = nil
+        guard let device else { return }
+        systemPressureObservation = device.observe(\\AVCaptureDevice.systemPressureState, options: [.initial, .new]) { [weak self] device, _ in
+            guard let self else { return }
+            let state = device.systemPressureState
+            self.clipAvNativeLog(
+                "systemPressureChanged recording=\\(self.suppressRecordingGestures) level=\\(self.systemPressureLevelLabel(state.level)) factors=\\(self.systemPressureFactorsLabel(state.factors))"
+            )
+        }
+    }
+
+    func installSessionHealthObservers() {
+        guard sessionHealthObserverTokens.isEmpty else {
+            bindSystemPressureObserver(to: activeCaptureDevice())
+            logRecordingHealthSnapshot(context: "observersAlreadyInstalled")
+            return
+        }
+        let center = NotificationCenter.default
+
+        sessionHealthObserverTokens.append(
+            center.addObserver(
+                forName: AVCaptureSession.wasInterruptedNotification,
+                object: captureSession,
+                queue: .main
+            ) { [weak self] note in
+                guard let self else { return }
+                var reasonLabel = "unknown"
+                if let raw = note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int,
+                   let reason = AVCaptureSession.InterruptionReason(rawValue: raw) {
+                    reasonLabel = self.interruptionReasonLabel(reason)
+                } else if let reason = note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? AVCaptureSession.InterruptionReason {
+                    reasonLabel = self.interruptionReasonLabel(reason)
+                }
+                self.clipAvNativeLog(
+                    "sessionInterrupted recording=\\(self.suppressRecordingGestures) reason=\\(reasonLabel) userInfo=\\(String(describing: note.userInfo))"
+                )
+                self.logRecordingHealthSnapshot(context: "afterSessionInterrupted")
+            }
+        )
+
+        sessionHealthObserverTokens.append(
+            center.addObserver(
+                forName: AVCaptureSession.interruptionEndedNotification,
+                object: captureSession,
+                queue: .main
+            ) { [weak self] note in
+                guard let self else { return }
+                self.clipAvNativeLog(
+                    "sessionInterruptionEnded recording=\\(self.suppressRecordingGestures) userInfo=\\(String(describing: note.userInfo))"
+                )
+                self.logRecordingHealthSnapshot(context: "afterSessionInterruptionEnded")
+            }
+        )
+
+        sessionHealthObserverTokens.append(
+            center.addObserver(
+                forName: AVCaptureSession.runtimeErrorNotification,
+                object: captureSession,
+                queue: .main
+            ) { [weak self] note in
+                guard let self else { return }
+                let err = note.userInfo?[AVCaptureSessionErrorKey] as? Error
+                let errText = err.map { self.nsErrorEvidence($0) } ?? "nil"
+                self.clipAvNativeLog(
+                    "sessionRuntimeError recording=\\(self.suppressRecordingGestures) \\(errText)"
+                )
+                self.logRecordingHealthSnapshot(context: "afterSessionRuntimeError")
+            }
+        )
+
+        sessionHealthObserverTokens.append(
+            center.addObserver(
+                forName: ProcessInfo.thermalStateDidChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                guard let self else { return }
+                self.clipAvNativeLog(
+                    "thermalStateChanged recording=\\(self.suppressRecordingGestures) thermal=\\(self.thermalStateLabel(ProcessInfo.processInfo.thermalState))"
+                )
+            }
+        )
+
+        bindSystemPressureObserver(to: activeCaptureDevice())
+        logRecordingHealthSnapshot(context: "observersInstalled")
+        print("[seconds-app-camera] session health observers installed")
+    }
+
+    func teardownSessionHealthObservers() {
+        let center = NotificationCenter.default
+        for token in sessionHealthObserverTokens {
+            center.removeObserver(token)
+        }
+        sessionHealthObserverTokens.removeAll()
+        systemPressureObservation?.invalidate()
+        systemPressureObservation = nil
+        clipAvNativeLog("healthObserversTornDown")
+    }
+
+    /// Lock virtual multi-cam constituent switching for the duration of a take.`;
+
+if (
+  controllerV8.includes(healthHelpersAnchor) &&
+  !controllerV8.includes("func installSessionHealthObservers()")
+) {
+  controllerV8 = controllerV8.replace(healthHelpersAnchor, healthHelpersBlock);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8: session health helpers)",
+  );
+} else if (controllerV8.includes("func installSessionHealthObservers()")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8 health helpers) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v8 health helpers: lockConstituent anchor missing",
+  );
+}
+
+const afterStartRunningOld = `            self.logRearCameraDiagnostics(context: "after startRunning")
+        }`;
+
+const afterStartRunningNew = `            self.logRearCameraDiagnostics(context: "after startRunning")
+            self.installSessionHealthObservers()
+        }`;
+
+if (
+  controllerV8.includes(afterStartRunningOld) &&
+  !controllerV8.includes("self.installSessionHealthObservers()")
+) {
+  controllerV8 = controllerV8.replace(afterStartRunningOld, afterStartRunningNew);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8: install observers after startRunning)",
+  );
+} else if (controllerV8.includes("self.installSessionHealthObservers()")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8 install observers) already patched",
+  );
+}
+
+const startRecordingHealthOld = `        setVideoDataOutputEnabled(false)
+
+        self.startRecordingCompletion = completion
+        movieOutput.startRecording(to: fileUrl, recordingDelegate: self)`;
+
+const startRecordingHealthNew = `        setVideoDataOutputEnabled(false)
+        logRecordingHealthSnapshot(context: "startRecording")
+        bindSystemPressureObserver(to: activeCaptureDevice())
+
+        self.startRecordingCompletion = completion
+        movieOutput.startRecording(to: fileUrl, recordingDelegate: self)`;
+
+if (
+  controllerV8.includes(startRecordingHealthOld) &&
+  !controllerV8.includes('logRecordingHealthSnapshot(context: "startRecording")')
+) {
+  controllerV8 = controllerV8.replace(startRecordingHealthOld, startRecordingHealthNew);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8: health snapshot at startRecording)",
+  );
+} else if (
+  controllerV8.includes('logRecordingHealthSnapshot(context: "startRecording")')
+) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8 startRecording snapshot) already patched",
+  );
+}
+
+const finishRecordingHealthOld = `    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        suppressRecordingGestures = false
+        setVideoDataOutputEnabled(true)
+        restoreContinuousFocusAndExposure()
+        if let device = activeCaptureDevice() {
+            logActiveFrameRate(context: "after stopRecording", device: device)
+        }
+        if let completion = stopRecordingCompletion {
+            stopRecordingCompletion = nil
+            if let error = error {
+                let nsError = error as NSError
+                if nsError.domain == AVFoundationErrorDomain && nsError.code == -11818 && nsError.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool == true {
+                    completion(outputFileURL, nil)
+                } else {
+                    completion(nil, error)
+                }
+            } else {
+                completion(outputFileURL, nil)
+            }
+        }
+    }`;
+
+const finishRecordingHealthNew = `    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        if let error = error {
+            clipAvNativeLog("movieFileOutputDidFinish error \\(nsErrorEvidence(error)) path=\\(outputFileURL.lastPathComponent)")
+        } else {
+            clipAvNativeLog("movieFileOutputDidFinish ok path=\\(outputFileURL.lastPathComponent)")
+        }
+        suppressRecordingGestures = false
+        setVideoDataOutputEnabled(true)
+        restoreContinuousFocusAndExposure()
+        if let device = activeCaptureDevice() {
+            logActiveFrameRate(context: "after stopRecording", device: device)
+        }
+        logRecordingHealthSnapshot(context: "stopRecording")
+        if let completion = stopRecordingCompletion {
+            stopRecordingCompletion = nil
+            if let error = error {
+                let nsError = error as NSError
+                if nsError.domain == AVFoundationErrorDomain && nsError.code == -11818 && nsError.userInfo[AVErrorRecordingSuccessfullyFinishedKey] as? Bool == true {
+                    clipAvNativeLog("movieFileOutputDidFinish treating -11818 as success (RecordingSuccessfullyFinished)")
+                    completion(outputFileURL, nil)
+                } else {
+                    completion(nil, error)
+                }
+            } else {
+                completion(outputFileURL, nil)
+            }
+        }
+    }`;
+
+if (
+  controllerV8.includes(finishRecordingHealthOld) &&
+  !controllerV8.includes("movieFileOutputDidFinish")
+) {
+  controllerV8 = controllerV8.replace(
+    finishRecordingHealthOld,
+    finishRecordingHealthNew,
+  );
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8: full delegate error evidence)",
+  );
+} else if (controllerV8.includes("movieFileOutputDidFinish")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8 delegate error log) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v8 delegate error log: didFinish pattern not found",
+  );
+}
+
+// Re-bind pressure observer after camera flip (active device changes).
+const switchCamerasHealthOld = `        if let device = self.activeCaptureDevice() {
+            try? self.applyNaturalPreviewDeviceSettings(to: device)
+        }
+
+        DispatchQueue.main.async {
+            if #available(iOS 17.0, *) {
+                self.refreshRotationCoordinator()
+            }
+            self.updateVideoOrientation()
+        }
+    }
+
+    func captureImage(completion: @escaping (UIImage?, Error?) -> Void) {`;
+
+const switchCamerasHealthNew = `        if let device = self.activeCaptureDevice() {
+            try? self.applyNaturalPreviewDeviceSettings(to: device)
+            self.bindSystemPressureObserver(to: device)
+            self.logRecordingHealthSnapshot(context: "afterSwitchCameras")
+        }
+
+        DispatchQueue.main.async {
+            if #available(iOS 17.0, *) {
+                self.refreshRotationCoordinator()
+            }
+            self.updateVideoOrientation()
+        }
+    }
+
+    func captureImage(completion: @escaping (UIImage?, Error?) -> Void) {`;
+
+if (
+  controllerV8.includes(switchCamerasHealthOld) &&
+  !controllerV8.includes('logRecordingHealthSnapshot(context: "afterSwitchCameras")')
+) {
+  controllerV8 = controllerV8.replace(switchCamerasHealthOld, switchCamerasHealthNew);
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8: pressure rebind on flip)",
+  );
+} else if (
+  controllerV8.includes('logRecordingHealthSnapshot(context: "afterSwitchCameras")')
+) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v8 flip pressure) already patched",
+  );
+}
+
+await writeFile(controllerPath, controllerV8, "utf8");
+
+// Tear down observers when preview stops (avoid leaks / stale session object).
+let pluginV8 = await readFile(pluginPath, "utf8");
+const pluginStopOld = `    @objc func stop(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            if self.cameraController.captureSession?.isRunning ?? false {
+                self.cameraController.captureSession?.stopRunning()
+
+                // Remove the orientation observer to prevent crashes
+                if self.rotateWhenOrientationChanged == true {
+                    NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
+                }`;
+
+const pluginStopNew = `    @objc func stop(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            if self.cameraController.captureSession?.isRunning ?? false {
+                self.cameraController.teardownSessionHealthObservers()
+                self.cameraController.captureSession?.stopRunning()
+
+                // Remove the orientation observer to prevent crashes
+                if self.rotateWhenOrientationChanged == true {
+                    NotificationCenter.default.removeObserver(self, name: UIDevice.orientationDidChangeNotification, object: nil)
+                }`;
+
+if (
+  pluginV8.includes(pluginStopOld) &&
+  !pluginV8.includes("teardownSessionHealthObservers()")
+) {
+  pluginV8 = pluginV8.replace(pluginStopOld, pluginStopNew);
+  await writeFile(pluginPath, pluginV8, "utf8");
+  console.log(
+    "[patch-camera-preview-ios] CameraPreviewPlugin.swift (v8: teardown health observers on stop)",
+  );
+} else if (pluginV8.includes("teardownSessionHealthObservers()")) {
+  console.log(
+    "[patch-camera-preview-ios] CameraPreviewPlugin.swift (v8 teardown) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v8 plugin stop teardown: pattern not found",
+  );
+}
+
