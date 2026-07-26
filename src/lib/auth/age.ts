@@ -3,6 +3,55 @@ export const MIN_SIGNUP_AGE_YEARS = 13;
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+export type DatePart = "year" | "month" | "day";
+
+/** Device UI language (navigator.language), not region/country alone. */
+export function getDeviceLocale(): string {
+  if (typeof navigator === "undefined") return "en";
+  return navigator.language || navigator.languages?.[0] || "en";
+}
+
+/**
+ * Year/month/day display order for the device locale
+ * (e.g. ja → YMD, en-US → MDY, en-GB → DMY).
+ */
+export function getLocalizedDatePartOrder(locale: string): DatePart[] {
+  try {
+    const parts = new Intl.DateTimeFormat(locale, {
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    }).formatToParts(new Date(2000, 11, 31));
+    const order = parts
+      .map((p) => p.type)
+      .filter((t): t is DatePart => t === "year" || t === "month" || t === "day");
+    if (order.length === 3) return order;
+  } catch {
+    /* fall through */
+  }
+  if (locale.toLowerCase().startsWith("ja")) return ["year", "month", "day"];
+  return ["month", "day", "year"];
+}
+
+/** Month option label: ja → "1月", otherwise locale month name. */
+export function getLocalizedMonthLabel(locale: string, month: number): string {
+  const m = Math.min(12, Math.max(1, Math.floor(month)));
+  if (locale.toLowerCase().startsWith("ja")) {
+    return `${m}月`;
+  }
+  try {
+    return new Intl.DateTimeFormat(locale, { month: "long" }).format(
+      new Date(2000, m - 1, 1),
+    );
+  } catch {
+    return String(m);
+  }
+}
+
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
 /** Parse YYYY-MM-DD as a local calendar date (no UTC shift). */
 export function parseIsoDateOnly(value: string): Date | null {
   const trimmed = value.trim();

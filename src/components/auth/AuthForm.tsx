@@ -1,6 +1,7 @@
 "use client";
 
 import { AppFooter } from "@/components/layout/AppFooter";
+import { BirthDateSelects } from "@/components/auth/BirthDateSelects";
 import {
   normalizeSignupBirthDate,
   validateSignupBirthDate,
@@ -27,13 +28,6 @@ export function AuthForm() {
     () => sanitizeAuthRedirectPath(searchParams.get("redirect")),
     [searchParams],
   );
-  const todayIsoLocal = useMemo(() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }, []);
   const urlError = searchParams.get("error");
   const resetDone = searchParams.get("reset") === "1";
 
@@ -241,21 +235,17 @@ export function AuthForm() {
 
             {mode === "signup" && (
               <div>
-                <label
-                  htmlFor="birthDate"
+                <span
+                  id="birthDate-label"
                   className="mb-1.5 block text-xs font-medium text-muted"
                 >
                   生年月日
-                </label>
-                <input
+                </span>
+                <BirthDateSelects
                   id="birthDate"
-                  type="date"
                   required
                   value={birthDate}
-                  onChange={(e) => setBirthDate(e.target.value)}
-                  autoComplete="bday"
-                  max={todayIsoLocal}
-                  className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
+                  onChange={setBirthDate}
                 />
                 <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
                   本サービスは13歳以上の方が対象です。生年月日は年齢確認のみに使用します。
