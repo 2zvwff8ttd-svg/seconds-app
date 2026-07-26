@@ -2884,3 +2884,65 @@ if (
   );
 }
 
+// =============================================================================
+// v9: Front/single-camera safety. MovieFileOutput's constituent-switching API
+// throws an invalid-argument exception when the active device reports .unsupported.
+// =============================================================================
+
+let controllerV9 = await readFile(controllerPath, "utf8");
+
+const constituentSwitchingUnsafe = `    private func lockConstituentSwitchingForRecording(on movieOutput: AVCaptureMovieFileOutput) {
+        guard #available(iOS 15.0, *) else { return }
+        // Default recording behavior is .restricted (switch-overs still allowed under
+        // some conditions). Lock to the active physical camera for the whole take so
+        // pinch zoom cannot interrupt the video track while mic audio continues.
+        movieOutput.isPrimaryConstituentDeviceSwitchingBehaviorForRecordingEnabled = true
+        movieOutput.setPrimaryConstituentDeviceSwitchingBehaviorForRecording(
+            .locked,
+            restrictedSwitchingBehaviorConditions: []
+        )
+        print("[seconds-app-camera] locked constituent switching for recording")
+    }`;
+
+const constituentSwitchingSafe = `    private func lockConstituentSwitchingForRecording(on movieOutput: AVCaptureMovieFileOutput) {
+        guard #available(iOS 15.0, *) else { return }
+        guard let device = activeCaptureDevice(),
+              device.activePrimaryConstituentDeviceSwitchingBehavior != .unsupported else {
+            print("[seconds-app-camera] skipped constituent switching lock: unsupported active camera")
+            return
+        }
+        // Default recording behavior is .restricted (switch-overs still allowed under
+        // some conditions). Lock to the active physical camera for the whole take so
+        // pinch zoom cannot interrupt the video track while mic audio continues.
+        movieOutput.isPrimaryConstituentDeviceSwitchingBehaviorForRecordingEnabled = true
+        movieOutput.setPrimaryConstituentDeviceSwitchingBehaviorForRecording(
+            .locked,
+            restrictedSwitchingBehaviorConditions: []
+        )
+        print("[seconds-app-camera] locked constituent switching for recording")
+    }`;
+
+if (controllerV9.includes(constituentSwitchingUnsafe)) {
+  controllerV9 = controllerV9.replace(
+    constituentSwitchingUnsafe,
+    constituentSwitchingSafe,
+  );
+  await writeFile(controllerPath, controllerV9, "utf8");
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v9: guard unsupported constituent switching)",
+  );
+} else if (
+  controllerV9.includes("func lockConstituentSwitchingForRecording") &&
+  controllerV9.includes(
+    "device.activePrimaryConstituentDeviceSwitchingBehavior != .unsupported",
+  )
+) {
+  console.log(
+    "[patch-camera-preview-ios] CameraController.swift (v9 constituent-switching guard) already patched",
+  );
+} else {
+  console.warn(
+    "[patch-camera-preview-ios] skip v9 constituent-switching guard: unexpected helper body",
+  );
+}
+

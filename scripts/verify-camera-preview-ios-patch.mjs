@@ -332,6 +332,18 @@ const checks = [
       "startRecording must lock primaryConstituentDeviceSwitchingBehaviorForRecording to .locked",
   },
   {
+    label: "skips constituent switching on unsupported cameras",
+    ok:
+      controller.includes(
+        "device.activePrimaryConstituentDeviceSwitchingBehavior != .unsupported",
+      ) &&
+      controller.includes(
+        "skipped constituent switching lock: unsupported active camera",
+      ),
+    fail:
+      "constituent switching must be guarded when the active camera reports .unsupported",
+  },
+  {
     label: "pauses VideoDataOutput while recording",
     ok:
       controller.includes("setVideoDataOutputEnabled(false)") &&
