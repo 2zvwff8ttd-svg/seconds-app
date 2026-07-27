@@ -17,3 +17,19 @@ export function getReplicateApiToken(): string | undefined {
 export function getSunoApiKey(): string | undefined {
   return process.env.SUNO_API_KEY?.trim() || undefined;
 }
+
+export function getOpenAiApiKey(): string | undefined {
+  return process.env.OPENAI_API_KEY?.trim() || undefined;
+}
+
+/** Default: gpt-image-1.5 (gpt-image-1 is deprecated). */
+export function getProfilePhotoImageModel(): string {
+  return process.env.OPENAI_PROFILE_PHOTO_MODEL?.trim() || "gpt-image-1.5";
+}
+
+/** UTC-day conversion limit per user. */
+export function getProfilePhotoDailyLimit(): number {
+  const raw = Number(process.env.AI_PROFILE_PHOTO_DAILY_LIMIT?.trim());
+  if (Number.isFinite(raw) && raw >= 0) return Math.floor(raw);
+  return 3;
+}
