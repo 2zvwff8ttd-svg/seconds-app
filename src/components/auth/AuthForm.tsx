@@ -3,9 +3,17 @@
 import { AppFooter } from "@/components/layout/AppFooter";
 import { BirthDateSelects } from "@/components/auth/BirthDateSelects";
 import {
+  TurnstileField,
+  type TurnstileFieldHandle,
+} from "@/components/auth/TurnstileField";
+import {
   normalizeSignupBirthDate,
   validateSignupBirthDate,
 } from "@/lib/auth/age";
+import {
+  isTurnstileConfigured,
+  mapAuthCaptchaError,
+} from "@/lib/auth/captcha";
 import { validatePassword, MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
 import {
   sanitizeSignupUsername,
@@ -15,7 +23,7 @@ import { sanitizeAuthRedirectPath } from "@/lib/auth/routes";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 type AuthMode = "signin" | "signup";
 
@@ -39,6 +47,9 @@ export function AuthForm() {
   const [birthDate, setBirthDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileFieldHandle>(null);
+  const turnstileEnabled = isTurnstileConfigured();
   const [message, setMessage] = useState<string | null>(
     resetDone
       ? "パスワードを更新しました。アプリを開き、新しいパスワードでログインしてください。"
@@ -54,11 +65,30 @@ export function AuthForm() {
 
   const supabase = createClient();
 
+  const mapAuthError = (rawMessage: string): string => {
+    return mapAuthCaptchaError(rawMessage) ?? rawMessage;
+  };
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setMessage(null);
+
+    if (turnstileEnabled && !captchaToken) {
+      setError("セキュリティ確認を完了してください");
+      setLoading(false);
+      return;
+    }
+
+    const captchaOptions = captchaToken
+      ? { captchaToken }
+      : ({} as { captchaToken?: string });
+
+    const finishAuthAttempt = () => {
+      turnstileRef.current?.reset();
+      setLoading(false);
+    };
 
     if (mode === "signup") {
       if (!acceptedTerms) {
@@ -101,6 +131,7 @@ export function AuthForm() {
         email,
         password,
         options: {
+          ...captchaOptions,
           data: {
             username: sanitizedUsername || undefined,
             country: "JP",
@@ -118,25 +149,26 @@ export function AuthForm() {
         ) {
           setError("13歳未満の方は本サービスをご利用いただけません");
         } else {
-          setError(signUpError.message);
+          setError(mapAuthError(signUpError.message));
         }
-        setLoading(false);
+        finishAuthAttempt();
         return;
       }
 
       if (data.session) {
+        finishAuthAttempt();
         completeLoginNavigation(redirectTo);
         return;
       }
 
-      // If email confirmations are disabled in Supabase, signUp may still return no session.
-      // Try to sign-in immediately to support "signup and login right away".
+      // captchaToken is single-use; do not reuse after signUp consumed it.
       const { error: autoSignInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (!autoSignInError) {
+        finishAuthAttempt();
         completeLoginNavigation(redirectTo);
         return;
       }
@@ -144,21 +176,23 @@ export function AuthForm() {
       setMessage(
         "アカウントを作成しました。メール確認が有効な場合は、確認メールのリンクを開いてからログインしてください。",
       );
-      setLoading(false);
+      finishAuthAttempt();
       return;
     }
 
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
+      options: captchaOptions,
     });
 
     if (signInError) {
-      setError(signInError.message);
-      setLoading(false);
+      setError(mapAuthError(signInError.message));
+      finishAuthAttempt();
       return;
     }
 
+    finishAuthAttempt();
     completeLoginNavigation(redirectTo);
   };
 
@@ -323,6 +357,12 @@ export function AuthForm() {
                 {message}
               </p>
             )}
+
+            <TurnstileField
+              ref={turnstileRef}
+              onTokenChange={setCaptchaToken}
+              className="flex justify-center pt-1"
+            />
 
             {mode === "signup" && (
               <label className="flex items-start gap-3 rounded-xl border border-border bg-surface px-3 py-3 text-xs leading-relaxed text-muted">

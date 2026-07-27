@@ -1,10 +1,18 @@
 "use client";
 
 import { AppFooter } from "@/components/layout/AppFooter";
+import {
+  TurnstileField,
+  type TurnstileFieldHandle,
+} from "@/components/auth/TurnstileField";
+import {
+  isTurnstileConfigured,
+  mapAuthCaptchaError,
+} from "@/lib/auth/captcha";
 import { PASSWORD_RESET_PATH } from "@/lib/auth/routes";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 /**
  * Request a Supabase password-recovery email.
@@ -16,11 +24,20 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileFieldHandle>(null);
+  const turnstileEnabled = isTurnstileConfigured();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (turnstileEnabled && !captchaToken) {
+      setError("セキュリティ確認を完了してください");
+      setLoading(false);
+      return;
+    }
 
     const supabase = createClient();
     const origin = window.location.origin;
@@ -30,13 +47,17 @@ export default function ForgotPasswordPage() {
 
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(
       email.trim(),
-      { redirectTo },
+      {
+        redirectTo,
+        ...(captchaToken ? { captchaToken } : {}),
+      },
     );
 
+    turnstileRef.current?.reset();
     setLoading(false);
 
     if (resetError) {
-      setError(resetError.message);
+      setError(mapAuthCaptchaError(resetError.message) ?? resetError.message);
       return;
     }
 
@@ -99,6 +120,12 @@ export default function ForgotPasswordPage() {
                     className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm text-foreground placeholder:text-muted/60 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/30"
                   />
                 </div>
+
+                <TurnstileField
+                  ref={turnstileRef}
+                  onTokenChange={setCaptchaToken}
+                  className="flex justify-center"
+                />
 
                 {error && (
                   <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
