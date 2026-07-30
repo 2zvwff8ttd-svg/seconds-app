@@ -2,6 +2,12 @@
 
 import { UserAvatar } from "@/components/search/UserAvatar";
 import { UserIdentity } from "@/components/profile/UserIdentity";
+import {
+  addSearchHistory,
+  getSearchHistory,
+  removeSearchHistory,
+  type SearchHistoryEntry,
+} from "@/lib/search/history";
 import { searchUsers } from "@/lib/search/users";
 import { searchVideos } from "@/lib/search/videos";
 import type { SearchTab, SearchUserResult, SearchVideoResult } from "@/types/search";
@@ -26,7 +32,12 @@ export function SearchScreen() {
   const [videos, setVideos] = useState<SearchVideoResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<SearchHistoryEntry[]>([]);
   const requestId = useRef(0);
+
+  useEffect(() => {
+    setHistory(getSearchHistory());
+  }, []);
 
   const runSearch = useCallback(async (term: string, activeTab: SearchTab) => {
     const id = ++requestId.current;
@@ -55,6 +66,10 @@ export function SearchScreen() {
         setVideos(results);
         setUsers([]);
       }
+      // Persist only after a real search ran (2+ chars).
+      if (requestId.current === id) {
+        setHistory(addSearchHistory(trimmed, activeTab));
+      }
     } catch (err) {
       if (requestId.current !== id) return;
       setError(err instanceof Error ? err.message : "検索に失敗しました");
@@ -72,7 +87,22 @@ export function SearchScreen() {
     return () => window.clearTimeout(timer);
   }, [query, tab, runSearch]);
 
+  const applyHistoryEntry = (entry: SearchHistoryEntry) => {
+    setTab(entry.tab);
+    setQuery(entry.query);
+  };
+
+  const deleteHistoryEntry = (
+    e: React.MouseEvent,
+    entry: SearchHistoryEntry,
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setHistory(removeSearchHistory(entry.query, entry.tab));
+  };
+
   const showHint = query.trim().length > 0 && query.trim().length < MIN_LEN;
+  const showHistory = query.trim().length === 0;
   const showEmpty =
     !loading &&
     !error &&
@@ -141,12 +171,72 @@ export function SearchScreen() {
           </p>
         )}
 
-        {!showHint && query.trim().length === 0 && (
-          <p className="py-12 text-center text-sm leading-relaxed text-muted">
-            {tab === "users"
-              ? "ユーザー名の一部を入力して\nクリエイターを探せます"
-              : "タイトルの一部を入力して\n動画を探せます"}
-          </p>
+        {showHistory && (
+          <>
+            {history.length === 0 ? (
+              <p className="whitespace-pre-line py-12 text-center text-sm leading-relaxed text-muted">
+                {tab === "users"
+                  ? "ユーザー名の一部を入力して\nクリエイターを探せます"
+                  : "タイトルの一部を入力して\n動画を探せます"}
+              </p>
+            ) : (
+              <div>
+                <p className="mb-2 px-1 text-xs font-medium text-muted">
+                  最近の検索
+                </p>
+                <ul className="divide-y divide-border rounded-xl border border-border bg-surface-elevated/80">
+                  {history.map((entry) => (
+                    <li key={`${entry.tab}:${entry.query}:${entry.at}`}>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => applyHistoryEntry(entry)}
+                          className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left transition hover:bg-white/5"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4 shrink-0 text-muted"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            aria-hidden
+                          >
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M12 7v5l3 2" />
+                          </svg>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm text-foreground">
+                              {entry.query}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-muted">
+                              {entry.tab === "users" ? "ユーザー" : "動画"}
+                            </p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => deleteHistoryEntry(e, entry)}
+                          aria-label={`「${entry.query}」を履歴から削除`}
+                          className="mr-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted/70 transition hover:bg-white/5 hover:text-muted"
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-4 w-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            aria-hidden
+                          >
+                            <path d="M6 6l12 12M18 6L6 18" />
+                          </svg>
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         )}
 
         {loading && query.trim().length >= MIN_LEN && (
