@@ -1,9 +1,8 @@
 "use client";
 
-import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "@/components/home/BottomNav";
+import { useBottomNavInset } from "@/components/layout/BottomNavInset";
 import { ProfileScreen } from "@/components/profile/ProfileScreen";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
 
 function cameFromSearch(): boolean {
   if (typeof window === "undefined") return false;
@@ -14,7 +13,7 @@ export default function UserProfilePage() {
   const params = useParams<{ userId: string }>();
   const userId = params.userId;
   const router = useRouter();
-  const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
+  const bottomInset = useBottomNavInset();
 
   const handleBack = () => {
     if (cameFromSearch()) {
@@ -50,7 +49,6 @@ export default function UserProfilePage() {
       <div className="min-h-0 flex-1" style={{ paddingBottom: bottomInset }}>
         <ProfileScreen userId={userId} />
       </div>
-      <BottomNav onInsetChange={setBottomInset} />
     </div>
   );
 }

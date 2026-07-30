@@ -1,12 +1,11 @@
 "use client";
 
-import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "@/components/home/BottomNav";
+import { useBottomNavInset } from "@/components/layout/BottomNavInset";
 import { SettingsScreen } from "@/components/settings/SettingsScreen";
 import Link from "next/link";
-import { useState } from "react";
 
 export default function SettingsPage() {
-  const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
+  const bottomInset = useBottomNavInset();
 
   return (
     <div className="flex h-[100dvh] flex-col bg-black">
@@ -29,7 +28,6 @@ export default function SettingsPage() {
       <div className="min-h-0 flex-1" style={{ paddingBottom: bottomInset }}>
         <SettingsScreen />
       </div>
-      <BottomNav onInsetChange={setBottomInset} />
     </div>
   );
 }

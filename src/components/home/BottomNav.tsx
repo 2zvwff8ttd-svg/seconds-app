@@ -1,10 +1,8 @@
 "use client";
 
 import { BottomNavButtons } from "@/components/home/BottomNavButtons";
-import { fetchDmUnreadCount } from "@/lib/dm/unread";
-import { subscribeDmUnreadCount } from "@/lib/dm/subscribe";
-import { createClient } from "@/lib/supabase/client";
-import { useEffect, useRef, useState } from "react";
+import { useDmUnreadCount } from "@/components/dm/DmUnreadProvider";
+import { useEffect, useRef } from "react";
 
 type BottomNavProps = {
   /** Total px to reserve at the bottom (nav bar + record button protrusion). */
@@ -13,34 +11,7 @@ type BottomNavProps = {
 
 export function BottomNav({ onInsetChange }: BottomNavProps) {
   const navRef = useRef<HTMLElement>(null);
-  const [dmUnreadCount, setDmUnreadCount] = useState(0);
-
-  useEffect(() => {
-    const supabase = createClient();
-    let channel: ReturnType<typeof subscribeDmUnreadCount> | null = null;
-
-    const setup = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      try {
-        const count = await fetchDmUnreadCount();
-        setDmUnreadCount(count);
-      } catch {
-        setDmUnreadCount(0);
-      }
-
-      channel = subscribeDmUnreadCount(user.id, setDmUnreadCount);
-    };
-
-    void setup();
-
-    return () => {
-      if (channel) supabase.removeChannel(channel);
-    };
-  }, []);
+  const dmUnreadCount = useDmUnreadCount();
 
   useEffect(() => {
     const nav = navRef.current;

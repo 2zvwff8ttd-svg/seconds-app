@@ -1,9 +1,7 @@
 "use client";
 
 import { BottomNavButtons } from "@/components/home/BottomNavButtons";
-import { fetchDmUnreadCount } from "@/lib/dm/unread";
-import { subscribeDmUnreadCount } from "@/lib/dm/subscribe";
-import { createClient } from "@/lib/supabase/client";
+import { useDmUnreadCount } from "@/components/dm/DmUnreadProvider";
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { createPortal } from "react-dom";
 
@@ -33,7 +31,7 @@ function readSafeAreaBottomPx(): number {
 export function PostBottomNavSheet({ onInsetChange }: PostBottomNavSheetProps) {
   const [mounted, setMounted] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [dmUnreadCount, setDmUnreadCount] = useState(0);
+  const dmUnreadCount = useDmUnreadCount();
   const [dragOffsetPx, setDragOffsetPx] = useState(0);
   const dragStartYRef = useRef<number | null>(null);
   const draggingRef = useRef(false);
@@ -69,33 +67,6 @@ export function PostBottomNavSheet({ onInsetChange }: PostBottomNavSheetProps) {
     const safeBottom = readSafeAreaBottomPx();
     onInsetChange(POST_NAV_COLLAPSED_INSET_PX + safeBottom);
   }, [onInsetChange]);
-
-  useEffect(() => {
-    const supabase = createClient();
-    let channel: ReturnType<typeof subscribeDmUnreadCount> | null = null;
-
-    const setup = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-
-      try {
-        const count = await fetchDmUnreadCount();
-        setDmUnreadCount(count);
-      } catch {
-        setDmUnreadCount(0);
-      }
-
-      channel = subscribeDmUnreadCount(user.id, setDmUnreadCount);
-    };
-
-    void setup();
-
-    return () => {
-      if (channel) supabase.removeChannel(channel);
-    };
-  }, []);
 
   useEffect(() => {
     if (!expanded) return;

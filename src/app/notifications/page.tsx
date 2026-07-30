@@ -1,12 +1,11 @@
 "use client";
 
-import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "@/components/home/BottomNav";
+import { useBottomNavInset } from "@/components/layout/BottomNavInset";
 import { NotificationList } from "@/components/notifications/NotificationList";
 import Link from "next/link";
-import { useState } from "react";
 
 export default function NotificationsPage() {
-  const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
+  const bottomInset = useBottomNavInset();
 
   return (
     <div className="flex h-[100dvh] flex-col bg-black">
@@ -29,8 +28,6 @@ export default function NotificationsPage() {
       <div className="flex min-h-0 flex-1 flex-col" style={{ paddingBottom: bottomInset }}>
         <NotificationList />
       </div>
-
-      <BottomNav onInsetChange={setBottomInset} />
     </div>
   );
 }

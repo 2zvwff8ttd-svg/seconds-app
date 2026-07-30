@@ -1,11 +1,10 @@
 "use client";
 
-import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "@/components/home/BottomNav";
+import { useBottomNavInset } from "@/components/layout/BottomNavInset";
 import { MessagesScreen } from "@/components/messages/MessagesScreen";
-import { useState } from "react";
 
 export default function MessagesPage() {
-  const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
+  const bottomInset = useBottomNavInset();
 
   return (
     <div className="flex h-[100dvh] flex-col bg-black">
@@ -19,8 +18,6 @@ export default function MessagesPage() {
       <div className="min-h-0 flex-1" style={{ paddingBottom: bottomInset }}>
         <MessagesScreen />
       </div>
-
-      <BottomNav onInsetChange={setBottomInset} />
     </div>
   );
 }

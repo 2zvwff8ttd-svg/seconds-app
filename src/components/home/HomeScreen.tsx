@@ -2,6 +2,7 @@
 
 import { CrownCelebrationModal } from "@/components/crown/CrownCelebrationModal";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
+import { useBottomNavInset } from "@/components/layout/BottomNavInset";
 import {
   fetchPendingCrownCelebration,
   type PendingCrownCelebration,
@@ -9,7 +10,6 @@ import {
 import { scheduleHomeNavPrefetches } from "@/lib/navigation/prefetch-routes";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { BubbleField } from "./BubbleField";
-import { BottomNav, DEFAULT_BOTTOM_NAV_INSET } from "./BottomNav";
 import { HomeStarfieldBackground } from "./HomeStarfieldBackground";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -17,8 +17,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export function HomeScreen() {
   const router = useRouter();
   const prefetchCleanupRef = useRef<(() => void) | null>(null);
+  const bottomInset = useBottomNavInset();
   const [countryCode, setCountryCode] = useState("JP");
-  const [bottomInset, setBottomInset] = useState(DEFAULT_BOTTOM_NAV_INSET);
   const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [immersive, setImmersive] = useState(false);
   const [backgroundHidden, setBackgroundHidden] = useState(false);
@@ -117,7 +117,6 @@ export function HomeScreen() {
         onFeedReady={handleFeedReady}
         onFullscreenChange={setImmersive}
       />
-      <BottomNav onInsetChange={setBottomInset} />
 
       {crownCelebration && !immersive ? (
         <CrownCelebrationModal
