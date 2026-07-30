@@ -24,7 +24,6 @@ import {
 } from "@/lib/recording/recorder-utils";
 import { normalizeStorageContentType } from "@/lib/video/media";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
-import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { roundClipDurationSeconds } from "@/lib/recording/format-clip-duration";
 import { TimeBudgetGauge } from "@/components/record/TimeBudgetGauge";
 import { logRecordedClipAvDurations } from "@/lib/video/av-duration-guard";
@@ -50,6 +49,7 @@ export function WebCameraRecorder({
   onClipAdded,
   onClipRemoved,
   disabled = false,
+  assignedSeconds,
 }: CameraRecorderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const nativeInputRef = useRef<HTMLInputElement>(null);
@@ -65,7 +65,6 @@ export function WebCameraRecorder({
   const lastRecordActionRef = useRef(0);
   const mimeRef = useRef(getPreferredMimeType());
 
-  const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [isRecording, setIsRecording] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -159,14 +158,6 @@ export function WebCameraRecorder({
     },
     [ensurePreview, stopStream],
   );
-
-  useEffect(() => {
-    fetchTodayAssignedSeconds()
-      .then(setAssignedSeconds)
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "秒数の取得に失敗しました");
-      });
-  }, []);
 
   useEffect(() => {
     return () => {

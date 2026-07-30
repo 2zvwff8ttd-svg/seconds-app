@@ -116,6 +116,7 @@ export function PostForm() {
     dismissError,
   } = useUpload();
 
+  // Draft restore runs on mount regardless; only persist while posting is allowed.
   const {
     draftReady,
     draftSaveError,
@@ -130,6 +131,11 @@ export function PostForm() {
     setTitle,
     enabled: postLimit === "allowed" && uploadSuccess === null && !isUploading,
   });
+
+  const cameraAllowed =
+    postLimit === "loading" || postLimit === "allowed";
+  const recordingLocked =
+    isUploading || postLimit !== "allowed";
 
   useEffect(() => {
     fetchTodayAssignedSeconds()
@@ -473,20 +479,7 @@ export function PostForm() {
     );
   }
 
-  if (postLimit === "loading" || !draftReady) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-        <span className="h-8 w-8 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
-        <p className="mt-4 text-sm text-muted">
-          {postLimit === "loading"
-            ? "投稿可能か確認しています…"
-            : "撮りかけのクリップを確認しています…"}
-        </p>
-      </div>
-    );
-  }
-
-  if (postLimit !== "allowed") {
+  if (postLimit !== "loading" && postLimit !== "allowed") {
     return (
       <div className="flex h-full flex-col items-center justify-center px-6 text-center">
         <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/15 text-amber-200">
@@ -538,14 +531,28 @@ export function PostForm() {
           </div>
         )}
 
+        {!draftReady && (
+          <p className="mb-2 text-center text-[10px] text-muted">
+            撮りかけを確認しています…
+          </p>
+        )}
+        {postLimit === "loading" && (
+          <p className="mb-2 text-center text-[10px] text-muted">
+            投稿可能か確認しています…
+          </p>
+        )}
+
         {!showPostDetails ? (
           <>
-            <CameraRecorder
-              clips={clips}
-              onClipAdded={handleClipAdded}
-              onClipRemoved={handleRemoveClip}
-              disabled={isUploading}
-            />
+            {cameraAllowed ? (
+              <CameraRecorder
+                clips={clips}
+                onClipAdded={handleClipAdded}
+                onClipRemoved={handleRemoveClip}
+                disabled={recordingLocked}
+                assignedSeconds={assignedSeconds}
+              />
+            ) : null}
             {hasContent && !isUploading && assignedSeconds !== null && (
               <p className="mt-4 text-center text-xs leading-relaxed text-muted">
                 割り当て時間（{assignedSeconds}秒）をすべて使うと、

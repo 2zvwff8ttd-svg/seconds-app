@@ -27,20 +27,47 @@ export type OwnProfileCacheData = {
   likedVideos: FeedVideo[];
 };
 
-async function loadOwnProfileData(): Promise<OwnProfileCacheData> {
+/** Core profile shell without likes — enough to paint header + posts grid. */
+export type OwnProfileCoreData = {
+  profile: ProfileData;
+  followStats: FollowStats;
+  userVideos: FeedVideo[];
+};
+
+export type OwnProfileLoadHandlers = {
+  /** Fires once profile + stats + posts are ready (likes may still be in flight). */
+  onCoreReady?: (core: OwnProfileCoreData) => void;
+};
+
+async function loadOwnProfileData(
+  handlers?: OwnProfileLoadHandlers,
+): Promise<OwnProfileCacheData> {
   const profile = await fetchCurrentProfile();
   const blockedIds = await fetchBlockedUserIds();
-  const [followStats, userVideos, likedRaw] = await Promise.all([
+
+  // Start likes in parallel with stats/videos (same shape as progressive UI).
+  const likedPromise = fetchLikedVideos(profile.userId).then((liked) =>
+    filterVideosByBlocked(liked, blockedIds),
+  );
+
+  const [followStats, userVideos] = await Promise.all([
     fetchFollowStats(profile.userId),
     fetchUserVideos(profile.userId),
-    fetchLikedVideos(profile.userId),
   ]);
+
+  handlers?.onCoreReady?.({
+    profile,
+    followStats,
+    userVideos,
+  });
+
+  const likedVideos = await likedPromise;
 
   return {
     profile,
     followStats,
     userVideos,
-    likedVideos: filterVideosByBlocked(likedRaw, blockedIds),
+    likedVideos,
   };
 }
 
@@ -49,7 +76,9 @@ export async function prefetchDmThreads(): Promise<DmThreadsCacheData> {
 }
 
 export async function prefetchOwnProfile(): Promise<OwnProfileCacheData> {
-  return fetchNavCacheFresh(NAV_CACHE_KEYS.OWN_PROFILE, loadOwnProfileData);
+  return fetchNavCacheFresh(NAV_CACHE_KEYS.OWN_PROFILE, () =>
+    loadOwnProfileData(),
+  );
 }
 
 export async function prefetchNavData(): Promise<void> {
@@ -60,6 +89,15 @@ export async function refreshDmThreadsCache(): Promise<DmThreadsCacheData> {
   return fetchNavCacheFresh(NAV_CACHE_KEYS.DM_THREADS, fetchDmThreadsForUser);
 }
 
-export async function refreshOwnProfileCache(): Promise<OwnProfileCacheData> {
-  return fetchNavCacheFresh(NAV_CACHE_KEYS.OWN_PROFILE, loadOwnProfileData);
+/**
+ * Own-profile fetch with in-flight dedupe shared with home prefetch.
+ * Optional onCoreReady enables progressive paint when this call owns the fetch.
+ * (If joining an existing prefetch promise, onCoreReady may not fire — full result still returns.)
+ */
+export async function refreshOwnProfileCache(
+  handlers?: OwnProfileLoadHandlers,
+): Promise<OwnProfileCacheData> {
+  return fetchNavCacheFresh(NAV_CACHE_KEYS.OWN_PROFILE, () =>
+    loadOwnProfileData(handlers),
+  );
 }

@@ -5,7 +5,6 @@ import { RecordMaskOverlay } from "@/components/record/RecordMaskOverlay";
 import { RecordFocusTapLayer } from "@/components/record/RecordFocusTapLayer";
 import { RecordStageControls } from "@/components/record/RecordStageControls";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
-import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
 import { getMinRecordingMs } from "@/lib/recording/recorder-utils";
 import {
@@ -50,6 +49,7 @@ export function NativeCameraRecorder({
   onClipAdded,
   onClipRemoved,
   disabled = false,
+  assignedSeconds,
 }: CameraRecorderProps) {
   const recordingStartRef = useRef<number | null>(null);
   const recordBudgetRef = useRef(0);
@@ -57,7 +57,6 @@ export function NativeCameraRecorder({
   const previewStartedRef = useRef(false);
   const previewStartingRef = useRef(false);
   const aliveRef = useRef(true);
-  const bootStartedRef = useRef(false);
   const cancelAutoStopRef = useRef<(() => void) | null>(null);
   const tickRef = useRef<number | null>(null);
   const lastRecordActionRef = useRef(0);
@@ -67,7 +66,6 @@ export function NativeCameraRecorder({
     budget: number;
   } | null>(null);
 
-  const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [isRecording, setIsRecording] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
@@ -96,21 +94,8 @@ export function NativeCameraRecorder({
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
-      bootStartedRef.current = false;
       previewStartingRef.current = false;
     };
-  }, []);
-
-  const clearTick = useCallback(() => {
-    if (tickRef.current !== null) {
-      window.clearInterval(tickRef.current);
-      tickRef.current = null;
-    }
-  }, []);
-
-  const clearAutoStop = useCallback(() => {
-    cancelAutoStopRef.current?.();
-    cancelAutoStopRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -120,14 +105,6 @@ export function NativeCameraRecorder({
       document.documentElement.classList.remove("record-native-preview-active");
       document.body.classList.remove("record-native-preview-active");
     };
-  }, []);
-
-  useEffect(() => {
-    fetchTodayAssignedSeconds()
-      .then(setAssignedSeconds)
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "秒数の取得に失敗しました");
-      });
   }, []);
 
   const addRecordedClip = useCallback(
@@ -143,6 +120,18 @@ export function NativeCameraRecorder({
     },
     [onClipAdded],
   );
+
+  const clearTick = useCallback(() => {
+    if (tickRef.current !== null) {
+      window.clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+  }, []);
+
+  const clearAutoStop = useCallback(() => {
+    cancelAutoStopRef.current?.();
+    cancelAutoStopRef.current = null;
+  }, []);
 
   const ensurePreview = useCallback(async () => {
     if (
@@ -181,17 +170,22 @@ export function NativeCameraRecorder({
     }
   }, [facingMode, isRecording]);
 
+  // Fullscreen viewport rect no longer needs host-layout settle; yield one frame
+  // so CSS (record-native-preview-active) applies before the native bridge call.
+  // Budget seconds are not required to start preview (only to record).
   useEffect(() => {
-    if (assignedSeconds === null || disabled || bootStartedRef.current) return;
-    bootStartedRef.current = true;
+    if (previewStartedRef.current || previewStartingRef.current) return;
 
-    const boot = window.setTimeout(() => {
-      if (!aliveRef.current) return;
+    let cancelled = false;
+    const raf = window.requestAnimationFrame(() => {
+      if (cancelled || !aliveRef.current) return;
       void ensurePreview();
-    }, 450);
-
-    return () => window.clearTimeout(boot);
-  }, [assignedSeconds, disabled, ensurePreview]);
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(raf);
+    };
+  }, [ensurePreview]);
 
   const syncPreviewLayout = useCallback(async () => {
     if (

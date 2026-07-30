@@ -87,6 +87,8 @@ export function useVlogDraftSession({
             }
           }
           if (restored.length === 0) return;
+          // Camera may already be open; never clobber clips the user just recorded.
+          if (clipsRef.current.length > 0) return;
           setClips(restored);
           setDisplayMaskShape(draft.displayMaskShape);
           if (draft.title) {

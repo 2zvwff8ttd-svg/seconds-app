@@ -4,7 +4,6 @@ import { ReportButton } from "@/components/reports/ReportButton";
 import { BlockUserButton } from "@/components/blocks/BlockUserButton";
 import { unblockUser } from "@/lib/blocks/actions";
 import { fetchBlockedUserIds } from "@/lib/blocks/list";
-import { filterVideosByBlocked } from "@/lib/blocks/filter";
 import { ConfirmDeleteVideoDialog } from "@/components/profile/ConfirmDeleteVideoDialog";
 import { EditProfileModal } from "@/components/profile/EditProfileModal";
 import { FollowButton } from "@/components/profile/FollowButton";
@@ -18,12 +17,14 @@ import { fetchFollowStats } from "@/lib/social/follows";
 import { deleteOwnVideo } from "@/lib/videos/delete";
 import {
   fetchCurrentProfile,
-  fetchLikedVideos,
   fetchProfile,
   fetchUserVideos,
 } from "@/lib/videos/profile-feed";
 import { NAV_CACHE_KEYS, readNavCache, writeNavCache } from "@/lib/cache/nav-data-cache";
-import type { OwnProfileCacheData } from "@/lib/prefetch/prefetch-nav-data";
+import {
+  refreshOwnProfileCache,
+  type OwnProfileCacheData,
+} from "@/lib/prefetch/prefetch-nav-data";
 import type { FeedVideo } from "@/types/feed";
 import type { FollowListKind, FollowStats, ProfileData } from "@/types/profile";
 import Link from "next/link";
@@ -78,6 +79,7 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
     null,
   );
   const [loading, setLoading] = useState(true);
+  const [likesLoading, setLikesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FeedVideo | null>(null);
@@ -85,47 +87,53 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
   const [isBlocked, setIsBlocked] = useState(false);
   const [unblocking, setUnblocking] = useState(false);
 
-  const load = useCallback(async (options?: { silent?: boolean }) => {
+  const applyOwnProfile = useCallback((data: OwnProfileCacheData) => {
+    setProfile(data.profile);
+    setFollowStats(data.followStats);
+    setUserVideos(data.userVideos);
+    setLikedVideos(data.likedVideos);
+    setIsOwnProfile(true);
+    setIsBlocked(false);
+    setLikesLoading(false);
+    setLoading(false);
+  }, []);
+
+  const loadOtherProfile = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
+    if (!userIdProp) return;
     if (!silent) {
       setLoading(true);
+      setLikesLoading(false);
     }
     setError(null);
     try {
       const current = await fetchCurrentProfile();
-      const targetUserId = userIdProp ?? current.userId;
+      const targetUserId = userIdProp;
       const own = targetUserId === current.userId;
+      if (own) {
+        // Rare: /profile/[id] for self — use shared own-profile path.
+        const data = await refreshOwnProfileCache();
+        applyOwnProfile(data);
+        return;
+      }
 
       const blockedIds = await fetchBlockedUserIds();
-      const blocked = !own && blockedIds.has(targetUserId);
+      const blocked = blockedIds.has(targetUserId);
       setIsBlocked(blocked);
 
       const [p, stats, videos] = await Promise.all([
-        own ? Promise.resolve(current) : fetchProfile(targetUserId),
+        fetchProfile(targetUserId),
         fetchFollowStats(targetUserId),
         fetchUserVideos(targetUserId),
       ]);
 
       setProfile(p);
       setFollowStats(stats);
-      setIsOwnProfile(own);
+      setIsOwnProfile(false);
       setUserVideos(blocked ? [] : videos);
-
-      if (own) {
-        const liked = await fetchLikedVideos(targetUserId);
-        const filteredLiked = filterVideosByBlocked(liked, blockedIds);
-        setLikedVideos(filteredLiked);
-        setTab((t) => (t === "likes" ? "likes" : t));
-        writeNavCache<OwnProfileCacheData>(NAV_CACHE_KEYS.OWN_PROFILE, {
-          profile: p,
-          followStats: stats,
-          userVideos: blocked ? [] : videos,
-          likedVideos: filteredLiked,
-        });
-      } else {
-        setLikedVideos([]);
-        setTab("videos");
-      }
+      setLikedVideos([]);
+      setTab("videos");
+      setLikesLoading(false);
     } catch (err) {
       if (!silent) {
         setError(err instanceof Error ? err.message : "読み込みに失敗しました");
@@ -133,28 +141,65 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
     } finally {
       setLoading(false);
     }
-  }, [userIdProp]);
+  }, [applyOwnProfile, userIdProp]);
+
+  const loadOwnProfile = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      setLoading(true);
+      setLikesLoading(true);
+    }
+    setError(null);
+    try {
+      const data = await refreshOwnProfileCache({
+        onCoreReady: silent
+          ? undefined
+          : (core) => {
+              setProfile(core.profile);
+              setFollowStats(core.followStats);
+              setUserVideos(core.userVideos);
+              setIsOwnProfile(true);
+              setIsBlocked(false);
+              // Unlock header + 投稿 grid; likes tab keeps its own spinner.
+              setLoading(false);
+              setLikesLoading(true);
+            },
+      });
+      applyOwnProfile(data);
+    } catch (err) {
+      if (!silent) {
+        setError(err instanceof Error ? err.message : "読み込みに失敗しました");
+      }
+      setLikesLoading(false);
+      setLoading(false);
+    }
+  }, [applyOwnProfile]);
 
   useEffect(() => {
     if (userIdProp) {
-      void load();
+      void loadOtherProfile();
       return;
     }
 
     const cached = readNavCache<OwnProfileCacheData>(NAV_CACHE_KEYS.OWN_PROFILE);
     if (cached) {
-      setProfile(cached.data.profile);
-      setFollowStats(cached.data.followStats);
-      setUserVideos(cached.data.userVideos);
-      setLikedVideos(cached.data.likedVideos);
-      setIsOwnProfile(true);
-      setIsBlocked(false);
-      setLoading(false);
-      void load({ silent: true });
+      applyOwnProfile(cached.data);
+      void loadOwnProfile({ silent: true });
     } else {
-      void load();
+      void loadOwnProfile();
     }
-  }, [userIdProp, load]);
+  }, [userIdProp, applyOwnProfile, loadOwnProfile, loadOtherProfile]);
+
+  const load = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (userIdProp) {
+        await loadOtherProfile(options);
+      } else {
+        await loadOwnProfile(options);
+      }
+    },
+    [userIdProp, loadOtherProfile, loadOwnProfile],
+  );
 
   const handleDeleteRequest = (video: FeedVideo) => {
     setDeleteTarget(video);
@@ -332,6 +377,20 @@ export function ProfileScreen({ userId: userIdProp }: ProfileScreenProps) {
           <p className="text-center text-sm text-muted">
             このユーザーの投稿は表示されません
           </p>
+        ) : isOwnProfile && tab === "likes" && likesLoading ? (
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {/* Likes still loading: show posts so the grid is usable immediately. */}
+            <VideoGrid
+              videos={userVideos}
+              emptyMessage="投稿した動画はまだありません"
+              deletable
+              onSelect={setSelected}
+              onDeleteRequest={handleDeleteRequest}
+            />
+            <p className="col-span-3 pt-2 text-center text-xs text-muted">
+              いいね一覧を読み込み中…
+            </p>
+          </div>
         ) : (
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {isOwnProfile && tab === "likes" ? (
