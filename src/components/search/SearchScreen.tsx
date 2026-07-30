@@ -2,16 +2,17 @@
 
 import { UserAvatar } from "@/components/search/UserAvatar";
 import { UserIdentity } from "@/components/profile/UserIdentity";
+import { pathWithFromSearch } from "@/lib/navigation/from-search";
 import {
-  addSearchHistory,
+  addSearchHistoryEntry,
   getSearchHistory,
-  removeSearchHistory,
+  hrefForHistoryEntry,
+  removeSearchHistoryEntry,
   type SearchHistoryEntry,
 } from "@/lib/search/history";
 import { searchUsers } from "@/lib/search/users";
 import { searchVideos } from "@/lib/search/videos";
 import type { SearchTab, SearchUserResult, SearchVideoResult } from "@/types/search";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -66,10 +67,6 @@ export function SearchScreen() {
         setVideos(results);
         setUsers([]);
       }
-      // Persist only after a real search ran (2+ chars).
-      if (requestId.current === id) {
-        setHistory(addSearchHistory(trimmed, activeTab));
-      }
     } catch (err) {
       if (requestId.current !== id) return;
       setError(err instanceof Error ? err.message : "検索に失敗しました");
@@ -87,9 +84,36 @@ export function SearchScreen() {
     return () => window.clearTimeout(timer);
   }, [query, tab, runSearch]);
 
-  const applyHistoryEntry = (entry: SearchHistoryEntry) => {
-    setTab(entry.tab);
-    setQuery(entry.query);
+  const openUser = (user: SearchUserResult) => {
+    setHistory(
+      addSearchHistoryEntry({
+        kind: "user",
+        userId: user.userId,
+        username: user.username,
+        displayName: user.displayName,
+        avatarUrl: user.avatarUrl,
+      }),
+    );
+    router.push(pathWithFromSearch(`/profile/${user.userId}`));
+  };
+
+  const openVideo = (video: SearchVideoResult) => {
+    setHistory(
+      addSearchHistoryEntry({
+        kind: "video",
+        videoId: video.id,
+        title: video.title,
+        thumbnailUrl: video.thumbnailUrl,
+        creatorName: video.creatorName,
+        creatorDisplayName: video.creatorDisplayName,
+      }),
+    );
+    router.push(pathWithFromSearch(`/video/${video.id}`));
+  };
+
+  const openHistoryEntry = (entry: SearchHistoryEntry) => {
+    setHistory(addSearchHistoryEntry(entry));
+    router.push(hrefForHistoryEntry(entry));
   };
 
   const deleteHistoryEntry = (
@@ -98,7 +122,13 @@ export function SearchScreen() {
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    setHistory(removeSearchHistory(entry.query, entry.tab));
+    setHistory(
+      removeSearchHistoryEntry(
+        entry.kind === "user"
+          ? { kind: "user", userId: entry.userId }
+          : { kind: "video", videoId: entry.videoId },
+      ),
+    );
   };
 
   const showHint = query.trim().length > 0 && query.trim().length < MIN_LEN;
@@ -182,41 +212,75 @@ export function SearchScreen() {
             ) : (
               <div>
                 <p className="mb-2 px-1 text-xs font-medium text-muted">
-                  最近の検索
+                  最近開いた項目
                 </p>
                 <ul className="divide-y divide-border rounded-xl border border-border bg-surface-elevated/80">
                   {history.map((entry) => (
-                    <li key={`${entry.tab}:${entry.query}:${entry.at}`}>
+                    <li
+                      key={
+                        entry.kind === "user"
+                          ? `user:${entry.userId}`
+                          : `video:${entry.videoId}`
+                      }
+                    >
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => applyHistoryEntry(entry)}
+                          onClick={() => openHistoryEntry(entry)}
                           className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left transition hover:bg-white/5"
                         >
-                          <svg
-                            viewBox="0 0 24 24"
-                            className="h-4 w-4 shrink-0 text-muted"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            aria-hidden
-                          >
-                            <circle cx="12" cy="12" r="9" />
-                            <path d="M12 7v5l3 2" />
-                          </svg>
+                          {entry.kind === "user" ? (
+                            <UserAvatar
+                              username={entry.username}
+                              avatarUrl={entry.avatarUrl}
+                              size="sm"
+                            />
+                          ) : entry.thumbnailUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={entry.thumbnailUrl}
+                              alt=""
+                              className="h-9 w-9 shrink-0 rounded-lg object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-[10px] text-muted">
+                              動画
+                            </div>
+                          )}
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm text-foreground">
-                              {entry.query}
-                            </p>
+                            {entry.kind === "user" ? (
+                              <UserIdentity
+                                username={entry.username}
+                                displayName={entry.displayName}
+                                size="sm"
+                                layout="stack"
+                              />
+                            ) : (
+                              <>
+                                <p className="truncate text-sm text-foreground">
+                                  {entry.title}
+                                </p>
+                                <UserIdentity
+                                  username={entry.creatorName}
+                                  displayName={entry.creatorDisplayName}
+                                  size="sm"
+                                  layout="inline"
+                                />
+                              </>
+                            )}
                             <p className="mt-0.5 text-[11px] text-muted">
-                              {entry.tab === "users" ? "ユーザー" : "動画"}
+                              {entry.kind === "user" ? "アカウント" : "動画"}
                             </p>
                           </div>
                         </button>
                         <button
                           type="button"
                           onClick={(e) => deleteHistoryEntry(e, entry)}
-                          aria-label={`「${entry.query}」を履歴から削除`}
+                          aria-label={
+                            entry.kind === "user"
+                              ? `@${entry.username} を履歴から削除`
+                              : `「${entry.title}」を履歴から削除`
+                          }
                           className="mr-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted/70 transition hover:bg-white/5 hover:text-muted"
                         >
                           <svg
@@ -264,9 +328,10 @@ export function SearchScreen() {
           <ul className="divide-y divide-border rounded-xl border border-border bg-surface-elevated/80">
             {users.map((user) => (
               <li key={user.userId}>
-                <Link
-                  href={`/profile/${user.userId}`}
-                  className="flex items-center gap-3 px-3 py-3 transition hover:bg-white/5"
+                <button
+                  type="button"
+                  onClick={() => openUser(user)}
+                  className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-white/5"
                 >
                   <UserAvatar
                     username={user.username}
@@ -293,7 +358,7 @@ export function SearchScreen() {
                   >
                     <path d="M9 6l6 6-6 6" />
                   </svg>
-                </Link>
+                </button>
               </li>
             ))}
           </ul>
@@ -305,7 +370,7 @@ export function SearchScreen() {
               <li key={video.id}>
                 <button
                   type="button"
-                  onClick={() => router.push(`/video/${video.id}`)}
+                  onClick={() => openVideo(video)}
                   className="group w-full overflow-hidden rounded-xl border border-border bg-surface text-left transition hover:border-violet-400/40"
                 >
                   <div className="relative aspect-[9/16] bg-black">

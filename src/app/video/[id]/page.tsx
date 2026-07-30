@@ -7,6 +7,11 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+function cameFromSearch(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("from") === "search";
+}
+
 export default function VideoDetailPage() {
   const params = useParams<{ id: string }>();
   const videoId = params.id;
@@ -14,6 +19,18 @@ export default function VideoDetailPage() {
   const [video, setVideo] = useState<FeedVideo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const handleClose = () => {
+    if (cameFromSearch()) {
+      router.push("/search");
+      return;
+    }
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/");
+  };
 
   useEffect(() => {
     if (!videoId) return;
@@ -48,25 +65,14 @@ export default function VideoDetailPage() {
       <div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-black px-6 text-center">
         <p className="text-sm text-red-400">{error ?? "動画が見つかりません"}</p>
         <Link
-          href="/"
+          href={cameFromSearch() ? "/search" : "/"}
           className="rounded-xl border border-border bg-surface px-4 py-2 text-sm text-foreground"
         >
-          ホームに戻る
+          {cameFromSearch() ? "検索に戻る" : "ホームに戻る"}
         </Link>
       </div>
     );
   }
 
-  return (
-    <FullscreenPlayer
-      video={video}
-      onClose={() => {
-        if (window.history.length > 1) {
-          router.back();
-        } else {
-          router.push("/");
-        }
-      }}
-    />
-  );
+  return <FullscreenPlayer video={video} onClose={handleClose} />;
 }
