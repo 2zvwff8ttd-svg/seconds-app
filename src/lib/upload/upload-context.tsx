@@ -3,6 +3,7 @@
 import { bonusDayMessageFromStreak, fetchCurrentStreak } from "@/lib/posting/post-streak";
 import { DAILY_POST_LIMIT_MESSAGE } from "@/lib/posting/daily-post-limit";
 import { invalidateHomeCaches } from "@/lib/home/feed-cache";
+import { maybeRequestInAppReviewAfterPostSuccess } from "@/lib/review/in-app-review";
 import { postVideo, type PostClipInput } from "@/lib/videos/post";
 import { enqueueSaveCompose } from "@/lib/video/save-compose-worker";
 import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
@@ -115,6 +116,9 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       setStage("done");
       setProgress(100);
       setProgressLabel("投稿を受け付けました");
+
+      // Native only: 3rd lifetime post → Apple/Google in-app review (once).
+      void maybeRequestInAppReviewAfterPostSuccess();
     } catch (err) {
       setStage("error");
       setProgressLabel("");
