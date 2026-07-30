@@ -25,6 +25,13 @@ import {
   createEmptySessionPreference,
 } from "@/lib/recommendation/score";
 import type { BubbleOriginRect } from "@/lib/home/bubble-origin-rect";
+import {
+  invalidateHomeFeedCache,
+  isHomeFeedCacheFresh,
+  patchHomeFeedActiveBubbles,
+  readHomeFeedCache,
+  writeHomeFeedCache,
+} from "@/lib/home/feed-cache";
 import { VideoBubble, type BubbleVideoPreview } from "./VideoBubble";
 import { FullscreenPlayer } from "./FullscreenPlayer";
 import Link from "next/link";
@@ -54,19 +61,25 @@ export function BubbleField({
   } | null>(null);
   const [hiddenBubbleId, setHiddenBubbleId] = useState<string | null>(null);
   const [bubbleSpawnGeneration, setBubbleSpawnGeneration] = useState(0);
-  const [feedPool, setFeedPool] = useState<FeedVideo[]>([]);
-  const [activeBubbles, setActiveBubbles] = useState<FeedVideo[]>([]);
-  const [, setRecContext] = useState<UserRecommendationContext>(
-    emptyRecommendationContext,
-  );
-  const [loading, setLoading] = useState(true);
+  const [feedPool, setFeedPool] = useState<FeedVideo[]>(() => {
+    return readHomeFeedCache()?.videos ?? [];
+  });
+  const [activeBubbles, setActiveBubbles] = useState<FeedVideo[]>(() => {
+    return readHomeFeedCache()?.activeBubbles ?? [];
+  });
+  const [, setRecContext] = useState<UserRecommendationContext>(() => {
+    return readHomeFeedCache()?.recContext ?? emptyRecommendationContext();
+  });
+  const [loading, setLoading] = useState(() => !readHomeFeedCache());
   const [error, setError] = useState<string | null>(null);
 
-  const feedPoolRef = useRef<FeedVideo[]>([]);
-  const recContextRef = useRef<UserRecommendationContext>(emptyRecommendationContext());
+  const feedPoolRef = useRef<FeedVideo[]>(readHomeFeedCache()?.videos ?? []);
+  const recContextRef = useRef<UserRecommendationContext>(
+    readHomeFeedCache()?.recContext ?? emptyRecommendationContext(),
+  );
   const sessionPrefRef = useRef(createEmptySessionPreference());
   const sessionWatchedIdsRef = useRef<Set<string>>(new Set());
-  const bubblesInitializedRef = useRef(false);
+  const bubblesInitializedRef = useRef(Boolean(readHomeFeedCache()));
 
   const mergedContext = useCallback(
     () =>
@@ -88,10 +101,18 @@ export function BubbleField({
   );
 
   const applyFeedPool = useCallback(
-    (pool: FeedVideo[]) => {
+    (
+      pool: FeedVideo[],
+      options?: { activeBubbles?: FeedVideo[]; reinitializeBubbles?: boolean },
+    ) => {
       feedPoolRef.current = pool;
       setFeedPool(pool);
-      if (!bubblesInitializedRef.current) {
+      if (options?.activeBubbles) {
+        setActiveBubbles(options.activeBubbles);
+        bubblesInitializedRef.current = true;
+        return;
+      }
+      if (options?.reinitializeBubbles || !bubblesInitializedRef.current) {
         setActiveBubbles(pickSlots(pool));
         bubblesInitializedRef.current = true;
       }
@@ -99,42 +120,86 @@ export function BubbleField({
     [pickSlots],
   );
 
-  const loadFeed = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [{ videos, countryCode }, serverCtx] = await Promise.all([
-        fetchHomeFeed(),
-        fetchUserRecommendationContext(),
-      ]);
-      recContextRef.current = serverCtx;
-      setRecContext(serverCtx);
-      applyFeedPool(videos);
-      onCountryChange?.(countryCode);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "フィードの取得に失敗しました");
-      feedPoolRef.current = [];
-      setFeedPool([]);
-      setActiveBubbles([]);
-    } finally {
-      setLoading(false);
-      onFeedReady?.();
-    }
-  }, [applyFeedPool, onCountryChange, onFeedReady]);
+  const loadFeed = useCallback(
+    async (options?: { force?: boolean }) => {
+      const force = options?.force === true;
+
+      if (!force) {
+        const cached = readHomeFeedCache();
+        if (cached) {
+          recContextRef.current = cached.recContext;
+          setRecContext(cached.recContext);
+          applyFeedPool(cached.videos, { activeBubbles: cached.activeBubbles });
+          onCountryChange?.(cached.countryCode);
+          setError(null);
+          setLoading(false);
+          onFeedReady?.();
+          return;
+        }
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const [{ videos, countryCode }, serverCtx] = await Promise.all([
+          fetchHomeFeed(),
+          fetchUserRecommendationContext(),
+        ]);
+        recContextRef.current = serverCtx;
+        setRecContext(serverCtx);
+        // Fresh network load: rebuild bubble slots from the new pool.
+        const slots = pickSlots(videos);
+        applyFeedPool(videos, { activeBubbles: slots });
+        onCountryChange?.(countryCode);
+        writeHomeFeedCache({
+          videos,
+          countryCode,
+          recContext: serverCtx,
+          activeBubbles: slots,
+        });
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "フィードの取得に失敗しました",
+        );
+        feedPoolRef.current = [];
+        setFeedPool([]);
+        setActiveBubbles([]);
+        bubblesInitializedRef.current = false;
+        invalidateHomeFeedCache();
+      } finally {
+        setLoading(false);
+        onFeedReady?.();
+      }
+    },
+    [applyFeedPool, onCountryChange, onFeedReady, pickSlots],
+  );
 
   useEffect(() => {
     if (pathname === "/") {
-      loadFeed();
+      void loadFeed();
     }
   }, [pathname, loadFeed]);
 
   useEffect(() => {
     const onFocus = () => {
-      if (pathname === "/") loadFeed();
+      if (pathname !== "/") return;
+      // Only refetch when the short cache has expired.
+      if (!isHomeFeedCacheFresh()) {
+        void loadFeed({ force: true });
+      }
     };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [pathname, loadFeed]);
+
+  // Persist current bubble layout so a quick remount restores the same slots.
+  useEffect(() => {
+    return () => {
+      if (activeBubbles.length > 0) {
+        patchHomeFeedActiveBubbles(activeBubbles);
+      }
+    };
+  }, [activeBubbles]);
 
   useEffect(() => {
     const el = canvasRef.current;
@@ -295,7 +360,7 @@ export function BubbleField({
               <p className="text-sm text-red-400">{error}</p>
               <button
                 type="button"
-                onClick={loadFeed}
+                onClick={() => void loadFeed({ force: true })}
                 className="rounded-full border border-border px-4 py-2 text-xs text-foreground"
               >
                 再読み込み

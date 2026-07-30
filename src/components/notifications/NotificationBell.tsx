@@ -1,6 +1,10 @@
 "use client";
 
 import {
+  readUnreadNotificationCache,
+  writeUnreadNotificationCache,
+} from "@/lib/home/feed-cache";
+import {
   fetchUnreadNotificationCount,
 } from "@/lib/notifications/list";
 import { subscribeUnreadNotificationCount } from "@/lib/notifications/subscribe";
@@ -9,7 +13,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 export function NotificationBell() {
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(
+    () => readUnreadNotificationCache() ?? 0,
+  );
 
   useEffect(() => {
     const supabase = createClient();
@@ -21,14 +27,23 @@ export function NotificationBell() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      try {
-        const count = await fetchUnreadNotificationCount();
-        setUnreadCount(count);
-      } catch {
-        setUnreadCount(0);
+      const cached = readUnreadNotificationCache();
+      if (cached !== null) {
+        setUnreadCount(cached);
+      } else {
+        try {
+          const count = await fetchUnreadNotificationCount();
+          setUnreadCount(count);
+          writeUnreadNotificationCache(count);
+        } catch {
+          setUnreadCount(0);
+        }
       }
 
-      channel = subscribeUnreadNotificationCount(user.id, setUnreadCount);
+      channel = subscribeUnreadNotificationCount(user.id, (count) => {
+        setUnreadCount(count);
+        writeUnreadNotificationCache(count);
+      });
     };
 
     void setup();

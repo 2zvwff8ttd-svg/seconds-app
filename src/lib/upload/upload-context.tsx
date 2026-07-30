@@ -2,6 +2,7 @@
 
 import { bonusDayMessageFromStreak, fetchCurrentStreak } from "@/lib/posting/post-streak";
 import { DAILY_POST_LIMIT_MESSAGE } from "@/lib/posting/daily-post-limit";
+import { invalidateHomeCaches } from "@/lib/home/feed-cache";
 import { postVideo, type PostClipInput } from "@/lib/videos/post";
 import { enqueueSaveCompose } from "@/lib/video/save-compose-worker";
 import type { VideoDisplayMaskShape } from "@/lib/video/display-mask";
@@ -109,6 +110,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         publishAt: result.publishAt,
         bonusCountdownMessage: bonusDayMessageFromStreak(result.currentStreak),
       });
+      // Fresh content on home after posting — don't serve the pre-post snapshot.
+      invalidateHomeCaches();
       setStage("done");
       setProgress(100);
       setProgressLabel("投稿を受け付けました");

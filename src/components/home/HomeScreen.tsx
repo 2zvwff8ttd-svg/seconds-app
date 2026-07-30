@@ -7,6 +7,12 @@ import {
   fetchPendingCrownCelebration,
   type PendingCrownCelebration,
 } from "@/lib/crown/celebration";
+import {
+  readCrownCelebrationCache,
+  readHomeShellCache,
+  writeCrownCelebrationCache,
+  writeHomeShellCache,
+} from "@/lib/home/feed-cache";
 import { scheduleHomeNavPrefetches } from "@/lib/navigation/prefetch-routes";
 import { fetchTodayAssignedSeconds } from "@/lib/recording/daily-assignment";
 import { BubbleField } from "./BubbleField";
@@ -19,11 +25,16 @@ export function HomeScreen() {
   const prefetchCleanupRef = useRef<(() => void) | null>(null);
   const bottomInset = useBottomNavInset();
   const [countryCode, setCountryCode] = useState("JP");
-  const [assignedSeconds, setAssignedSeconds] = useState<number | null>(null);
+  const [assignedSeconds, setAssignedSeconds] = useState<number | null>(() => {
+    return readHomeShellCache()?.assignedSeconds ?? null;
+  });
   const [immersive, setImmersive] = useState(false);
   const [backgroundHidden, setBackgroundHidden] = useState(false);
   const [crownCelebration, setCrownCelebration] =
-    useState<PendingCrownCelebration | null>(null);
+    useState<PendingCrownCelebration | null>(() => {
+      const cached = readCrownCelebrationCache<PendingCrownCelebration>();
+      return cached ? cached.pending : null;
+    });
 
   // Free the starfield only when the main thread is idle after the fullscreen
   // enter settles, so its teardown never competes with the first video frame
@@ -57,16 +68,39 @@ export function HomeScreen() {
   }, [immersive]);
 
   useEffect(() => {
+    const cached = readHomeShellCache();
+    if (cached) {
+      setAssignedSeconds(cached.assignedSeconds);
+      return;
+    }
+    let cancelled = false;
     fetchTodayAssignedSeconds()
-      .then(setAssignedSeconds)
-      .catch(() => setAssignedSeconds(null));
+      .then((seconds) => {
+        if (cancelled) return;
+        setAssignedSeconds(seconds);
+        writeHomeShellCache(seconds);
+      })
+      .catch(() => {
+        if (!cancelled) setAssignedSeconds(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
+    const cached = readCrownCelebrationCache<PendingCrownCelebration>();
+    if (cached) {
+      if (cached.pending) setCrownCelebration(cached.pending);
+      return;
+    }
+
     let cancelled = false;
     fetchPendingCrownCelebration()
       .then((pending) => {
-        if (!cancelled && pending) setCrownCelebration(pending);
+        if (cancelled) return;
+        writeCrownCelebrationCache(pending);
+        if (pending) setCrownCelebration(pending);
       })
       .catch(() => {
         /* ignore — RPC may not exist until SQL is applied */
@@ -121,7 +155,10 @@ export function HomeScreen() {
       {crownCelebration && !immersive ? (
         <CrownCelebrationModal
           celebration={crownCelebration}
-          onDismissed={() => setCrownCelebration(null)}
+          onDismissed={() => {
+            setCrownCelebration(null);
+            writeCrownCelebrationCache(null);
+          }}
         />
       ) : null}
     </div>
