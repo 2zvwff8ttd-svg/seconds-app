@@ -1353,6 +1353,7 @@ body {
     210  flip camera
     300  bottom dock (record button + status)
     310  shape picker carousel (above scrim, with dock)
+    320  camera boot error overlay (must sit above mask hole)
    Native camera: fullscreen behind WebView (toBack). Scrim punches hole only.
    Tune hole/dock/scale in display-mask.ts → RECORD_LAYOUT + visualScale.
    ─────────────────────────────────────────────────────────────────────── */
@@ -1364,6 +1365,7 @@ body {
   --z-record-flip: 210;
   --z-record-clip-strip: 310;
   --z-record-dock: 300;
+  --z-record-boot-error: 320;
   --record-layout-top-reserve: 76px;
   --record-layout-bottom-nav: 88px;
   --record-layout-dock-bottom: calc(
@@ -1943,6 +1945,52 @@ html.record-native-preview-active body {
   height: 1.5rem;
   width: 1.5rem;
   border-radius: 0.125rem;
+}
+
+.record-camera-boot-error {
+  position: fixed;
+  left: 50%;
+  top: 42%;
+  z-index: var(--z-record-boot-error);
+  width: min(78vw, 320px);
+  transform: translate(-50%, -50%);
+  border-radius: 1rem;
+  border: 1px solid rgb(248 113 113 / 0.35);
+  background: rgb(0 0 0 / 0.88);
+  padding: 1.15rem 1.25rem;
+  text-align: center;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+  pointer-events: auto;
+}
+
+.record-camera-boot-error__title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: rgb(254 202 202);
+}
+
+.record-camera-boot-error__body {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: rgb(252 165 165);
+}
+
+.record-camera-boot-error__retry {
+  margin-top: 0.9rem;
+  min-width: 8.5rem;
+  border-radius: 999px;
+  border: 1px solid rgb(248 113 113 / 0.55);
+  background: rgb(248 113 113 / 0.2);
+  padding: 0.55rem 1.1rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: rgb(254 226 226);
+}
+
+.record-camera-boot-error__retry:disabled {
+  opacity: 0.55;
 }
 
 .record-camera-error {

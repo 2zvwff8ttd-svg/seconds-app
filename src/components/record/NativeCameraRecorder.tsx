@@ -4,6 +4,7 @@ import type { CameraRecorderProps } from "@/components/record/camera-recorder-ty
 import { RecordMaskOverlay } from "@/components/record/RecordMaskOverlay";
 import { RecordFocusTapLayer } from "@/components/record/RecordFocusTapLayer";
 import { RecordStageControls } from "@/components/record/RecordStageControls";
+import { RecordStagePortal } from "@/components/record/RecordStagePortal";
 import { sumRecordedClipSeconds } from "@/lib/recording/clip-budget";
 import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscreen-preview-rect";
 import { getMinRecordingMs } from "@/lib/recording/recorder-utils";
@@ -29,6 +30,9 @@ import {
 import { logRecordedClipAvDurations } from "@/lib/video/av-duration-guard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+/** Wait for CSS (record-native-preview-active) + layout before native start. */
+const PREVIEW_BOOT_SETTLE_MS = 400;
+
 function waitMs(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -44,6 +48,25 @@ function nativePreviewOpts(facingMode: "user" | "environment") {
   };
 }
 
+function formatPreviewStartError(err: unknown): string {
+  const raw =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : "カメラプレビューの起動に失敗しました";
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("permission") ||
+    lower.includes("denied") ||
+    lower.includes("not authorized") ||
+    lower.includes("notdetermined")
+  ) {
+    return "カメラの使用が許可されていません。設定アプリでカメラを許可してから、再試行してください。";
+  }
+  return raw.trim() || "カメラプレビューの起動に失敗しました";
+}
+
 export function NativeCameraRecorder({
   clips,
   onClipAdded,
@@ -56,7 +79,10 @@ export function NativeCameraRecorder({
   const finishingRef = useRef(false);
   const previewStartedRef = useRef(false);
   const previewStartingRef = useRef(false);
-  const aliveRef = useRef(true);
+  /** Bumps on each mount; in-flight start/stop ignore stale generations. */
+  const generationRef = useRef(0);
+  const facingModeRef = useRef<"user" | "environment">("environment");
+  const isRecordingRef = useRef(false);
   const cancelAutoStopRef = useRef<(() => void) | null>(null);
   const tickRef = useRef<number | null>(null);
   const lastRecordActionRef = useRef(0);
@@ -73,8 +99,13 @@ export function NativeCameraRecorder({
   const [recordingStarting, setRecordingStarting] = useState(false);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  /** Preview start failures — shown in a fixed portal (visible over the hole). */
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [pendingRecordedSeconds, setPendingRecordedSeconds] = useState(0);
   const [failedClipPending, setFailedClipPending] = useState(false);
+
+  facingModeRef.current = facingMode;
+  isRecordingRef.current = isRecording;
 
   const previewZoomed = useNativePreviewZoomed(cameraReady && !cameraStarting);
 
@@ -90,22 +121,113 @@ export function NativeCameraRecorder({
     return Math.max(0, assignedSeconds - usedClipSeconds - elapsed);
   }, [assignedSeconds, usedClipSeconds, isRecording, pendingRecordedSeconds, tick]);
 
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-      previewStartingRef.current = false;
-    };
+  const isCurrentGeneration = useCallback((gen: number) => {
+    return generationRef.current === gen;
   }, []);
 
+  /**
+   * Start native preview for a mount generation. No-ops if generation is stale
+   * (unmounted / remounted). Stale starts that already called the plugin are
+   * stopped so they cannot leave a zombie session under the next mount.
+   */
+  const ensurePreview = useCallback(
+    async (gen: number, options?: { force?: boolean }): Promise<boolean> => {
+      if (!isCurrentGeneration(gen)) return false;
+      if (isRecordingRef.current) return false;
+      // Serialize within a generation (no parallel starts).
+      if (previewStartingRef.current) return false;
+
+      if (previewStartedRef.current && !options?.force) {
+        return true;
+      }
+
+      if (options?.force) {
+        previewStartedRef.current = false;
+        setCameraReady(false);
+      }
+
+      previewStartingRef.current = true;
+      setCameraStarting(true);
+      setPreviewError(null);
+      setError(null);
+
+      try {
+        await startNativePreview(nativePreviewOpts(facingModeRef.current));
+
+        if (!isCurrentGeneration(gen)) {
+          // Unmounted (or remounted) while starting — tear down this start.
+          try {
+            await stopNativePreview();
+          } catch (stopErr) {
+            console.warn(
+              "[NativeCameraRecorder] stop after stale start",
+              stopErr,
+            );
+          }
+          return false;
+        }
+
+        previewStartedRef.current = true;
+        setCameraReady(true);
+        setPreviewError(null);
+        return true;
+      } catch (err) {
+        if (!isCurrentGeneration(gen)) return false;
+        console.error("[NativeCameraRecorder] ensurePreview failed", err);
+        const message = formatPreviewStartError(err);
+        setPreviewError(message);
+        setError(message);
+        setCameraReady(false);
+        previewStartedRef.current = false;
+        return false;
+      } finally {
+        if (isCurrentGeneration(gen)) {
+          previewStartingRef.current = false;
+          setCameraStarting(false);
+        }
+      }
+    },
+    [isCurrentGeneration],
+  );
+
+  // Mount lifecycle: CSS class + settle delay + start, then generation-aware stop.
   useEffect(() => {
+    const gen = ++generationRef.current;
+    previewStartedRef.current = false;
+    previewStartingRef.current = false;
+    setCameraReady(false);
+    setPreviewError(null);
+
     document.documentElement.classList.add("record-native-preview-active");
     document.body.classList.add("record-native-preview-active");
+
+    let cancelled = false;
+    const settleTimer = window.setTimeout(() => {
+      if (cancelled || !isCurrentGeneration(gen)) return;
+      void ensurePreview(gen);
+    }, PREVIEW_BOOT_SETTLE_MS);
+
     return () => {
+      cancelled = true;
+      window.clearTimeout(settleTimer);
+      // Invalidate in-flight ensurePreview for this gen (next mount ++'s generation).
+      if (generationRef.current === gen) {
+        generationRef.current = gen + 1;
+      }
+      previewStartedRef.current = false;
+      previewStartingRef.current = false;
       document.documentElement.classList.remove("record-native-preview-active");
       document.body.classList.remove("record-native-preview-active");
+      void stopNativePreview().catch((err) => {
+        console.warn("[NativeCameraRecorder] stopNativePreview on unmount", err);
+      });
     };
-  }, []);
+  }, [ensurePreview, isCurrentGeneration]);
+
+  const retryPreview = useCallback(() => {
+    const gen = generationRef.current;
+    void ensurePreview(gen, { force: true });
+  }, [ensurePreview]);
 
   const addRecordedClip = useCallback(
     (file: File, durationSeconds: number) => {
@@ -133,64 +255,11 @@ export function NativeCameraRecorder({
     cancelAutoStopRef.current = null;
   }, []);
 
-  const ensurePreview = useCallback(async () => {
-    if (
-      !aliveRef.current ||
-      isRecording ||
-      previewStartedRef.current ||
-      previewStartingRef.current
-    ) {
-      return false;
-    }
-
-    previewStartingRef.current = true;
-    setCameraStarting(true);
-    setError(null);
-
-    try {
-      await startNativePreview(nativePreviewOpts(facingMode));
-      if (!aliveRef.current) return false;
-
-      previewStartedRef.current = true;
-      setCameraReady(true);
-      return true;
-    } catch (err) {
-      if (!aliveRef.current) return false;
-      setError(
-        err instanceof Error ? err.message : "カメラプレビューの起動に失敗しました",
-      );
-      setCameraReady(false);
-      previewStartedRef.current = false;
-      return false;
-    } finally {
-      previewStartingRef.current = false;
-      if (aliveRef.current) {
-        setCameraStarting(false);
-      }
-    }
-  }, [facingMode, isRecording]);
-
-  // Fullscreen viewport rect no longer needs host-layout settle; yield one frame
-  // so CSS (record-native-preview-active) applies before the native bridge call.
-  // Budget seconds are not required to start preview (only to record).
-  useEffect(() => {
-    if (previewStartedRef.current || previewStartingRef.current) return;
-
-    let cancelled = false;
-    const raf = window.requestAnimationFrame(() => {
-      if (cancelled || !aliveRef.current) return;
-      void ensurePreview();
-    });
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(raf);
-    };
-  }, [ensurePreview]);
-
   const syncPreviewLayout = useCallback(async () => {
+    const gen = generationRef.current;
     if (
-      !aliveRef.current ||
-      isRecording ||
+      !isCurrentGeneration(gen) ||
+      isRecordingRef.current ||
       !previewStartedRef.current ||
       previewStartingRef.current ||
       cameraStarting
@@ -199,12 +268,13 @@ export function NativeCameraRecorder({
     }
 
     try {
-      await syncNativePreviewLayout(nativePreviewOpts(facingMode));
+      await syncNativePreviewLayout(nativePreviewOpts(facingModeRef.current));
+      if (!isCurrentGeneration(gen)) return;
     } catch (err) {
-      if (!aliveRef.current) return;
+      if (!isCurrentGeneration(gen)) return;
       console.warn("[NativeCameraRecorder] syncPreviewLayout", err);
     }
-  }, [cameraStarting, facingMode, isRecording]);
+  }, [cameraStarting, isCurrentGeneration]);
 
   const scheduleLayoutSyncRef = useRef(debounceAsync(() => syncPreviewLayout(), 500));
 
@@ -239,11 +309,6 @@ export function NativeCameraRecorder({
       clearAutoStop();
       clearTick();
       recordingStartRef.current = null;
-      previewStartedRef.current = false;
-      previewStartingRef.current = false;
-      void stopNativePreview().catch((err) => {
-        console.warn("[NativeCameraRecorder] stopNativePreview on unmount", err);
-      });
     };
   }, [clearAutoStop, clearTick]);
 
@@ -267,7 +332,6 @@ export function NativeCameraRecorder({
       console.info(
         `[NativeCameraRecorder] clip added: ${durationSeconds}s (${file.size} bytes)`,
       );
-      // Evidence for A/V mismatch: probe streams async (do not block UI).
       void logRecordedClipAvDurations(file, {
         source: "native",
         wallClockSec: durationSeconds,
@@ -308,7 +372,6 @@ export function NativeCameraRecorder({
         err instanceof Error ? err.message : typeof err === "string" ? err : "";
       const message = formatNativeRecordingError(err);
       setError(detail && detail !== message ? `${message} [${detail}]` : message);
-      // pendingRecordedSeconds は維持 — ゲージが録画前に戻るのを防ぐ
     } finally {
       finishingRef.current = false;
     }
@@ -379,14 +442,17 @@ export function NativeCameraRecorder({
     }
 
     if (!cameraReady) {
-      const started = await ensurePreview();
+      const started = await ensurePreview(generationRef.current, { force: true });
       if (!started) {
-        setError((prev) => prev ?? "カメラプレビューの起動に失敗しました");
+        setPreviewError(
+          (prev) => prev ?? "カメラプレビューの起動に失敗しました",
+        );
         return;
       }
     }
 
     setError(null);
+    setPreviewError(null);
     recordBudgetRef.current = budget;
     setRecordingStarting(true);
 
@@ -534,7 +600,24 @@ export function NativeCameraRecorder({
         }
       />
 
-      {error && (
+      {previewError && (
+        <RecordStagePortal>
+          <div className="record-camera-boot-error" role="alert">
+            <p className="record-camera-boot-error__title">カメラを起動できません</p>
+            <p className="record-camera-boot-error__body">{previewError}</p>
+            <button
+              type="button"
+              className="record-camera-boot-error__retry"
+              onClick={retryPreview}
+              disabled={cameraStarting}
+            >
+              {cameraStarting ? "起動中…" : "再試行"}
+            </button>
+          </div>
+        </RecordStagePortal>
+      )}
+
+      {error && !previewError && (
         <div className="record-camera-error" role="alert">
           <p>{error}</p>
           {failedClipPending && (
