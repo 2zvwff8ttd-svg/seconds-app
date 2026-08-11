@@ -1499,27 +1499,75 @@ html.clip-preview-open .post-nav-scrim {
 }
 
 
+/*
+ * toBack preview: camera is BEHIND WKWebView. Any solid bg on html/body/page
+ * paints over the stream. Force transparent with !important (beats Tailwind bg-*).
+ */
 html.record-native-preview-active,
-html.record-native-preview-active body {
+html.record-native-preview-active body,
+html.record-native-preview-active body.app-body,
+html.record-native-preview-active .app-page,
+html.record-native-preview-active .post-page-root,
+html.record-native-preview-active .post-form-scroll,
+html.record-native-preview-active .record-camera-root,
+html.record-native-preview-active .record-camera-layout-spacer {
   background: transparent !important;
+  background-color: transparent !important;
 }
 
-.record-native-preview-active .post-page-root {
+/* Post page defaults to dark; still clear while recording class is on. */
+.post-page-root--record {
+  background-color: #000000;
+}
+
+html.record-native-preview-active .post-page-root--record {
   background: transparent !important;
+  background-color: transparent !important;
 }
 
 .record-native-preview-active .post-page-root > header {
   background: rgb(var(--bg-base-rgb, 10 10 10));
 }
 
-.record-native-preview-active .post-form-scroll {
-  background: transparent;
-}
-
 .record-native-preview-active .post-form-scroll > *:not(.record-camera-root) {
   position: relative;
   z-index: 50;
   background-color: rgb(var(--bg-base-rgb, 10 10 10));
+}
+
+.record-camera-diag {
+  position: fixed;
+  left: 0.5rem;
+  right: 0.5rem;
+  top: max(0.35rem, env(safe-area-inset-top, 0px));
+  z-index: calc(var(--z-record-boot-error) + 1);
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  background: rgb(0 0 0 / 0.78);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  color: #d4d4d8;
+  font-size: 9px;
+  line-height: 1.35;
+  pointer-events: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+
+.record-camera-diag__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  align-items: baseline;
+}
+
+.record-camera-diag__row strong {
+  color: #a7f3d0;
+  font-weight: 700;
+}
+
+.record-camera-diag__detail {
+  margin-top: 0.2rem;
+  opacity: 0.85;
 }
 
 .record-camera-root {

@@ -55,25 +55,85 @@ function buildPreviewOptions(
   };
 }
 
-export async function startNativePreview(
-  opts: StartNativePreviewOptions,
-): Promise<void> {
-  return enqueueNativePreviewOp("startNativePreview", async () => {
+function isAlreadyStartedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /already started/i.test(msg);
+}
+
+function isAlreadyStoppedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /already stopped/i.test(msg);
+}
+
+export async function getNativeCameraStarted(): Promise<boolean> {
+  try {
+    const started = await CameraPreview.isCameraStarted();
+    return Boolean(started.value);
+  } catch {
+    return false;
+  }
+}
+
+async function stopIfRunning(): Promise<void> {
+  try {
     const started = await CameraPreview.isCameraStarted();
     if (started.value) {
       await CameraPreview.stop();
     }
-    await CameraPreview.start(buildPreviewOptions(opts));
+  } catch (err) {
+    if (!isAlreadyStoppedError(err)) {
+      throw err;
+    }
+  }
+}
+
+export async function startNativePreview(
+  opts: StartNativePreviewOptions,
+): Promise<void> {
+  return enqueueNativePreviewOp("startNativePreview", async () => {
+    if (opts.width < 2 || opts.height < 2) {
+      throw new Error(
+        `プレビューサイズが不正です (${opts.width}x${opts.height})`,
+      );
+    }
+
+    await stopIfRunning();
+
+    try {
+      await withPluginTimeout(
+        CameraPreview.start(buildPreviewOptions(opts)),
+        15_000,
+        "カメラの起動がタイムアウトしました（15秒）",
+      );
+    } catch (err) {
+      // Stale session race: stop hard and retry once.
+      if (isAlreadyStartedError(err)) {
+        await stopIfRunning();
+        await withPluginTimeout(
+          CameraPreview.start(buildPreviewOptions(opts)),
+          15_000,
+          "カメラの起動がタイムアウトしました（再試行後）",
+        );
+      } else {
+        throw err;
+      }
+    }
+
+    // start() can resolve without a live session on some iOS edge cases.
+    const running = await getNativeCameraStarted();
+    if (!running) {
+      throw new Error(
+        "カメラセッションが開始されませんでした（isCameraStarted=false）",
+      );
+    }
+
     lastAppliedRectKey = rectKey(opts, opts.position);
   });
 }
 
 export async function stopNativePreview(): Promise<void> {
   return enqueueNativePreviewOp("stopNativePreview", async () => {
-    const started = await CameraPreview.isCameraStarted();
-    if (started.value) {
-      await CameraPreview.stop();
-    }
+    await stopIfRunning();
     lastAppliedRectKey = null;
   });
 }
@@ -112,7 +172,7 @@ export async function syncNativePreviewLayout(
       lastAppliedRectKey = key;
       return;
     }
-    await CameraPreview.stop();
+    await stopIfRunning();
     await CameraPreview.start(buildPreviewOptions(opts));
     lastAppliedRectKey = key;
   });

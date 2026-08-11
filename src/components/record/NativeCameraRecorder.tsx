@@ -10,6 +10,7 @@ import { getFullscreenNativePreviewRect } from "@/lib/recording/native-fullscree
 import { getMinRecordingMs } from "@/lib/recording/recorder-utils";
 import {
   flipNativeCamera,
+  getNativeCameraStarted,
   NATIVE_CAMERA_PREVIEW_ID,
   startNativePreview,
   startNativeRecording,
@@ -18,6 +19,11 @@ import {
   syncNativePreviewLayout,
   type NativeRecordingResult,
 } from "@/lib/recording/native-camera-preview";
+import {
+  applyRecordPreviewTransparentSurfaces,
+  clearRecordPreviewTransparentSurfaces,
+  readPreviewSurfaceDiag,
+} from "@/lib/recording/record-preview-transparency";
 import { debounceAsync } from "@/lib/recording/native-preview-scheduler";
 import { useNativePreviewZoomed } from "@/lib/recording/use-native-preview-zoomed";
 import { formatNativeRecordingError } from "@/lib/recording/native-recording-error";
@@ -28,10 +34,14 @@ import {
   scheduleRecordingAutoStop,
 } from "@/lib/recording/recording-timer";
 import { logRecordedClipAvDurations } from "@/lib/video/av-duration-guard";
+import { Capacitor } from "@capacitor/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-/** Wait for CSS (record-native-preview-active) + layout before native start. */
-const PREVIEW_BOOT_SETTLE_MS = 400;
+/** Wait for transparent surfaces to paint before native start. */
+const PREVIEW_BOOT_SETTLE_MS = 450;
+
+/** Diagnostic build id — shows on-screen so we know which JS is running. */
+const CAM_PATCH_ID = "cam-boot-v2";
 
 function waitMs(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -67,6 +77,14 @@ function formatPreviewStartError(err: unknown): string {
   return raw.trim() || "カメラプレビューの起動に失敗しました";
 }
 
+type BootPhase =
+  | "idle"
+  | "settle"
+  | "starting"
+  | "ready"
+  | "error"
+  | "unmounted";
+
 export function NativeCameraRecorder({
   clips,
   onClipAdded,
@@ -91,6 +109,9 @@ export function NativeCameraRecorder({
     elapsed: number;
     budget: number;
   } | null>(null);
+  const ensurePreviewRef = useRef<
+    (gen: number, options?: { force?: boolean }) => Promise<boolean>
+  >(async () => false);
 
   const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
   const [isRecording, setIsRecording] = useState(false);
@@ -99,10 +120,12 @@ export function NativeCameraRecorder({
   const [recordingStarting, setRecordingStarting] = useState(false);
   const [tick, setTick] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  /** Preview start failures — shown in a fixed portal (visible over the hole). */
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [pendingRecordedSeconds, setPendingRecordedSeconds] = useState(0);
   const [failedClipPending, setFailedClipPending] = useState(false);
+  const [bootPhase, setBootPhase] = useState<BootPhase>("idle");
+  const [diagLine, setDiagLine] = useState("boot…");
+  const [nativeStarted, setNativeStarted] = useState<boolean | null>(null);
 
   facingModeRef.current = facingMode;
   isRecordingRef.current = isRecording;
@@ -121,20 +144,32 @@ export function NativeCameraRecorder({
     return Math.max(0, assignedSeconds - usedClipSeconds - elapsed);
   }, [assignedSeconds, usedClipSeconds, isRecording, pendingRecordedSeconds, tick]);
 
-  const isCurrentGeneration = useCallback((gen: number) => {
-    return generationRef.current === gen;
-  }, []);
+  const refreshDiag = useCallback(
+    (phase: BootPhase, extra?: string) => {
+      const rect = getFullscreenNativePreviewRect();
+      const surf = readPreviewSurfaceDiag();
+      const line = [
+        CAM_PATCH_ID,
+        `ph=${phase}`,
+        `gen=${generationRef.current}`,
+        `plat=${Capacitor.getPlatform()}/${Capacitor.isNativePlatform() ? "native" : "web"}`,
+        `rect=${rect.width}x${rect.height}`,
+        `cls=${surf.htmlHasClass && surf.bodyHasClass ? "y" : "n"}`,
+        `bodyBg=${surf.bodyBg}`,
+        extra ?? "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      setDiagLine(line);
+      console.info("[NativeCameraRecorder]", line);
+    },
+    [],
+  );
 
-  /**
-   * Start native preview for a mount generation. No-ops if generation is stale
-   * (unmounted / remounted). Stale starts that already called the plugin are
-   * stopped so they cannot leave a zombie session under the next mount.
-   */
   const ensurePreview = useCallback(
     async (gen: number, options?: { force?: boolean }): Promise<boolean> => {
-      if (!isCurrentGeneration(gen)) return false;
+      if (generationRef.current !== gen) return false;
       if (isRecordingRef.current) return false;
-      // Serialize within a generation (no parallel starts).
       if (previewStartingRef.current) return false;
 
       if (previewStartedRef.current && !options?.force) {
@@ -146,16 +181,20 @@ export function NativeCameraRecorder({
         setCameraReady(false);
       }
 
+      // Always own the starting flag for this attempt; clear even if gen goes stale.
       previewStartingRef.current = true;
       setCameraStarting(true);
+      setBootPhase("starting");
       setPreviewError(null);
       setError(null);
+      applyRecordPreviewTransparentSurfaces();
+      refreshDiag("starting", options?.force ? "force" : "boot");
 
       try {
-        await startNativePreview(nativePreviewOpts(facingModeRef.current));
+        const opts = nativePreviewOpts(facingModeRef.current);
+        await startNativePreview(opts);
 
-        if (!isCurrentGeneration(gen)) {
-          // Unmounted (or remounted) while starting — tear down this start.
+        if (generationRef.current !== gen) {
           try {
             await stopNativePreview();
           } catch (stopErr) {
@@ -167,67 +206,90 @@ export function NativeCameraRecorder({
           return false;
         }
 
+        // Re-assert transparent DOM — plugin stop sets isOpaque=true; start clears webview,
+        // but DOM black layers still block toBack until CSS is forced again.
+        applyRecordPreviewTransparentSurfaces();
+
+        const started = await getNativeCameraStarted();
+        setNativeStarted(started);
+        if (!started) {
+          throw new Error("isCameraStarted=false after start");
+        }
+
         previewStartedRef.current = true;
         setCameraReady(true);
         setPreviewError(null);
+        setBootPhase("ready");
+        refreshDiag("ready", "ok");
         return true;
       } catch (err) {
-        if (!isCurrentGeneration(gen)) return false;
+        if (generationRef.current !== gen) return false;
         console.error("[NativeCameraRecorder] ensurePreview failed", err);
         const message = formatPreviewStartError(err);
         setPreviewError(message);
         setError(message);
         setCameraReady(false);
         previewStartedRef.current = false;
+        setBootPhase("error");
+        setNativeStarted(false);
+        refreshDiag("error", message.slice(0, 80));
         return false;
       } finally {
-        if (isCurrentGeneration(gen)) {
-          previewStartingRef.current = false;
+        previewStartingRef.current = false;
+        if (generationRef.current === gen) {
+          setCameraStarting(false);
+        } else {
+          // Stale attempt: still drop UI starting flag if nothing new owns it.
           setCameraStarting(false);
         }
       }
     },
-    [isCurrentGeneration],
+    [refreshDiag],
   );
 
-  // Mount lifecycle: CSS class + settle delay + start, then generation-aware stop.
+  ensurePreviewRef.current = ensurePreview;
+
+  // Mount lifecycle: transparent surfaces → settle → start (empty deps via ref).
   useEffect(() => {
     const gen = ++generationRef.current;
     previewStartedRef.current = false;
     previewStartingRef.current = false;
     setCameraReady(false);
     setPreviewError(null);
+    setBootPhase("settle");
+    setNativeStarted(null);
 
-    document.documentElement.classList.add("record-native-preview-active");
-    document.body.classList.add("record-native-preview-active");
+    applyRecordPreviewTransparentSurfaces();
+    refreshDiag("settle");
 
     let cancelled = false;
     const settleTimer = window.setTimeout(() => {
-      if (cancelled || !isCurrentGeneration(gen)) return;
-      void ensurePreview(gen);
+      if (cancelled || generationRef.current !== gen) return;
+      void ensurePreviewRef.current(gen);
     }, PREVIEW_BOOT_SETTLE_MS);
 
     return () => {
       cancelled = true;
       window.clearTimeout(settleTimer);
-      // Invalidate in-flight ensurePreview for this gen (next mount ++'s generation).
       if (generationRef.current === gen) {
         generationRef.current = gen + 1;
       }
       previewStartedRef.current = false;
       previewStartingRef.current = false;
-      document.documentElement.classList.remove("record-native-preview-active");
-      document.body.classList.remove("record-native-preview-active");
+      setBootPhase("unmounted");
+      clearRecordPreviewTransparentSurfaces();
       void stopNativePreview().catch((err) => {
         console.warn("[NativeCameraRecorder] stopNativePreview on unmount", err);
       });
     };
-  }, [ensurePreview, isCurrentGeneration]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mount via refs
+  }, []);
 
   const retryPreview = useCallback(() => {
     const gen = generationRef.current;
-    void ensurePreview(gen, { force: true });
-  }, [ensurePreview]);
+    applyRecordPreviewTransparentSurfaces();
+    void ensurePreviewRef.current(gen, { force: true });
+  }, []);
 
   const addRecordedClip = useCallback(
     (file: File, durationSeconds: number) => {
@@ -258,7 +320,7 @@ export function NativeCameraRecorder({
   const syncPreviewLayout = useCallback(async () => {
     const gen = generationRef.current;
     if (
-      !isCurrentGeneration(gen) ||
+      generationRef.current !== gen ||
       isRecordingRef.current ||
       !previewStartedRef.current ||
       previewStartingRef.current ||
@@ -269,12 +331,13 @@ export function NativeCameraRecorder({
 
     try {
       await syncNativePreviewLayout(nativePreviewOpts(facingModeRef.current));
-      if (!isCurrentGeneration(gen)) return;
+      if (generationRef.current !== gen) return;
+      applyRecordPreviewTransparentSurfaces();
     } catch (err) {
-      if (!isCurrentGeneration(gen)) return;
+      if (generationRef.current !== gen) return;
       console.warn("[NativeCameraRecorder] syncPreviewLayout", err);
     }
-  }, [cameraStarting, isCurrentGeneration]);
+  }, [cameraStarting]);
 
   const scheduleLayoutSyncRef = useRef(debounceAsync(() => syncPreviewLayout(), 500));
 
@@ -599,6 +662,26 @@ export function NativeCameraRecorder({
           usedClipSeconds >= assignedSeconds
         }
       />
+
+      {/* Always-visible bootstrap status for field triage (no device logs needed). */}
+      <RecordStagePortal>
+        <div className="record-camera-diag" aria-live="polite">
+          <div className="record-camera-diag__row">
+            <strong>{CAM_PATCH_ID}</strong>
+            <span>
+              {bootPhase}
+              {nativeStarted === null
+                ? ""
+                : nativeStarted
+                  ? " · native:on"
+                  : " · native:off"}
+              {cameraReady ? " · ready" : ""}
+              {cameraStarting ? " · starting" : ""}
+            </span>
+          </div>
+          <div className="record-camera-diag__detail">{diagLine}</div>
+        </div>
+      </RecordStagePortal>
 
       {previewError && (
         <RecordStagePortal>
